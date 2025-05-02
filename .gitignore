@@ -1,0 +1,23 @@
+# Environment variables
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# IDE / OS files
+.idea/
+.vscode/
+*.DS_Store
+
+# Anaconda environment files (optional)
+# seoenv/
+
+# Bild-Ordner (werden in der Cloud-Version nicht per Git verwaltet)
+pics_to_process/
+pics_done/
+
+# Jupyter Notebook Checkpoints
+.ipynb_checkpoints/
