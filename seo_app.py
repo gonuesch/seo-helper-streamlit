@@ -8,6 +8,9 @@ from pathlib import Path
 # from dotenv import load_dotenv # Nicht mehr für Cloud benötigt
 import time
 from io import BytesIO # Für die Verarbeitung von Upload-Bytes
+from typing import Union
+# Ggf. auch BytesIO importieren, falls im Code verwendet, aber nicht importiert
+from io import BytesIO
 
 # --- Grundkonfiguration & API Key ---
 
@@ -36,7 +39,7 @@ else:
 # --- Kernfunktion: Tag-Generierung (Angepasst für UploadedFile) ---
 
 # === ÄNDERUNG: Akzeptiert BytesIO oder UploadedFile ===
-def generate_image_tags(image_input, file_name_for_log: str, model_name: str = "gemini-1.5-pro-latest") -> tuple[str | None, str | None]:
+def generate_image_tags(image_input, file_name_for_log: str, model_name: str = "gemini-1.5-pro-latest") -> tuple[Union[str, None], Union[str, None]]:
     """
     Nimmt ein Bild (als BytesIO oder Streamlit UploadedFile), sendet es an Gemini
     und gibt SEO-optimierte title- und alt-Tags zurück.
