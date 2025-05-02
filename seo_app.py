@@ -1,57 +1,50 @@
 # -*- coding: utf-8 -*-
 
 import os
-import streamlit as st # Streamlit importieren
+import streamlit as st
 import google.generativeai as genai
 from PIL import Image
 from pathlib import Path
-from dotenv import load_dotenv
+# from dotenv import load_dotenv # Nicht mehr für Cloud benötigt
 import time
+from io import BytesIO # Für die Verarbeitung von Upload-Bytes
 
 # --- Grundkonfiguration & API Key ---
 
-# Lade Umgebungsvariablen (API Key) aus .env Datei
-load_dotenv()
-api_key = os.getenv("GOOGLE_API_KEY")
-
-# Streamlit Seiten-Konfiguration (optional, aber nett)
 st.set_page_config(page_title="SEO Bild-Tag Generator", layout="wide")
 
-st.title("🤖 SEO Bild-Tag Generator")
+st.title("🤖 SEO Bild-Tag Generator (Cloud Version)")
 st.write("""
-    Dieses Tool analysiert Bilder in einem festgelegten Ordner mithilfe der Gemini API,
-    generiert SEO-optimierte 'alt'- und 'title'-Attribute und verschiebt
-    die verarbeiteten Bilder anschließend in einen anderen Ordner.
-    **Wichtig:** Benötigt eine `.env`-Datei mit einem gültigen `GOOGLE_API_KEY` im selben Verzeichnis.
+    Lade ein oder mehrere Bilder hoch. Diese App analysiert sie mithilfe der Gemini API
+    und generiert SEO-optimierte 'alt'- und 'title'-Attribute.
 """)
 
-# Prüfe API Key und konfiguriere Gemini (oder zeige Fehler in Streamlit)
+# === ÄNDERUNG: API Key aus Streamlit Secrets ===
+# Versuche, den Key aus den Secrets zu lesen
+api_key = st.secrets.get("GOOGLE_API_KEY")
+
 if not api_key:
-    st.error("🚨 Fehler: GOOGLE_API_KEY nicht in der .env Datei gefunden. Bitte die .env Datei erstellen und den Key eintragen.")
-    st.stop() # Hält die Ausführung der App an
+    st.error("🚨 Fehler: GOOGLE_API_KEY nicht in den Streamlit Secrets konfiguriert! Bitte füge ihn in den App-Einstellungen hinzu.")
+    st.stop()
 else:
     try:
         genai.configure(api_key=api_key)
-        # st.success("Google API Key geladen und Gemini konfiguriert.") # Optionales Feedback
     except Exception as e:
         st.error(f"🚨 Fehler bei der Konfiguration von Gemini: {e}")
         st.stop()
 
-# --- Kernfunktion: Tag-Generierung (fast unverändert) ---
+# --- Kernfunktion: Tag-Generierung (Angepasst für UploadedFile) ---
 
-# (Wir belassen die Funktion hier, könnten sie aber auch in eine separate utils.py auslagern)
-def generate_image_tags(image_path: str, model_name: str = "gemini-1.5-pro-latest") -> tuple[str | None, str | None]:
+# === ÄNDERUNG: Akzeptiert BytesIO oder UploadedFile ===
+def generate_image_tags(image_input, file_name_for_log: str, model_name: str = "gemini-1.5-pro-latest") -> tuple[str | None, str | None]:
     """
-    Nimmt einen Bildpfad, sendet das Bild an Gemini und gibt
-    SEO-optimierte title- und alt-Tags zurück. (Minimale print Anpassungen für Streamlit)
+    Nimmt ein Bild (als BytesIO oder Streamlit UploadedFile), sendet es an Gemini
+    und gibt SEO-optimierte title- und alt-Tags zurück.
     """
-    image_path_obj = Path(image_path)
-    if not image_path_obj.is_file():
-        # Fehler wird im Hauptteil behandelt, hier nur return
-        return None, None
-
     try:
-        img = Image.open(image_path_obj)
+        # PIL kann direkt mit file-like Objekten umgehen
+        img = Image.open(image_input)
+
         model = genai.GenerativeModel(model_name)
         prompt = """
         Analysiere das folgende Bild sorgfältig.
@@ -69,12 +62,11 @@ def generate_image_tags(image_path: str, model_name: str = "gemini-1.5-pro-lates
         TITLE: [Hier der generierte Title-Text]
         """
 
-        # API Call mit Timeout
         response = model.generate_content([prompt, img], request_options={"timeout": 120})
 
-        # Längere Pause wegen Free Tier Rate Limit (nach dem API Call)
-        # st.write(f"    (Warte ~32s...)") # Info in Streamlit UI während der Pause
-        time.sleep(32)
+        # Längere Pause wegen Free Tier Rate Limit
+        # Im Cloud-Deployment ist das Limit evtl. höher, aber sicher ist sicher
+        time.sleep(32) # Behalte die Pause vorerst bei
 
         generated_text = response.text.strip()
         alt_tag = None
@@ -89,15 +81,16 @@ def generate_image_tags(image_path: str, model_name: str = "gemini-1.5-pro-lates
         if alt_tag and title_tag:
             return title_tag, alt_tag
         else:
-            # Fehlerdetails für die Hauptschleife bereitstellen (oder hier loggen)
-            # print(f"  Fehler: Konnte Tags nicht aus Gemini-Antwort extrahieren für {Path(image_path).name}.") # Debug Print
-            # print(f"  Rohe Antwort: {generated_text}") # Debug Print
-            return None, None # Fehler wird im Hauptteil angezeigt
+            st.warning(f"⚠️ Konnte Tags nicht korrekt aus Antwort extrahieren für {file_name_for_log}.")
+            st.text(f"Rohe Antwort: {generated_text}") # Zeige die Antwort zur Fehlersuche
+            return None, None
 
+    # === ÄNDERUNG: Breitere Fehlerbehandlung für Uploads ===
     except Exception as e:
-        st.warning(f"⚠️ Fehler während Gemini-API Call für {image_path_obj.name}: {e}") # Warnung in Streamlit
+        st.error(f"🚨 Fehler bei der Verarbeitung/Analyse von '{file_name_for_log}': {e}")
+        # Versuche, Prompt Feedback zu loggen, falls response existiert
         try:
-            if response:
+            if response and hasattr(response, 'prompt_feedback'):
                st.warning(f"Prompt Feedback: {response.prompt_feedback}")
         except Exception:
             pass
@@ -105,113 +98,60 @@ def generate_image_tags(image_path: str, model_name: str = "gemini-1.5-pro-lates
 
 # --- Streamlit UI & Verarbeitungslogik ---
 
-st.divider() # Visuelle Trennlinie
+st.divider()
 
-# Definiere die Verzeichnisse relativ zum Skriptpfad
-# __file__ zeigt auf die aktuelle Datei (seo_app.py)
-script_dir = Path(__file__).parent
-input_folder_name = "pics_to_process"
-output_folder_name = "pics_done"
-input_dir = script_dir / input_folder_name
-output_dir = script_dir / output_folder_name
-
-st.subheader("Verzeichnisse")
-st.info(f"**Input-Ordner:** `{input_dir}`\n\n**Output-Ordner:** `{output_dir}`")
-st.caption(f"Das Skript erwartet die Ordner '{input_folder_name}' und '{output_folder_name}' im selben Verzeichnis wie die App selbst ({script_dir}). Der Output-Ordner wird bei Bedarf erstellt.")
+# === ÄNDERUNG: File Uploader statt fester Ordner ===
+uploaded_files = st.file_uploader(
+    "Lade ein oder mehrere Bilder hoch...",
+    accept_multiple_files=True,
+    type=['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'] # Erlaubte Dateitypen
+)
 
 st.divider()
 
-# Button zum Starten der Verarbeitung
-if st.button("🚀 Verarbeitung starten", type="primary"):
+if uploaded_files: # Prüfe, ob Dateien hochgeladen wurden
+    st.info(f"{len(uploaded_files)} Bild(er) zum Hochladen ausgewählt.")
 
-    st.info("Starte Verarbeitung...")
+    if st.button("🚀 Ausgewählte Bilder verarbeiten", type="primary"):
 
-    # 1. Stelle sicher, dass Output-Verzeichnis existiert
-    with st.spinner("Prüfe/Erstelle Output-Verzeichnis..."):
-        try:
-            output_dir.mkdir(parents=True, exist_ok=True)
-            st.success(f"Output-Verzeichnis '{output_dir.name}' bereit.")
-        except Exception as e:
-            st.error(f"Konnte Output-Verzeichnis nicht erstellen: {e}")
-            st.stop() # Anhalten, wenn das nicht klappt
+        st.subheader("Verarbeitungsergebnisse")
+        processed_count = 0
+        failed_count = 0
 
-    # 2. Finde Bilddateien
-    with st.spinner(f"Suche nach Bildern in '{input_dir.name}'..."):
-        image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
-        try:
-            image_files_to_process = [
-                item for item in input_dir.iterdir()
-                if item.is_file() and item.suffix.lower() in image_extensions
-            ]
-            if not image_files_to_process:
-                st.warning("Keine passenden Bilddateien im Input-Verzeichnis gefunden.")
-                st.stop() # Anhalten, wenn keine Bilder da sind
-            else:
-                st.success(f"{len(image_files_to_process)} Bilddatei(en) gefunden.")
-        except FileNotFoundError:
-            st.error(f"Input-Verzeichnis '{input_dir}' nicht gefunden!")
-            st.stop()
-        except Exception as e:
-            st.error(f"Fehler beim Lesen des Input-Verzeichnisses: {e}")
-            st.stop()
+        # Iteriere durch die hochgeladenen Dateien
+        for uploaded_file in uploaded_files:
+            file_name = uploaded_file.name
+            st.markdown(f"--- \n**Verarbeite:** `{file_name}`")
 
-
-    # 3. Verarbeite jede Datei
-    st.subheader("Verarbeitungsfortschritt")
-    processed_count = 0
-    failed_count = 0
-    results_placeholder = st.empty() # Platzhalter für dynamische Updates
-    current_results_text = ""
-
-    for image_file_path in image_files_to_process:
-        file_name = image_file_path.name
-        current_results_text += f"\n\n**Verarbeite:** `{file_name}`"
-        results_placeholder.info(current_results_text) # Update Platzhalter
-
-        try:
-            # Zeige Spinner während der Tag-Generierung (inkl. Wartezeit)
+            # Zeige Spinner während der Verarbeitung
             with st.spinner(f"Generiere Tags für {file_name}... (inkl. Wartezeit ~32s)"):
-                title, alt = generate_image_tags(str(image_file_path))
+                # === ÄNDERUNG: Übergebe das file-like Objekt direkt ===
+                # Die Funktion generate_image_tags wurde angepasst, um dies zu akzeptieren
+                title, alt = generate_image_tags(uploaded_file, file_name)
 
-            # Prüfe Ergebnis und handle Verschiebung
+            # Zeige Ergebnis für diese Datei
             if title and alt:
-                current_results_text += f"\n  ✅ **Erfolg!**\n  *ALT:* {alt}\n  *TITLE:* {title}"
-                results_placeholder.info(current_results_text) # Update Platzhalter
-
-                # Verschiebe die Datei
-                destination_path = output_dir / file_name
-                try:
-                    image_file_path.rename(destination_path)
-                    current_results_text += f"\n  -> Verschoben nach '{output_folder_name}'."
-                    results_placeholder.info(current_results_text) # Update Platzhalter
-                    processed_count += 1
-                except OSError as move_error:
-                    current_results_text += f"\n  ❌ **Fehler beim Verschieben:** {move_error}"
-                    results_placeholder.warning(current_results_text) # Update Platzhalter mit Warnung
-                    failed_count += 1 # Zählen als Fehler, da nicht verschoben
-
+                st.success(f"Tags für '{file_name}' generiert:")
+                # Verwende st.code oder st.text_area für gute Lesbarkeit
+                st.code(f"ALT: {alt}\nTITLE: {title}", language=None)
+                processed_count += 1
             else:
-                current_results_text += f"\n  ❌ **Fehler:** Konnte keine Tags generieren. Nicht verschoben."
-                results_placeholder.error(current_results_text) # Update Platzhalter mit Fehler
+                # Fehlermeldung wurde schon in generate_image_tags via st.error/st.warning ausgegeben
+                st.error(f"Fehler bei der Tag-Generierung für '{file_name}'. Details siehe oben.")
                 failed_count += 1
 
-        except Exception as e:
-            current_results_text += f"\n  ❌ **Unerwarteter Fehler** bei Verarbeitung von '{file_name}': {e}"
-            results_placeholder.error(current_results_text) # Update Platzhalter mit Fehler
-            failed_count += 1
-
-    # 4. Finale Zusammenfassung
-    st.subheader("🏁 Zusammenfassung")
-    col1, col2 = st.columns(2)
-    col1.metric("Erfolgreich verarbeitet & verschoben", processed_count)
-    col2.metric("Fehlgeschlagen / Nicht verschoben", failed_count, delta=None if failed_count == 0 else -failed_count, delta_color="inverse")
-
-    st.info("Verarbeitung abgeschlossen.")
+        # Finale Zusammenfassung
+        st.divider()
+        st.subheader("🏁 Zusammenfassung")
+        col1, col2 = st.columns(2)
+        col1.metric("Erfolgreich verarbeitet", processed_count)
+        col2.metric("Fehlgeschlagen", failed_count, delta=None if failed_count == 0 else -failed_count, delta_color="inverse")
+        st.info("Verarbeitung abgeschlossen.")
 
 else:
-    st.info("Klicke auf 'Verarbeitung starten', um die Bilder im Input-Ordner zu analysieren.")
+    st.info("Bitte lade Bilder über den Uploader oben hoch.")
 
-
-# Hinweis zum Zurücksetzen
-st.sidebar.title("🧪 Testen")
-st.sidebar.write("Um die Verarbeitung erneut zu testen, musst du die Bilder manuell (oder mit dem separaten Hilfsskript) vom Ordner `pics_done` zurück in den Ordner `pics_to_process` verschieben.")
+# Optional: Link zur Doku oder Hinweise
+st.sidebar.title("ℹ️ Info")
+st.sidebar.write("Diese App nutzt die Google Gemini API zur Generierung von Bild-Tags.")
+# (Kein Reset-Button mehr nötig, da keine Dateien verschoben werden)
