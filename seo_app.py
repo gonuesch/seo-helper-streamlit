@@ -200,4 +200,5 @@ else:
 
 st.sidebar.title("ℹ️ Info")
 st.sidebar.write("Diese App nutzt die Google Gemini API zur Generierung von Bild-Tags.")
-st.sidebar.caption("Entwickelt als Beispiel.")
+st.sidebar.caption("Nutzt Free Tier - daher nach jedem Bild 32s sleep.")
+st.text("Unterstützte Formate sind: 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'")
