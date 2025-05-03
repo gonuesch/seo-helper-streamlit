@@ -1,5 +1,4 @@
 streamlit
 google-generativeai
 Pillow
-streamlit-clipboard
 # python-dotenv # Nicht mehr nötig für Cloud, aber schadet nicht für lokale Tests
