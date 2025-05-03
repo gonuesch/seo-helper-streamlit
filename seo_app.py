@@ -4,17 +4,17 @@ import os
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
-from pathlib import Path
-# from dotenv import load_dotenv # Nicht mehr für Cloud benötigt
+# from pathlib import Path # Nicht mehr direkt benötigt für Ordner
 import time
 from io import BytesIO # Für die Verarbeitung von Upload-Bytes
 from typing import Union
 
-# NEU: Import für den Copy-Button
-from streamlit_copy_button import copy_button
+# Import für die alternative Clipboard-Komponente
+from streamlit_clipboard import st_clipboard
 
 # --- Grundkonfiguration & API Key ---
 
+# Streamlit Seiten-Konfiguration
 st.set_page_config(page_title="SEO Bild-Tag Generator", layout="wide")
 
 st.title("🤖 SEO Bild-Tag Generator (Cloud Version)")
@@ -23,32 +23,37 @@ st.write("""
     und generiert SEO-optimierte 'alt'- und 'title'-Attribute.
 """)
 
-# API Key aus Streamlit Secrets
+# API Key aus Streamlit Secrets lesen
 api_key = st.secrets.get("GOOGLE_API_KEY")
 
+# Prüfen ob API Key vorhanden ist
 if not api_key:
-    st.error("🚨 Fehler: GOOGLE_API_KEY nicht in den Streamlit Secrets konfiguriert! Bitte füge ihn in den App-Einstellungen hinzu.")
-    st.stop()
+    st.error("🚨 Fehler: GOOGLE_API_KEY nicht in den Streamlit Secrets konfiguriert! Bitte füge ihn in den App-Einstellungen unter 'Settings' -> 'Secrets' hinzu.")
+    st.stop() # App anhalten, wenn kein Key da ist
 else:
+    # Versuche Gemini zu konfigurieren
     try:
         genai.configure(api_key=api_key)
     except Exception as e:
-        st.error(f"🚨 Fehler bei der Konfiguration von Gemini: {e}")
-        st.stop()
+        st.error(f"🚨 Fehler bei der Konfiguration von Gemini mit dem API Key: {e}")
+        st.stop() # App anhalten bei Konfigurationsfehler
 
-# --- Kernfunktion: Tag-Generierung (unverändert zur letzten Version) ---
+# --- Kernfunktion: Tag-Generierung (Gecacht) ---
 
-@st.cache_data # Cache hinzufügen, um API-Aufrufe für gleiche Bilder zu sparen
+@st.cache_data # Cachet das Ergebnis basierend auf den Input-Argumenten
 def generate_image_tags_cached(image_bytes, file_name_for_log: str, model_name: str = "gemini-1.5-pro-latest") -> tuple[Union[str, None], Union[str, None]]:
     """
     Nimmt Bild-Bytes, sendet sie an Gemini und gibt SEO-optimierte Tags zurück.
     Gecacht von Streamlit. ACHTUNG: Rate Limiting muss VOR dem Aufruf erfolgen.
     """
     try:
-        # Erstelle PIL Image aus Bytes
+        # Erstelle PIL Image aus Bytes für die API
         img = Image.open(BytesIO(image_bytes))
 
+        # Initialisiere das Gemini Modell
         model = genai.GenerativeModel(model_name)
+
+        # Definiere den Prompt für die API
         prompt = """
         Analysiere das folgende Bild sorgfältig.
         Deine Aufgabe ist es, SEO-optimierte HTML-Attribute für dieses Bild zu generieren:
@@ -65,38 +70,39 @@ def generate_image_tags_cached(image_bytes, file_name_for_log: str, model_name: 
         TITLE: [Hier der generierte Title-Text]
         """
 
-        # API Call mit Timeout
+        # Führe den API Call aus
+        # Kein try-except hier, wird außerhalb für Rate Limiting gefangen
         response = model.generate_content([prompt, img], request_options={"timeout": 120})
 
-        # KEIN time.sleep() HIER wegen @st.cache_data.
-        # Rate-Limiting muss *vor* dem Funktionsaufruf erfolgen.
+        # KEIN time.sleep() HIER IM GEC तनCHTEN TEIL! Muss außen erfolgen.
 
+        # Extrahiere Text und parse Tags
         generated_text = response.text.strip()
         alt_tag = None
         title_tag = None
         lines = generated_text.split('\n')
         for line in lines:
-            if line.upper().startswith("ALT:"):
-                alt_tag = line[len("ALT:"):].strip()
-            elif line.upper().startswith("TITLE:"):
-                title_tag = line[len("TITLE:"):].strip()
+            # Suche nach den Zeilen, ignoriere Groß-/Kleinschreibung und Leerzeichen
+            if line.strip().upper().startswith("ALT:"):
+                alt_tag = line.strip()[len("ALT:"):].strip()
+            elif line.strip().upper().startswith("TITLE:"):
+                title_tag = line.strip()[len("TITLE:"):].strip()
 
+        # Gib Ergebnis zurück (oder None bei Fehlern)
         if alt_tag and title_tag:
             return title_tag, alt_tag
         else:
-            # Gib None zurück, Fehlerbehandlung im Hauptteil
-            # Loggen der Rohen Antwort kann hier sinnvoll sein (nicht mit st.write)
-            # print(f"Raw response issue for {file_name_for_log}: {generated_text}")
+            # Logge das Problem, falls Tags nicht extrahiert werden konnten
+            print(f"Warning: Could not extract tags for {file_name_for_log}. Raw response: {generated_text}") # Log geht in Streamlit Cloud Logs
             return None, None
 
     except Exception as e:
-        # Loggen des Fehlers hier sinnvoll (nicht mit st.write)
-        # print(f"Error processing/analyzing {file_name_for_log}: {e}")
+        # Logge unerwartete Fehler während der API-Verarbeitung
+        print(f"Error during Gemini processing for {file_name_for_log}: {e}") # Log geht in Streamlit Cloud Logs
         # Versuche, Prompt Feedback zu loggen, falls response existiert
         try:
              if response and hasattr(response, 'prompt_feedback'):
-                 # print(f"Prompt Feedback: {response.prompt_feedback}")
-                 pass
+                 print(f"Prompt Feedback: {response.prompt_feedback}") # Log
         except Exception:
             pass
         return None, None
@@ -104,78 +110,82 @@ def generate_image_tags_cached(image_bytes, file_name_for_log: str, model_name: 
 
 # --- Streamlit UI & Verarbeitungslogik ---
 
-st.divider()
+st.divider() # Visuelle Trennlinie
 
+# File Uploader für mehrere Bilder
 uploaded_files = st.file_uploader(
     "Lade ein oder mehrere Bilder hoch...",
     accept_multiple_files=True,
-    type=['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp']
+    type=['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'], # Erlaubte Dateitypen
+    key="file_uploader" # Eindeutiger Key
 )
 
 st.divider()
 
+# Verarbeitung starten, wenn Dateien hochgeladen wurden
 if uploaded_files:
     st.info(f"{len(uploaded_files)} Bild(er) zum Hochladen ausgewählt.")
 
-    if st.button("🚀 Ausgewählte Bilder verarbeiten", type="primary"):
+    # Button zum Starten der Verarbeitung
+    if st.button("🚀 Ausgewählte Bilder verarbeiten", type="primary", key="process_button"):
 
         st.subheader("Verarbeitungsergebnisse")
         processed_count = 0
         failed_count = 0
 
-        # Platzhalter für Fortschritt/Status (optional, aber nett)
+        # Platzhalter für den aktuellen Verarbeitungsstatus
         status_placeholder = st.empty()
 
+        # Iteriere durch jede hochgeladene Datei
         for i, uploaded_file in enumerate(uploaded_files):
             file_name = uploaded_file.name
             status_placeholder.info(f"Verarbeite Bild {i+1}/{len(uploaded_files)}: {file_name}...")
 
             try:
-                # Lese Bytes für Caching und Verarbeitung
+                # Lese Bild-Bytes (wird für Caching benötigt)
                 image_bytes = uploaded_file.getvalue()
 
                 # Wende Rate-Limiting an (vor dem Cache-Check/API-Call)
-                # Beachte: Dies verlangsamt auch, wenn das Ergebnis gecached ist.
-                # Eine bessere Implementierung würde das Caching prüfen, bevor sie schläft.
-                # Aber für Einfachheit belassen wir es erstmal so.
+                # Muss außerhalb der gecachten Funktion sein.
+                # TODO: Optimalerweise nur warten, wenn NICHT im Cache.
                 with st.spinner(f"Warte wegen Rate Limit (~32s) für {file_name}..."):
                     time.sleep(32)
 
-                # Rufe die (potenziell gecachte) Funktion auf
+                # Rufe die (potenziell gecachte) Funktion zur Tag-Generierung auf
                 title, alt = generate_image_tags_cached(image_bytes, file_name)
 
-                # === NEU: Ergebnisdarstellung mit Thumbnail und Copy-Buttons ===
+                # Zeige Ergebnis im Expander an, wenn erfolgreich
                 if title and alt:
                     with st.expander(f"✅ Ergebnisse für: {file_name}", expanded=True):
-                        col1, col2 = st.columns([1, 3], gap="medium") # Verhältnis und Abstand anpassen
+                        # Teile Bereich auf für Bild und Text/Buttons
+                        col1, col2 = st.columns([1, 3], gap="medium")
                         with col1:
-                            st.image(image_bytes, width=150, caption="Vorschau") # Zeige hochgeladenes Bild
+                            # Zeige Thumbnail an
+                            st.image(image_bytes, width=150, caption="Vorschau")
                         with col2:
+                            # ALT Tag Anzeige + Copy Button
                             st.text("ALT Tag:")
-                            # Zeige den Tag-Text an
                             st.text_area("ALT", value=alt, height=75, key=f"alt_text_{file_name}", disabled=True, label_visibility="collapsed")
-                            # Füge Copy-Button hinzu, der nur den 'alt'-Wert kopiert
-                            copy_button(text_to_copy=alt, button_text="ALT kopieren", key=f"alt_copy_{file_name}")
+                            st_clipboard(text=alt, label="ALT kopieren", key=f"alt_copy_{file_name}")
 
                             st.write("") # Kleiner Abstand
 
+                            # TITLE Tag Anzeige + Copy Button
                             st.text("TITLE Tag:")
-                            # Zeige den Tag-Text an
                             st.text_area("TITLE", value=title, height=75, key=f"title_text_{file_name}", disabled=True, label_visibility="collapsed")
-                             # Füge Copy-Button hinzu, der nur den 'title'-Wert kopiert
-                            copy_button(text_to_copy=title, button_text="TITLE kopieren", key=f"title_copy_{file_name}")
+                            st_clipboard(text=title, label="TITLE kopieren", key=f"title_copy_{file_name}")
                     processed_count += 1
                 else:
-                    # Zeige nur den Expander-Titel als Fehler an
+                    # Zeige Fehler im Expander-Titel, wenn keine Tags zurückkamen
                     st.error(f"❌ Fehler bei der Tag-Generierung für '{file_name}'. Keine Tags erhalten.")
                     failed_count += 1
-                # === Ende Ergebnisdarstellung ===
 
             except Exception as e:
-               st.error(f"🚨 Unerwarteter FEHLER bei Verarbeitung von '{file_name}': {e}")
+               # Fange unerwartete Fehler während der Schleife ab
+               st.error(f"🚨 Unerwarteter FEHLER bei der Verarbeitung von '{file_name}': {e}")
                failed_count += 1
 
-        # Leere den Status-Platzhalter am Ende
+        # Leere den Status-Text am Ende
         status_placeholder.empty()
 
         # Finale Zusammenfassung
@@ -184,11 +194,14 @@ if uploaded_files:
         col1, col2 = st.columns(2)
         col1.metric("Erfolgreich verarbeitet", processed_count)
         col2.metric("Fehlgeschlagen", failed_count, delta=None if failed_count == 0 else -failed_count, delta_color="inverse")
-        st.success("Verarbeitung abgeschlossen.") # Geändert zu success für positiveren Abschluss
+        st.success("Verarbeitung abgeschlossen.") # Positiver Abschluss
 
 else:
+    # Hinweis, wenn keine Dateien hochgeladen sind
     st.info("Bitte lade Bilder über den Uploader oben hoch.")
 
 
+# Informationen in der Seitenleiste
 st.sidebar.title("ℹ️ Info")
 st.sidebar.write("Diese App nutzt die Google Gemini API zur Generierung von Bild-Tags.")
+st.sidebar.caption("Entwickelt als Beispiel.")
