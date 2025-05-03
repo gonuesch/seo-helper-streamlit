@@ -1,5 +1,5 @@
 streamlit
 google-generativeai
 Pillow
-streamlit-copy-button
+streamlit-copy-button==0.0.14
 # python-dotenv # Nicht mehr nötig für Cloud, aber schadet nicht für lokale Tests
