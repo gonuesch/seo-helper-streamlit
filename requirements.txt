@@ -1,4 +1,6 @@
+# requirements.txt
 streamlit
 google-generativeai
 Pillow
-# python-dotenv # Nicht mehr nötig für Cloud, aber schadet nicht für lokale Tests
+pandas
+openpyxl

@@ -11,6 +11,7 @@ import json
 import streamlit.components.v1 as components
 from google.api_core.exceptions import ResourceExhausted
 from pathlib import Path
+import pandas as pd # Hinzugefügt für Excel-Export
 
 # --- Grundkonfiguration & API Key ---
 st.set_page_config(page_title="Bildbeschreibungs-Generator", layout="wide")
@@ -44,12 +45,13 @@ Zweck und Zielgruppe:
 Stil und Formulierung:
 - Neutral und deskriptiv: Beschreibe objektiv, was visuell wahrnehmbar ist.
 - Keine Interpretation: Vermeide persönliche Deutungen oder Wertungen.
-- Direkter Einstieg: Verzichte zwingend auf einleitende Formulierungen wie „Das Foto zeigt…“ oder „Auf dem Bild ist zu sehen…“.
-Sprache: Klar, präzise und allgemein verständlich.
+- Direkter Einstieg: Verzichte zwingend auf einleitende Formulierungen wie „Das Foto zeigt…“, „Die Illustration stellt dar…“, „Auf dem Bild ist zu sehen…“ oder ähnliche Phrasen.
+- Anführungszeichen: Verwende für Anführungszeichen ausschließlich französische Guillemets («Beispiel»).
+- Sprache: Klar, präzise und allgemein verständlich.
 Inhalt und Struktur:
 - Vom Allgemeinen zum Speziellen: Beginne mit einer allgemeinen Erfassung und gehe dann auf Details ein.
 - Wesentliche Elemente: Identifiziere und beschreibe alle relevanten Elemente.
-- Bildtyp berücksichtigen: Gib ggf. den Bildtyp an (z.B. Fotografie, Illustration).
+- Bildtyp berücksichtigen: Gib ggf. den Bildtyp an.
 - Bei Karten, Tabellen und Diagrammen: Erkläre die dargestellten Daten und deren Beziehungen.
 - Relevanz und Redundanzvermeidung: Konzentriere dich auf die Informationen, die für das Verständnis im $BUCHKONTEXT notwendig sind.
 Länge:
@@ -146,7 +148,7 @@ ebook_context_input = ""
 if generation_mode == "Barrierefreie Bildbeschreibung":
     ebook_context_input = st.sidebar.text_area(
         "Optional: Kontext des E-Books (max. 500 Zeichen)", height=150, key="ebook_context", max_chars=500,
-        placeholder="z.B. Titel, Kapitel, Thema des Abschnitts...",
+        placeholder="z.B. Titel des Werks, Kapitelüberschrift, Thema des Abschnitts...",
         help="Erkläre kurz, welche Funktion das Bild im spezifischen Kontext des E-Book-Kapitels hat."
     )
     st.sidebar.caption(f"{len(ebook_context_input)}/500 Zeichen")
@@ -165,6 +167,9 @@ if uploaded_files:
         st.subheader("Verarbeitungsergebnisse")
         processed_count, failed_count = 0, 0
         status_placeholder = st.empty()
+        
+        # Liste zum Sammeln der Ergebnisse für den Export
+        results_for_export = []
 
         for i, uploaded_file in enumerate(uploaded_files):
             file_name = uploaded_file.name
@@ -176,15 +181,15 @@ if uploaded_files:
             try:
                 original_image_bytes = uploaded_file.getvalue()
                 image_bytes_for_api = original_image_bytes
-
+                
                 file_extension = Path(file_name).suffix.lower()
                 if file_extension in ['.tif', '.tiff']:
-                    # TIFF-Konvertierung
                     try:
                         with st.spinner(f"Konvertiere {file_name} (TIFF) zu PNG..."):
                             pil_image = Image.open(BytesIO(original_image_bytes))
                             if getattr(pil_image, "n_frames", 1) > 1: pil_image.seek(0)
-                            if pil_image.mode not in ('RGB', 'RGBA', 'L'): pil_image = pil_image.convert('RGB')
+                            if pil_image.mode not in ('RGB', 'RGBA', 'L'):
+                                pil_image = pil_image.convert('RGB')
                             output_buffer = BytesIO(); pil_image.save(output_buffer, format="PNG")
                             image_bytes_for_api = output_buffer.getvalue()
                     except Exception as conv_e:
@@ -194,17 +199,16 @@ if uploaded_files:
                     with st.spinner(f"Generiere SEO Tags für {file_name}..."):
                         title, alt = generate_seo_tags_cached(image_bytes_for_api, file_name)
                     if title and alt:
-                        alt_button_id, title_button_id = f"alt_btn_{base_id}", f"title_btn_{base_id}"
                         with st.expander(f"✅ SEO Tags für: {file_name}", expanded=True):
-                            # (Code für SEO-Ausgabe bleibt wie gehabt, hier gekürzt)
+                            alt_button_id, title_button_id = f"alt_btn_{base_id}", f"title_btn_{base_id}"
                             col1, col2 = st.columns([1, 3], gap="medium")
                             with col1: st.image(original_image_bytes, width=150, caption="Vorschau")
                             with col2:
                                 st.text("ALT Tag:"); st.text_area("ALT", value=alt, height=75, key=f"alt_text_{base_id}", disabled=True, label_visibility="collapsed")
-                                alt_json = json.dumps(alt); components.html(f"""<button id="{alt_button_id}">ALT kopieren</button><script>...</script><style>...</style>""",height=45)
+                                alt_json = json.dumps(alt); components.html(f"""<button id="{alt_button_id}">ALT kopieren</button><script>document.getElementById("{alt_button_id}").addEventListener('click', function(){{navigator.clipboard.writeText({alt_json}).then(function(){{let b=document.getElementById("{alt_button_id}");let o=b.innerText;b.innerText='Kopiert!';setTimeout(function(){{b.innerText=o}},1500)}})}});</script><style>#{alt_button_id}{{background-color:#007bff;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;margin-top:5px}}#{alt_button_id}:hover{{background-color:#0056b3}}</style>""",height=45)
                                 st.write(""); st.text("TITLE Tag:")
                                 st.text_area("TITLE", value=title, height=75, key=f"title_text_{base_id}", disabled=True, label_visibility="collapsed")
-                                title_json = json.dumps(title); components.html(f"""<button id="{title_button_id}">TITLE kopieren</button><script>...</script><style>...</style>""",height=45)
+                                title_json = json.dumps(title); components.html(f"""<button id="{title_button_id}">TITLE kopieren</button><script>document.getElementById("{title_button_id}").addEventListener('click', function(){{navigator.clipboard.writeText({title_json}).then(function(){{let b=document.getElementById("{title_button_id}");let o=b.innerText;b.innerText='Kopiert!';setTimeout(function(){{b.innerText=o}},1500)}})}});</script><style>#{title_button_id}{{background-color:#007bff;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;margin-top:5px}}#{title_button_id}:hover{{background-color:#0056b3}}</style>""",height=45)
                         processed_count += 1
                     else: st.error(f"❌ Fehler bei SEO Tag-Generierung für '{file_name}'."); failed_count += 1
 
@@ -212,42 +216,49 @@ if uploaded_files:
                     with st.spinner(f"Generiere barrierefreie Beschreibung für {file_name}..."):
                         short_desc, long_desc = generate_accessibility_description_cached(image_bytes_for_api, file_name, ebook_context_input)
                     if short_desc and long_desc:
-                        
-                        # === KORREKTUR: Äußeren Expander entfernt, durch Überschrift ersetzt ===
-                        st.markdown(f"--- \n#### ✅ Ergebnisse für: `{file_name}`")
-
-                        col1, col2 = st.columns([1, 3], gap="medium")
-                        with col1:
-                            st.image(original_image_bytes, width=150, caption="Vorschau")
-                        with col2:
-                            # Kurzbeschreibung (immer sichtbar)
-                            st.text("Kurzbeschreibung (max. 140 Zeichen):")
-                            st.text_area("Kurz", value=short_desc, height=100, key=f"short_text_{base_id}", disabled=True, label_visibility="collapsed")
-                            short_desc_button_id = f"short_copy_{base_id}"
-                            short_json = json.dumps(short_desc)
-                            components.html(f"""<button id="{short_desc_button_id}">Kurzbeschreibung kopieren</button><script>...</script>""", height=45) # Script gekürzt
-
-                            st.write("") # Abstand
-                            
-                            # Langbeschreibung (jetzt in einem nicht-verschachtelten Expander)
-                            with st.expander("Zeige/verberge Langbeschreibung"):
-                                st.text_area("Lang", value=long_desc, height=200, key=f"long_text_{base_id}", disabled=True, label_visibility="collapsed")
-                                long_desc_button_id = f"long_copy_{base_id}"
-                                long_json = json.dumps(long_desc)
-                                components.html(f"""<button id="{long_desc_button_id}">Langbeschreibung kopieren</button><script>...</script>""", height=45) # Script gekürzt
-                        
+                        with st.expander(f"✅ Barrierefreie Beschreibung für: {file_name}", expanded=True):
+                            short_desc_button_id, long_desc_button_id = f"short_copy_{base_id}", f"long_copy_{base_id}"
+                            col1, col2 = st.columns([1, 3], gap="medium")
+                            with col1: st.image(original_image_bytes, width=150, caption="Vorschau")
+                            with col2:
+                                st.text("Kurzbeschreibung (max. 140 Zeichen):")
+                                st.text_area("Kurz", value=short_desc, height=100, key=f"short_text_{base_id}", disabled=True, label_visibility="collapsed")
+                                short_json = json.dumps(short_desc); components.html(f"""<button id="{short_desc_button_id}">Kurzbeschreibung kopieren</button><script>document.getElementById("{short_desc_button_id}").addEventListener('click', function(){{navigator.clipboard.writeText({short_json}).then(function(){{let b=document.getElementById("{short_desc_button_id}");let o=b.innerText;b.innerText='Kopiert!';setTimeout(function(){{b.innerText=o}},1500)}})}});</script><style>#{short_desc_button_id}{{background-color:#007bff;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;margin-top:5px}}#{short_desc_button_id}:hover{{background-color:#0056b3}}</style>""", height=45)
+                                with st.expander("Zeige/verberge Langbeschreibung"):
+                                    st.text_area("Lang", value=long_desc, height=200, key=f"long_text_{base_id}", disabled=True, label_visibility="collapsed")
+                                    long_json = json.dumps(long_desc); components.html(f"""<button id="{long_desc_button_id}">Langbeschreibung kopieren</button><script>document.getElementById("{long_desc_button_id}").addEventListener('click', function(){{navigator.clipboard.writeText({long_json}).then(function(){{let b=document.getElementById("{long_desc_button_id}");let o=b.innerText;b.innerText='Kopiert!';setTimeout(function(){{b.innerText=o}},1500)}})}});</script><style>#{long_desc_button_id}{{background-color:#007bff;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;margin-top:5px}}#{long_desc_button_id}:hover{{background-color:#0056b3}}</style>""", height=45)
                         processed_count += 1
-                    else:
-                        st.error(f"❌ Fehler bei Erstellung der barrierefreien Beschreibung für '{file_name}'.")
-                        failed_count += 1
-
+                        results_for_export.append({
+                            "Bildname": file_name,
+                            "Dateiname Produktion": "",
+                            "Alternativtext": short_desc,
+                            "Bildlegende": "",
+                            "Anmerkung": "",
+                            "Langbeschreibung": long_desc,
+                            "(Platzierung/Größe/Übersetzungstexte in der Abbildung/...)": ""
+                        })
+                    else: st.error(f"❌ Fehler bei Erstellung der barrierefreien Beschreibung für '{file_name}'."); failed_count += 1
             except Exception as e:
                st.error(f"🚨 Unerwarteter FEHLER bei der Hauptverarbeitung von '{file_name}': {e}"); failed_count += 1
         
         status_placeholder.empty()
+
+        if results_for_export:
+            st.divider()
+            st.subheader("📊 Ergebnisse exportieren")
+            df = pd.DataFrame(results_for_export)
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df.to_excel(writer, index=False, sheet_name='Bildbeschreibungen')
+            excel_data = output.getvalue()
+            st.download_button(
+                label="💾 Excel-Datei herunterladen", data=excel_data,
+                file_name="barrierefreie_bildbeschreibungen.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
         st.divider()
         st.subheader("🏁 Zusammenfassung")
-        # ... (Zusammenfassung bleibt wie gehabt) ...
         col1, col2 = st.columns(2)
         col1.metric("Erfolgreich verarbeitet", processed_count)
         col2.metric("Fehlgeschlagen", failed_count, delta=None if failed_count == 0 else -failed_count, delta_color="inverse")
@@ -258,4 +269,4 @@ else:
 st.sidebar.title("ℹ️ Info")
 st.sidebar.write("Diese App nutzt die Google Gemini API zur Generierung von Bild-Tags.")
 st.sidebar.text(f"Unterstützte Formate: {', '.join(['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'tif', 'tiff'])}")
-st.sidebar.text("Bei Fragen -> Gordon")
+st.sidebar.text("Bei Fragen -> Gordon")")
