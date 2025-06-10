@@ -6,7 +6,7 @@ import google.generativeai as genai
 from PIL import Image
 import time
 from io import BytesIO
-from typing import Union
+from typing import Union, Tuple
 import json
 import streamlit.components.v1 as components
 from google.api_core.exceptions import ResourceExhausted
