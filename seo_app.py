@@ -90,7 +90,7 @@ def generate_seo_tags_cached(image_bytes_for_api, file_name_for_log: str, model_
     except Exception as e: print(f"Error during SEO tag generation for {file_name_for_log}: {e}"); return None, None
 
 @st.cache_data
-def generate_accessibility_description_cached(image_bytes_for_api, file_name_for_log: str, ebook_context: str = "", model_name: str = "gemini-1.5-pro-latest") -> Tuple[Union[str, None], Union[str, None]]:
+def generate_accessibility_description_cached(image_bytes_for_api, file_name_for_log: str, ebook_context: str = "", model_name: str = "gemini-2.5-flash-preview-05-20") -> Tuple[Union[str, None], Union[str, None]]:
     try:
         img = Image.open(BytesIO(image_bytes_for_api))
         model = genai.GenerativeModel(model_name)
