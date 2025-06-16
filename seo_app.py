@@ -17,7 +17,7 @@ from streamlit_option_menu import option_menu
 # --- Grundkonfiguration & App-Titel ---
 st.set_page_config(
     page_title="Toolbox",
-    page_icon="🧰",
+    page_icon="app_icon.png", # Verwendet die Bilddatei aus deinem Projektordner
     layout="wide"
 )
 
@@ -69,7 +69,6 @@ TITLE: [Hier der generierte Title-Text]
 
 @st.cache_data
 def generate_seo_tags_cached(image_bytes_for_api, file_name_for_log: str, model_name: str = "gemini-1.5-pro-latest") -> Tuple[Union[str, None], Union[str, None]]:
-    """Generiert SEO alt und title Tags."""
     try:
         img = Image.open(BytesIO(image_bytes_for_api))
         model = genai.GenerativeModel(model_name)
@@ -93,7 +92,6 @@ def generate_seo_tags_cached(image_bytes_for_api, file_name_for_log: str, model_
 
 @st.cache_data
 def generate_accessibility_description_cached(image_bytes_for_api, file_name_for_log: str, ebook_context: str = "", model_name: str = "gemini-1.5-pro-latest") -> Tuple[Union[str, None], Union[str, None]]:
-    """Generiert eine barrierefreie Kurz- und Langbeschreibung."""
     try:
         img = Image.open(BytesIO(image_bytes_for_api))
         model = genai.GenerativeModel(model_name)
@@ -129,7 +127,7 @@ def generate_accessibility_description_cached(image_bytes_for_api, file_name_for
 # API Key Handling
 api_key = st.secrets.get("GOOGLE_API_KEY")
 if not api_key:
-    st.error("🚨 Fehler: GOOGLE_API_KEY nicht konfiguriert! Bitte füge ihn in den App-Einstellungen unter 'Settings' -> 'Secrets' hinzu.")
+    st.error("🚨 Fehler: GOOGLE_API_KEY nicht in den Streamlit Secrets konfiguriert!")
     st.stop()
 try:
     genai.configure(api_key=api_key)
@@ -137,19 +135,7 @@ except Exception as e:
     st.error(f"🚨 Fehler bei Konfiguration: {e}")
     st.stop()
 
-# --- Seitenleiste ---
-with st.sidebar:
-    st.title("🧰 Toolbox")
-    st.write("Tools zur automatisierten Erstellung von Bildtexten mit Gemini.")
-    st.divider()
-    st.title("ℹ️ Info")
-    st.write("Diese App nutzt die Google Gemini API zur Generierung von Bild-Tags.")
-    st.text(f"Unterstützte Formate: {', '.join(['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'tif', 'tiff'])}")
-    st.text("Bei Fragen -> Gordon")
-
-
 # --- Hauptbereich mit neuer Navigation ---
-
 selected_tool = option_menu(
     menu_title=None,
     options=["SEO Tags", "Barrierefreie Bildbeschreibung"],
@@ -171,6 +157,37 @@ selected_tool = option_menu(
         "nav-link-selected": {"background-color": "#007bff"},
     }
 )
+
+# --- Seitenleiste (Sidebar) mit dynamischem Inhalt ---
+with st.sidebar:
+    st.image("app_icon.png", width=100)
+    st.markdown("# 🧰 Toolbox")
+    st.markdown("##### AI-Tools für dich")
+    
+    st.divider()
+    
+    st.subheader("ℹ️ Info")
+
+    supported_formats = "jpg, jpeg, png, gif, bmp, webp, tif, tiff"
+
+    if selected_tool == "SEO Tags":
+        st.markdown(f"""
+        Erzeuge **Alt** und **Title Tags** mit Gemini.
+        
+        **Unterstützte Formate:** `{supported_formats}`
+        
+        Bei Fragen -> Gordon
+        """)
+    elif selected_tool == "Barrierefreie Bildbeschreibung":
+        st.markdown(f"""
+        Erzeuge **Bildbeschreibungen** mit Gemini.
+        
+        **Unterstützte Formate:** `{supported_formats}`
+        
+        **Download möglich:** Die Ergebnisse können als Excel-Datei heruntergeladen werden.
+        
+        Bei Fragen -> Gordon
+        """)
 
 st.divider()
 
@@ -219,7 +236,7 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
         "Kontext des E-Books eingeben (optional, aber empfohlen)",
         height=100, key="ebook_context_main", max_chars=500,
         placeholder="z.B. Titel, Kapitel, Thema des Abschnitts, oder was das Bild illustrieren soll.",
-        help="Dieser Kontext wird an die KI weitergegeben, um relevantere Beschreibungen zu erstellen."
+        help="Dieser Kontext wird an die KI weitergegeben."
     )
     st.caption(f"{len(ebook_context_input)}/500 Zeichen")
 
@@ -239,18 +256,26 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
                 safe_file_name_part = "".join(c if c.isalnum() else "_" for c in file_name)
                 base_id = f"access_{i}_{safe_file_name_part}"
                 try:
-                    original_image_bytes = uploaded_file.getvalue(); image_bytes_for_api = original_image_bytes
+                    original_image_bytes = uploaded_file.getvalue()
+                    image_bytes_for_api = original_image_bytes
                     if Path(file_name).suffix.lower() in ['.tif', '.tiff']:
                         with st.spinner(f"Konvertiere {file_name} (TIFF) zu PNG..."):
                             try:
                                 pil_image = Image.open(BytesIO(original_image_bytes))
                                 if getattr(pil_image, "n_frames", 1) > 1: pil_image.seek(0)
-                                if pil_image.mode not in ('RGB', 'RGBA', 'L'): pil_image = pil_image.convert('RGB')
-                                output_buffer = BytesIO(); pil_image.save(output_buffer, format="PNG"); image_bytes_for_api = output_buffer.getvalue()
-                            except Exception as conv_e: st.error(f"🚨 Fehler beim Konvertieren von '{file_name}': {conv_e}"); failed_count += 1; continue
+                                if pil_image.mode not in ('RGB', 'RGBA', 'L'):
+                                    pil_image = pil_image.convert('RGB')
+                                output_buffer = BytesIO()
+                                pil_image.save(output_buffer, format="PNG")
+                                image_bytes_for_api = output_buffer.getvalue()
+                            except Exception as conv_e:
+                                st.error(f"🚨 Fehler beim Konvertieren der TIFF-Datei '{file_name}': {conv_e}")
+                                failed_count += 1
+                                continue
                     
                     with st.spinner(f"Generiere barrierefreie Beschreibung für {file_name}..."):
                         short_desc, long_desc = generate_accessibility_description_cached(image_bytes_for_api, file_name, ebook_context_input)
+                    
                     if short_desc and long_desc:
                         st.markdown(f"--- \n#### ✅ Ergebnisse für: `{file_name}`")
                         col1, col2 = st.columns([1, 3], gap="medium")
@@ -258,24 +283,41 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
                         with col2:
                             st.text("Kurzbeschreibung (max. 140 Zeichen):")
                             st.text_area("Kurz", value=short_desc, height=100, key=f"short_text_{base_id}", disabled=True, label_visibility="collapsed")
-                            short_desc_button_id = f"short_copy_{base_id}"; short_json = json.dumps(short_desc)
+                            short_desc_button_id = f"short_copy_{base_id}"
+                            short_json = json.dumps(short_desc)
                             components.html(f"""<button id="{short_desc_button_id}">Kurzbeschreibung kopieren</button><script>document.getElementById("{short_desc_button_id}").addEventListener('click', function(){{navigator.clipboard.writeText({short_json}).then(function(){{let b=document.getElementById("{short_desc_button_id}");let o=b.innerText;b.innerText='Kopiert!';setTimeout(function(){{b.innerText=o}},1500)}})}});</script><style>#{short_desc_button_id}{{background-color:#007bff;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;margin-top:5px}}#{short_desc_button_id}:hover{{background-color:#0056b3}}</style>""", height=45)
+                            
                             with st.expander("Zeige/verberge Langbeschreibung"):
                                 st.text_area("Lang", value=long_desc, height=200, key=f"long_text_{base_id}", disabled=True, label_visibility="collapsed")
-                                long_desc_button_id = f"long_copy_{base_id}"; long_json = json.dumps(long_desc)
+                                long_desc_button_id = f"long_copy_{base_id}"
+                                long_json = json.dumps(long_desc)
                                 components.html(f"""<button id="{long_desc_button_id}">Langbeschreibung kopieren</button><script>document.getElementById("{long_desc_button_id}").addEventListener('click', function(){{navigator.clipboard.writeText({long_json}).then(function(){{let b=document.getElementById("{long_desc_button_id}");let o=b.innerText;b.innerText='Kopiert!';setTimeout(function(){{b.innerText=o}},1500)}})}});</script><style>#{long_desc_button_id}{{background-color:#007bff;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;margin-top:5px}}#{long_desc_button_id}:hover{{background-color:#0056b3}}</style>""", height=45)
                         processed_count += 1
-                        results_for_export.append({"Bildname": file_name, "Dateiname Produktion": "", "Alternativtext": short_desc, "Bildlegende": "", "Anmerkung": "", "Langbeschreibung": long_desc, "(Platzierung/Größe/Übersetzungstexte in der Abbildung/...)": ""})
-                    else: st.error(f"❌ Fehler bei Erstellung der barrierefreien Beschreibung für '{file_name}'."); failed_count += 1
-                except Exception as e: st.error(f"🚨 Unerwarteter FEHLER bei der Hauptverarbeitung von '{file_name}': {e}"); failed_count += 1
+                        results_for_export.append({
+                            "Bildname": file_name, "Dateiname Produktion": "", "Alternativtext": short_desc,
+                            "Bildlegende": "", "Anmerkung": "", "Langbeschreibung": long_desc,
+                            "(Platzierung/Größe/Übersetzungstexte in der Abbildung/...)": ""
+                        })
+                    else:
+                        st.error(f"❌ Fehler bei Erstellung der barrierefreien Beschreibung für '{file_name}'.")
+                        failed_count += 1
+                except Exception as e:
+                    st.error(f"🚨 Unerwarteter FEHLER bei der Hauptverarbeitung von '{file_name}': {e}")
+                    failed_count += 1
             
             if results_for_export:
-                st.divider(); st.subheader("📊 Ergebnisse exportieren")
+                st.divider()
+                st.subheader("📊 Ergebnisse exportieren")
                 df = pd.DataFrame(results_for_export)
                 output = BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer: df.to_excel(writer, index=False, sheet_name='Bildbeschreibungen')
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    df.to_excel(writer, index=False, sheet_name='Bildbeschreibungen')
                 excel_data = output.getvalue()
-                st.download_button(label="💾 Excel-Datei herunterladen", data=excel_data, file_name="barrierefreie_bildbeschreibungen.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                st.download_button(
+                    label="💾 Excel-Datei herunterladen", data=excel_data,
+                    file_name="barrierefreie_bildbeschreibungen.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
             
             st.divider()
             st.subheader("🏁 Zusammenfassung")
