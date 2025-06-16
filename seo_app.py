@@ -12,10 +12,11 @@ import streamlit.components.v1 as components
 from google.api_core.exceptions import ResourceExhausted
 from pathlib import Path
 import pandas as pd
+from streamlit_option_menu import option_menu
 
 # --- Grundkonfiguration & App-Titel ---
 st.set_page_config(
-    page_title="Marketing & SEO Toolbox",
+    page_title="Toolbox",
     page_icon="🧰",
     layout="wide"
 )
@@ -31,7 +32,7 @@ Zweck und Zielgruppe:
 Stil und Formulierung:
 - Neutral und deskriptiv: Beschreibe objektiv, was visuell wahrnehmbar ist.
 - Keine Interpretation: Vermeide persönliche Deutungen oder Wertungen.
-- Direkter Einstieg: Verzichte zwingend auf einleitende Formulierungen wie „Das Foto zeigt…“ oder „Auf dem Bild ist zu sehen…“.
+- Direkter Einstieg: Verzichte zwingend auf einleitende Formulierungen wie „Das Foto zeigt…“, „Die Illustration stellt dar…“, „Auf dem Bild ist zu sehen…“ oder ähnliche Phrasen.
 - Anführungszeichen: Verwende für Anführungszeichen ausschließlich französische Guillemets («Beispiel»).
 - Sprache: Klar, präzise und allgemein verständlich.
 Inhalt und Struktur:
@@ -68,6 +69,7 @@ TITLE: [Hier der generierte Title-Text]
 
 @st.cache_data
 def generate_seo_tags_cached(image_bytes_for_api, file_name_for_log: str, model_name: str = "gemini-1.5-pro-latest") -> Tuple[Union[str, None], Union[str, None]]:
+    """Generiert SEO alt und title Tags."""
     try:
         img = Image.open(BytesIO(image_bytes_for_api))
         model = genai.GenerativeModel(model_name)
@@ -91,6 +93,7 @@ def generate_seo_tags_cached(image_bytes_for_api, file_name_for_log: str, model_
 
 @st.cache_data
 def generate_accessibility_description_cached(image_bytes_for_api, file_name_for_log: str, ebook_context: str = "", model_name: str = "gemini-1.5-pro-latest") -> Tuple[Union[str, None], Union[str, None]]:
+    """Generiert eine barrierefreie Kurz- und Langbeschreibung."""
     try:
         img = Image.open(BytesIO(image_bytes_for_api))
         model = genai.GenerativeModel(model_name)
@@ -120,24 +123,60 @@ def generate_accessibility_description_cached(image_bytes_for_api, file_name_for
         print(f"Error during accessibility desc generation for {file_name_for_log}: {e}")
         return None, None
 
+
 # --- App-Struktur ---
 
 # API Key Handling
 api_key = st.secrets.get("GOOGLE_API_KEY")
-if not api_key: st.error("🚨 Fehler: GOOGLE_API_KEY nicht konfiguriert!"); st.stop()
-try: genai.configure(api_key=api_key)
-except Exception as e: st.error(f"🚨 Fehler bei Konfiguration: {e}"); st.stop()
+if not api_key:
+    st.error("🚨 Fehler: GOOGLE_API_KEY nicht konfiguriert! Bitte füge ihn in den App-Einstellungen unter 'Settings' -> 'Secrets' hinzu.")
+    st.stop()
+try:
+    genai.configure(api_key=api_key)
+except Exception as e:
+    st.error(f"🚨 Fehler bei Konfiguration: {e}")
+    st.stop()
 
-# Header der App
-with st.container(border=True):
-    st.title("🧰 Marketing & SEO Toolbox")
+# --- Seitenleiste ---
+with st.sidebar:
+    st.title("🧰 Toolbox")
     st.write("Tools zur automatisierten Erstellung von Bildtexten mit Gemini.")
+    st.divider()
+    st.title("ℹ️ Info")
+    st.write("Diese App nutzt die Google Gemini API zur Generierung von Bild-Tags.")
+    st.text(f"Unterstützte Formate: {', '.join(['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'tif', 'tiff'])}")
+    st.text("Bei Fragen -> Gordon")
 
-# Navigation mit Tabs
-tab_seo, tab_accessibility = st.tabs(["**SEO Tags**", "**Barrierefreie Bildbeschreibungen**"])
 
-# --- Werkzeug 1: SEO Tags ---
-with tab_seo:
+# --- Hauptbereich mit neuer Navigation ---
+
+selected_tool = option_menu(
+    menu_title=None,
+    options=["SEO Tags", "Barrierefreie Bildbeschreibung"],
+    icons=['search', 'universal-access-circle'],
+    menu_icon="cast",
+    default_index=0,
+    orientation="horizontal",
+    styles={
+        "container": {"padding": "5px !important", "background-color": "#fafafa", "border-radius": "10px"},
+        "icon": {"color": "#4A90E2", "font-size": "24px"},
+        "nav-link": {
+            "font-size": "16px",
+            "font-weight": "600",
+            "text-align": "center",
+            "margin": "0px 5px",
+            "--hover-color": "#eee",
+            "border-radius": "10px",
+        },
+        "nav-link-selected": {"background-color": "#007bff"},
+    }
+)
+
+st.divider()
+
+# --- Logik basierend auf der Navigations-Auswahl ---
+
+if selected_tool == "SEO Tags":
     st.header("SEO Tags (Alt & Title) generieren")
     st.caption("Dieses Werkzeug erstellt prägnante `alt`- und `title`-Tags für Bilder zur Suchmaschinenoptimierung und grundlegenden Barrierefreiheit.")
 
@@ -155,13 +194,13 @@ with tab_seo:
                 base_id = f"seo_{i}_{safe_file_name_part}"
                 try:
                     with st.spinner(f"Generiere SEO Tags für {file_name}..."):
-                        image_bytes_for_api = uploaded_file.getvalue()
-                        title, alt = generate_seo_tags_cached(image_bytes_for_api, file_name)
+                        image_bytes = uploaded_file.getvalue()
+                        title, alt = generate_seo_tags_cached(image_bytes, file_name)
                     if title and alt:
                         with st.expander(f"✅ SEO Tags für: {file_name}", expanded=True):
                             alt_button_id, title_button_id = f"alt_btn_{base_id}", f"title_btn_{base_id}"
                             col1, col2 = st.columns([1, 3], gap="medium")
-                            with col1: st.image(image_bytes_for_api, width=150, caption="Vorschau")
+                            with col1: st.image(image_bytes, width=150, caption="Vorschau")
                             with col2:
                                 st.text("ALT Tag:"); st.text_area("ALT", value=alt, height=75, key=f"alt_text_{base_id}", disabled=True, label_visibility="collapsed")
                                 alt_json = json.dumps(alt); components.html(f"""<button id="{alt_button_id}">ALT kopieren</button><script>document.getElementById("{alt_button_id}").addEventListener('click', function(){{navigator.clipboard.writeText({alt_json}).then(function(){{let b=document.getElementById("{alt_button_id}");let o=b.innerText;b.innerText='Kopiert!';setTimeout(function(){{b.innerText=o}},1500)}})}});</script><style>#{alt_button_id}{{background-color:#007bff;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;margin-top:5px}}#{alt_button_id}:hover{{background-color:#0056b3}}</style>""",height=45)
@@ -172,8 +211,7 @@ with tab_seo:
                 except Exception as e: st.error(f"🚨 Unerwarteter FEHLER bei '{file_name}': {e}")
             st.success("SEO-Verarbeitung abgeschlossen.")
 
-# --- Werkzeug 2: Barrierefreie Bildbeschreibungen ---
-with tab_accessibility:
+elif selected_tool == "Barrierefreie Bildbeschreibung":
     st.header("Barrierefreie Bildbeschreibung (Kurz & Lang)")
     st.caption("Dieses Werkzeug erstellt eine prägnante Kurzbeschreibung (Alt-Text) und eine detaillierte Langbeschreibung für E-Books und barrierefreie Inhalte.")
 
@@ -195,7 +233,7 @@ with tab_accessibility:
             st.subheader("Verarbeitungsergebnisse")
             processed_count, failed_count = 0, 0
             results_for_export = []
-
+            
             for i, uploaded_file in enumerate(accessibility_uploaded_files):
                 file_name = uploaded_file.name
                 safe_file_name_part = "".join(c if c.isalnum() else "_" for c in file_name)
@@ -209,7 +247,7 @@ with tab_accessibility:
                                 if getattr(pil_image, "n_frames", 1) > 1: pil_image.seek(0)
                                 if pil_image.mode not in ('RGB', 'RGBA', 'L'): pil_image = pil_image.convert('RGB')
                                 output_buffer = BytesIO(); pil_image.save(output_buffer, format="PNG"); image_bytes_for_api = output_buffer.getvalue()
-                            except Exception as conv_e: st.error(f"🚨 Fehler beim Konvertieren der TIFF-Datei '{file_name}': {conv_e}"); failed_count += 1; continue
+                            except Exception as conv_e: st.error(f"🚨 Fehler beim Konvertieren von '{file_name}': {conv_e}"); failed_count += 1; continue
                     
                     with st.spinner(f"Generiere barrierefreie Beschreibung für {file_name}..."):
                         short_desc, long_desc = generate_accessibility_description_cached(image_bytes_for_api, file_name, ebook_context_input)
@@ -238,10 +276,10 @@ with tab_accessibility:
                 with pd.ExcelWriter(output, engine='openpyxl') as writer: df.to_excel(writer, index=False, sheet_name='Bildbeschreibungen')
                 excel_data = output.getvalue()
                 st.download_button(label="💾 Excel-Datei herunterladen", data=excel_data, file_name="barrierefreie_bildbeschreibungen.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            
+            st.divider()
+            st.subheader("🏁 Zusammenfassung")
+            col1, col2 = st.columns(2)
+            col1.metric("Erfolgreich verarbeitet", processed_count)
+            col2.metric("Fehlgeschlagen", failed_count, delta=None if failed_count == 0 else -failed_count, delta_color="inverse")
             st.success("Verarbeitung abgeschlossen.")
-
-# --- Sidebar für allgemeine Infos ---
-st.sidebar.title("ℹ️ Info")
-st.sidebar.write("Diese App nutzt die Google Gemini API zur Generierung von Bild-Tags.")
-st.sidebar.text(f"Unterstützte Formate: {', '.join(['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'tif', 'tiff'])}")
-st.sidebar.text("Bei Fragen -> Gordon")
