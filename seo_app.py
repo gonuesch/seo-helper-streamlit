@@ -161,7 +161,7 @@ selected_tool = option_menu(
 # --- Seitenleiste (Sidebar) mit dynamischem Inhalt ---
 with st.sidebar:
     st.image("app_icon.png", width=100)
-    st.markdown("# 🧰 Toolbox")
+    st.markdown("# Toolbox")
     st.markdown("##### AI-Tools für dich")
     
     st.divider()
