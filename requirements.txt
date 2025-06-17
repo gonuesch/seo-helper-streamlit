@@ -5,3 +5,5 @@ Pillow
 pandas
 openpyxl
 streamlit-option-menu
+python-docx
+elevenlabs
