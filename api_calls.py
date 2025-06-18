@@ -6,7 +6,7 @@ from io import BytesIO
 from typing import Union, Tuple
 import google.generativeai as genai
 from google.api_core.exceptions import ResourceExhausted
-from elevenlabs.client import ElevenLabs
+from elevenlabs.client import ElevenLabs # Stellen Sie sicher, dass elevenlabs installiert ist
 from elevenlabs import Voice, VoiceSettings
 
 # Importiere die Prompt-Vorlagen aus der prompts.py Datei
@@ -93,25 +93,33 @@ def generate_accessibility_description_cached(image_bytes_for_api, file_name_for
 def generate_audio_from_text(text: str, api_key: str) -> Union[bytes, None]:
     """
     Generiert Audio aus Text mit der ElevenLabs API und gibt die Audio-Bytes zurück.
+    Angepasst für die ElevenLabs Python Bibliothek Version 1.x.x
     """
     if not text or not api_key:
         st.warning("Kein Text oder API-Schlüssel für die Audio-Generierung vorhanden.")
         return None
     
     try:
-        # Initialisiere den ElevenLabs Client
         client = ElevenLabs(api_key=api_key)
         
-        # Generiere die Audio-Bytes. Hier kannst du Stimme und Modell anpassen.
-        # Eine Liste verfügbarer Stimmen findest du in deinem ElevenLabs Konto.
-        audio_bytes = client.generate(
+        # === ÄNDERUNG HIER: ANPASSUNG AN NEUE ELEVENLABS API (v1.x.x) ===
+        # Die Methode ist jetzt client.text_to_speech.convert()
+        # Voice-ID 'Rachel' (UUID) und Modell werden direkt übergeben.
+        
+        # Wähle eine Standardstimme (Voice ID für "Rachel" ist eine gängige Wahl)
+        # Eine Liste deiner verfügbaren Voice IDs findest du in deinem ElevenLabs Konto
+        # oder über client.voices.get_all()
+        selected_voice_id = '21m00Tcm4NF8gDrvPhhE' # Beispiel Voice ID für eine Standardstimme (Rachel)
+
+        audio_bytes = client.text_to_speech.convert(
+            voice_id=selected_voice_id,
             text=text,
-            voice=Voice(
-                voice_id='Rachel', # Eine populäre, klare Stimme. Alternativen: 'Adam', 'Bella', etc.
-                settings=VoiceSettings(stability=0.7, similarity_boost=0.5, style=0.0, use_speaker_boost=True)
-            ),
-            model="eleven_multilingual_v2" # Gutes Modell für mehrsprachige Texte
+            model_id="eleven_multilingual_v2", # Modell-ID als Parameter
+            # Optional: voice_settings können hier auch als Dictionary übergeben werden,
+            # wenn du spezifische Einstellungen für Stabilität/Ähnlichkeit möchtest:
+            # voice_settings=VoiceSettings(stability=0.71, similarity_boost=0.5)
         )
+        # === ENDE ÄNDERUNG ===
         
         # Überprüfen, ob Bytes zurückgegeben wurden
         if isinstance(audio_bytes, bytes) and len(audio_bytes) > 0:
@@ -122,5 +130,5 @@ def generate_audio_from_text(text: str, api_key: str) -> Union[bytes, None]:
 
     except Exception as e:
         print(f"Error calling ElevenLabs API: {e}")
-        st.error(f"Fehler bei der Audio-Generierung durch ElevenLabs: {e}")
+        st.error(f"Fehler bei der Audio-Generierung durch ElevenLabs: {e}. Prüfe API-Key und Textlänge.")
         return None
