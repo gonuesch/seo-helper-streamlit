@@ -96,14 +96,15 @@ def generate_accessibility_description_cached(image_bytes_for_api, file_name_for
         st.error(f"Ein unerwarteter Fehler ist bei der Generierung der Barrierefreiheits-Beschreibung für '{file_name_for_log}' aufgetreten.")
         return None, None
 
-@st.cache_data(ttl=3600) # Cache für 1 Stunde
+@st.cache_data(ttl=3600)
 def get_available_voices(api_key: str) -> Dict[str, str]:
     """
     Ruft die verfügbaren Stimmen von der ElevenLabs API ab.
     Gibt ein Dictionary zurück: {'Stimmenname': 'stimmen_id'}
     """
     try:
-        client = ElevenLabs(api_key=api_key)
+        # HIER DEN TIMEOUT HINZUFÜGEN
+        client = ElevenLabs(api_key=api_key, timeout=60.0) # Timeout auf 60 Sekunden setzen
         voices = client.voices.get_all()
         return {voice.name: voice.voice_id for voice in voices.voices}
     except Exception as e:
@@ -122,10 +123,11 @@ def generate_audio_from_text(text: str, api_key: str, voice_id: str) -> Union[by
         return None
     
     try:
-        client = ElevenLabs(api_key=api_key)
+        # HIER DEN TIMEOUT HINZUFÜGEN
+        client = ElevenLabs(api_key=api_key, timeout=300.0) # Timeout auf 300s (5 Minuten) setzen
         
         audio_generator = client.text_to_speech.convert(
-            voice_id=voice_id, # Verwende die übergebene voice_id
+            voice_id=voice_id,
             text=text,
             model_id="eleven_multilingual_v2", 
         )
