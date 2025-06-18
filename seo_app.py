@@ -9,7 +9,7 @@ from io import BytesIO
 from streamlit_option_menu import option_menu
 
 # Importiere Funktionen aus deinen Modulen
-from utils import convert_tiff_to_png_bytes, read_text_from_docx
+from utils import convert_tiff_to_png_bytes, read_text_from_docx, chunk_text
 from api_calls import generate_seo_tags_cached, generate_accessibility_description_cached, generate_audio_from_text, get_available_voices
 
 
@@ -248,37 +248,31 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
             col2.metric("Fehlgeschlagen", failed_count, delta=None if failed_count == 0 else -failed_count, delta_color="inverse")
             st.success("Verarbeitung abgeschlossen.")
 
-elif selected_tool == "Text-to-Speech":
+lif selected_tool == "Text-to-Speech":
     st.header("Text-to-Speech mit ElevenLabs")
     st.caption("Lade ein Word-Dokument (.docx) hoch, um den Text in eine Audiodatei umzuwandeln.")
     
-    # Lade verfügbare Stimmen
     with st.spinner("Lade verfügbare Stimmen von ElevenLabs..."):
         available_voices = get_available_voices(elevenlabs_api_key)
     
-    # Prüfe, ob das Laden der Stimmen erfolgreich war
     if "Fehler" in available_voices:
         st.error("Stimmen konnten nicht von ElevenLabs geladen werden. Bitte API-Schlüssel prüfen.")
     else:
-        # UI zur Stimmenauswahl
         selected_voice_name = st.selectbox(
             label="Wähle eine Stimme",
             options=list(available_voices.keys()),
-            key="voice_selection" # Eindeutiger Key für die Selectbox
+            key="voice_selection"
         )
         
-        # File Uploader
         docx_file = st.file_uploader(
             label="Word-Dokument (.docx) hochladen",
             type=['docx'],
             key="tts_uploader"
         )
 
-        # Wenn eine Datei hochgeladen wurde und eine Stimme ausgewählt ist
         if docx_file and selected_voice_name:
             selected_voice_id = available_voices[selected_voice_name]
             
-            # Button zum Generieren des Audios. Dieser Code-Pfad wird nur einmal erreicht.
             if st.button("🎙️ Audio generieren", type="primary", key="process_tts_button"):
                 try:
                     with st.spinner("Lese Text aus Word-Dokument..."):
@@ -287,25 +281,44 @@ elif selected_tool == "Text-to-Speech":
                     if not text_content or not text_content.strip():
                         st.warning("Das Word-Dokument scheint keinen Text zu enthalten.")
                     else:
-                        st.info(f"Text mit {len(text_content)} Zeichen gelesen. Generiere Audio mit Stimme '{selected_voice_name}'...")
+                        st.info(f"Text mit {len(text_content)} Zeichen gelesen. Teile ihn in kleinere Stücke auf...")
                         
-                        with st.spinner("Audio wird von ElevenLabs generiert... (Dies kann einige Minuten dauern)"):
-                            audio_bytes = generate_audio_from_text(text_content, elevenlabs_api_key, selected_voice_id)
-                        
-                        if audio_bytes:
+                        # Den Text in Chunks aufteilen
+                        text_chunks = chunk_text(text_content)
+                        st.info(f"Text wurde in {len(text_chunks)} Teile aufgeteilt. Generiere jetzt Audio für jeden Teil...")
+
+                        all_audio_bytes = []
+                        progress_bar = st.progress(0, text="Audio-Generierung startet...")
+
+                        # Für jeden Chunk Audio generieren
+                        for i, chunk in enumerate(text_chunks):
+                            progress_text = f"Generiere Audio für Teil {i+1}/{len(text_chunks)}..."
+                            progress_bar.progress((i) / len(text_chunks), text=progress_text)
+                            
+                            audio_segment = generate_audio_from_text(chunk, elevenlabs_api_key, selected_voice_id)
+                            if audio_segment:
+                                all_audio_bytes.append(audio_segment)
+                            else:
+                                st.error(f"Fehler bei der Audio-Generierung für Teil {i+1}. Breche ab.")
+                                break # Schleife abbrechen bei einem Fehler
+
+                        progress_bar.progress(1.0, text="Verarbeitung abgeschlossen!")
+
+                        # Überprüfen, ob alle Teile erfolgreich waren
+                        if len(all_audio_bytes) == len(text_chunks):
+                            # Alle Audio-Segmente zu einer Datei zusammenfügen
+                            final_audio = b"".join(all_audio_bytes)
+                            
                             st.success("Audio erfolgreich generiert!")
-                            st.audio(audio_bytes, format="audio/mpeg")
+                            st.audio(final_audio, format="audio/mpeg")
                             st.download_button(
                                 label="MP3-Datei herunterladen",
-                                data=audio_bytes,
+                                data=final_audio,
                                 file_name=f"{Path(docx_file.name).stem}.mp3",
                                 mime="audio/mpeg"
                             )
                         else:
-                            st.error(
-                                "Audio konnte nicht generiert werden. "
-                                "Mögliche Ursachen: Der Text im Dokument ist zu kurz/ungültig oder es gab ein vorübergehendes Serverproblem. "
-                                "Bitte prüfe die App-Logs für technische Details."
-                            )
+                            st.error("Nicht alle Audio-Teile konnten erfolgreich generiert werden.")
+
                 except Exception as e:
                     st.error(f"Ein unerwarteter Fehler ist aufgetreten: {e}")
