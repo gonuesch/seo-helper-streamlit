@@ -268,6 +268,7 @@ elif selected_tool == "Text-to-Speech":
                     st.warning("Das Word-Dokument scheint keinen Text zu enthalten.")
                 else:
                     st.info(f"Text mit {len(text_content)} Zeichen erfolgreich gelesen. Generiere jetzt Audio...")
+                    
                     with st.spinner("Audio wird von ElevenLabs generiert... (Dies kann einige Minuten dauern)"):
                         audio_bytes = generate_audio_from_text(text_content, elevenlabs_api_key)
                     
@@ -281,7 +282,13 @@ elif selected_tool == "Text-to-Speech":
                             mime="audio/mpeg"
                         )
                     else:
-                        st.error("Audio konnte nicht generiert werden. Prüfe die Logs für Details.")
+                        # Verbesserte, klarere Fehlermeldung für den Benutzer
+                        st.error(
+                            "Audio konnte nicht generiert werden. "
+                            "Mögliche Ursachen: Der Text im Dokument ist zu kurz/ungültig, der ElevenLabs API-Key ist falsch oder es gab ein vorübergehendes Serverproblem. "
+                            "Bitte prüfe die App-Logs für technische Details."
+                        )
 
             except Exception as e:
+                # Allgemeiner Fehler-Fallback
                 st.error(f"Ein unerwarteter Fehler ist aufgetreten: {e}")
