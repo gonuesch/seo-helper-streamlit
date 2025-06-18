@@ -10,7 +10,7 @@ from streamlit_option_menu import option_menu
 
 # Importiere Funktionen aus deinen Modulen
 from utils import convert_tiff_to_png_bytes, read_text_from_docx
-from api_calls import generate_seo_tags_cached, generate_accessibility_description_cached, generate_audio_from_text
+from api_calls import generate_seo_tags_cached, generate_accessibility_description_cached, generate_audio_from_text, get_available_voices
 
 
 # --- Seitenkonfiguration & API Keys ---
