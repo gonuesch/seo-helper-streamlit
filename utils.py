@@ -23,20 +23,25 @@ def read_text_from_docx(file_object: BytesIO) -> str:
     return '\n'.join(full_text)
 
 def read_text_from_pdf(file_object: BytesIO) -> str:
-    """Liest den gesamten Text aus einer PDF-Datei."""
-    try:
-        # Öffne das PDF-Dokument aus den Bytes
-        pdf_document = fitz.open(stream=file_object.read(), filetype="pdf")
-        full_text = ""
-        # Iteriere durch jede Seite und extrahiere den Text
-        for page_num in range(len(pdf_document)):
-            page = pdf_document.load_page(page_num)
-            full_text += page.get_text()
-        return full_text
-    except Exception as e:
-        # Gib einen leeren String zurück, wenn ein Fehler auftritt
-        print(f"Fehler beim Lesen der PDF-Datei: {e}")
-        return ""
+    """
+    Liest den gesamten Text aus einer PDF-Datei.
+    WIRFT EINEN FEHLER, WENN ETWAS SCHIEFGEHT (ZUM DEBUGGEN).
+    """
+    # Öffne das PDF-Dokument aus den Bytes
+    # Der try...except Block wurde bewusst entfernt, um den echten Fehler zu sehen.
+    pdf_document = fitz.open(stream=file_object.read(), filetype="pdf")
+    full_text = ""
+    # Iteriere durch jede Seite und extrahiere den Text
+    for page_num in range(len(pdf_document)):
+        page = pdf_document.load_page(page_num)
+        full_text += page.get_text()
+    
+    # Wenn nach dem Lesen aller Seiten kein Text da ist, ist es wahrscheinlich eine Bild-PDF
+    if not full_text.strip():
+        # Wir geben eine spezifische Meldung zurück, die wir in der App anzeigen können
+        return "NO_TEXT_IN_PDF"
+        
+    return full_text
 
 def chunk_text(text: str, chunk_size: int = 9500) -> list[str]:
     """

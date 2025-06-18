@@ -298,6 +298,8 @@ elif selected_tool == "Text-to-Speech":
                     
                     if not text_content or not text_content.strip():
                         st.warning("Das Dokument scheint keinen lesbaren Text zu enthalten.")
+                    elif text_content == "NO_TEXT_IN_PDF":
+                        st.warning("Die PDF-Datei enthält keinen extrahierbaren Text. Möglicherweise ist es ein reines Bild-Dokument (Scan).")
                     else:
                         st.info(f"Text mit {len(text_content)} Zeichen gelesen. Teile ihn in kleinere Stücke auf...")
                         
