@@ -3,7 +3,7 @@
 import streamlit as st
 from PIL import Image
 from io import BytesIO
-from typing import Union, Tuple
+from typing import Union, Tuple, Dict 
 import google.generativeai as genai
 from google.api_core.exceptions import ResourceExhausted
 from elevenlabs.client import ElevenLabs
