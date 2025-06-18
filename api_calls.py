@@ -96,50 +96,56 @@ def generate_accessibility_description_cached(image_bytes_for_api, file_name_for
         st.error(f"Ein unerwarteter Fehler ist bei der Generierung der Barrierefreiheits-Beschreibung für '{file_name_for_log}' aufgetreten.")
         return None, None
 
+@st.cache_data(ttl=3600) # Cache für 1 Stunde
+def get_available_voices(api_key: str) -> Dict[str, str]:
+    """
+    Ruft die verfügbaren Stimmen von der ElevenLabs API ab.
+    Gibt ein Dictionary zurück: {'Stimmenname': 'stimmen_id'}
+    """
+    try:
+        client = ElevenLabs(api_key=api_key)
+        voices = client.voices.get_all()
+        return {voice.name: voice.voice_id for voice in voices.voices}
+    except Exception as e:
+        logger.error(f"Fehler beim Abrufen der ElevenLabs-Stimmen: {e}", exc_info=True)
+        return {"Fehler": "Stimmen konnten nicht geladen werden"}
+
 
 @st.cache_data
-def generate_audio_from_text(text: str, api_key: str) -> Union[bytes, None]:
+def generate_audio_from_text(text: str, api_key: str, voice_id: str) -> Union[bytes, None]:
     """
     Generiert Audio aus Text mit der ElevenLabs API und gibt die Audio-Bytes zurück.
-    Angepasst für die ElevenLabs Python Bibliothek Version 1.x.x, die einen Generator zurückgibt.
+    Akzeptiert jetzt eine dynamische voice_id.
     """
-    if not text or not text.strip() or not api_key:
-        logger.warning("Kein Text oder API-Schlüssel für die Audio-Generierung vorhanden.")
+    if not all([text, text.strip(), api_key, voice_id]):
+        logger.warning("Kein Text, API-Schlüssel oder Voice-ID für die Audio-Generierung vorhanden.")
         return None
     
     try:
         client = ElevenLabs(api_key=api_key)
         
-        selected_voice_id = '21m00Tcm4NF8gDrvPhhE' # Beispiel Voice ID für "Rachel"
-
-        # Die .convert() Methode gibt einen Generator zurück, der die Audio-Chunks liefert.
         audio_generator = client.text_to_speech.convert(
-            voice_id=selected_voice_id,
+            voice_id=voice_id, # Verwende die übergebene voice_id
             text=text,
             model_id="eleven_multilingual_v2", 
         )
 
-        # Sammle die Audio-Chunks aus dem Generator in einer Liste
-        logger.info("Sammle Audio-Chunks von der ElevenLabs API...")
+        logger.info(f"Sammle Audio-Chunks von der ElevenLabs API für Stimme {voice_id}...")
         audio_chunks = [chunk for chunk in audio_generator]
 
-        # Überprüfen, ob überhaupt Daten empfangen wurden
         if not audio_chunks:
-            logger.error("ElevenLabs API hat keine Audio-Daten (leere Chunk-Liste) zurückgegeben.")
+            logger.error("ElevenLabs API hat keine Audio-Daten zurückgegeben.")
             return None
 
-        # Verbinde die Chunks zu einem einzigen Bytes-Objekt
         full_audio_bytes = b"".join(audio_chunks)
 
         if full_audio_bytes:
             logger.info("Audio-Bytes erfolgreich zusammengefügt.")
             return full_audio_bytes
         else:
-            logger.error("ElevenLabs API hat nach dem Zusammenfügen der Chunks keine validen Audio-Daten ergeben.")
+            logger.error("Zusammenfügen der Audio-Chunks ergab keine Daten.")
             return None
 
     except Exception as e:
-        # Gib die spezifische Fehlermeldung der API im Log aus
         logger.error(f"Fehler bei der Audio-Generierung durch ElevenLabs: {e}", exc_info=True)
-        # Die UI kümmert sich um die Fehlermeldung für den User.
         return None
