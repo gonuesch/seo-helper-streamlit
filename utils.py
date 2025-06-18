@@ -3,6 +3,7 @@
 from PIL import Image
 from io import BytesIO
 import docx
+import fitz
 
 def convert_tiff_to_png_bytes(tiff_bytes: bytes) -> bytes:
     """Konvertiert eine TIFF-Datei (als Bytes) in PNG-Bytes."""
