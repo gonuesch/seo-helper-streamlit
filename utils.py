@@ -22,6 +22,22 @@ def read_text_from_docx(file_object: BytesIO) -> str:
     full_text = [para.text for para in doc.paragraphs]
     return '\n'.join(full_text)
 
+def read_text_from_pdf(file_object: BytesIO) -> str:
+    """Liest den gesamten Text aus einer PDF-Datei."""
+    try:
+        # Öffne das PDF-Dokument aus den Bytes
+        pdf_document = fitz.open(stream=file_object.read(), filetype="pdf")
+        full_text = ""
+        # Iteriere durch jede Seite und extrahiere den Text
+        for page_num in range(len(pdf_document)):
+            page = pdf_document.load_page(page_num)
+            full_text += page.get_text()
+        return full_text
+    except Exception as e:
+        # Gib einen leeren String zurück, wenn ein Fehler auftritt
+        print(f"Fehler beim Lesen der PDF-Datei: {e}")
+        return ""
+
 def chunk_text(text: str, chunk_size: int = 9500) -> list[str]:
     """
     Teilt einen langen Text in kleinere Chunks auf, ohne Sätze zu zerschneiden.

@@ -9,7 +9,7 @@ from io import BytesIO
 from streamlit_option_menu import option_menu
 
 # Importiere Funktionen aus deinen Modulen
-from utils import convert_tiff_to_png_bytes, read_text_from_docx, chunk_text
+from utils import convert_tiff_to_png_bytes, read_text_from_docx, read_text_from_pdf, chunk_text
 from api_calls import generate_seo_tags_cached, generate_accessibility_description_cached, generate_audio_from_text, get_available_voices
 
 
@@ -248,9 +248,9 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
             col2.metric("Fehlgeschlagen", failed_count, delta=None if failed_count == 0 else -failed_count, delta_color="inverse")
             st.success("Verarbeitung abgeschlossen.")
 
-if selected_tool == "Text-to-Speech":
+elif selected_tool == "Text-to-Speech":
     st.header("Text-to-Speech mit ElevenLabs")
-    st.caption("Lade ein Word-Dokument (.docx) hoch, um den Text in eine Audiodatei umzuwandeln.")
+    st.caption("Lade ein Word-Dokument (.docx) oder eine PDF-Datei (.pdf) hoch, um den Text in eine Audiodatei umzuwandeln.")
     
     with st.spinner("Lade verfügbare Stimmen von ElevenLabs..."):
         available_voices = get_available_voices(elevenlabs_api_key)
@@ -258,39 +258,55 @@ if selected_tool == "Text-to-Speech":
     if "Fehler" in available_voices:
         st.error("Stimmen konnten nicht von ElevenLabs geladen werden. Bitte API-Schlüssel prüfen.")
     else:
+        # --- NEUE LOGIK FÜR STIMMENAUSWAHL UND VORSCHAU ---
         selected_voice_name = st.selectbox(
-            label="Wähle eine Stimme",
+            label="1. Wähle eine Stimme",
             options=list(available_voices.keys()),
             key="voice_selection"
         )
         
+        # Zeige die Stimm-Vorschau an, wenn eine Stimme ausgewählt ist
+        if selected_voice_name:
+            st.write("Stimmprobe:")
+            preview_url = available_voices[selected_voice_name].get("preview_url")
+            if preview_url:
+                st.audio(preview_url)
+            else:
+                st.info("Für diese Stimme ist keine Vorschau verfügbar.")
+        
+        st.divider()
+
+        # --- NEUE LOGIK FÜR DATEI-UPLOADER ---
         docx_file = st.file_uploader(
-            label="Word-Dokument (.docx) hochladen",
-            type=['docx'],
+            label="2. Lade deine Datei hoch",
+            type=['docx', 'pdf'], # PDF als erlaubten Typ hinzufügen
             key="tts_uploader"
         )
 
         if docx_file and selected_voice_name:
-            selected_voice_id = available_voices[selected_voice_name]
+            selected_voice_id = available_voices[selected_voice_name]["voice_id"]
             
             if st.button("🎙️ Audio generieren", type="primary", key="process_tts_button"):
                 try:
-                    with st.spinner("Lese Text aus Word-Dokument..."):
-                        text_content = read_text_from_docx(docx_file)
+                    text_content = ""
+                    with st.spinner("Lese Text aus Datei..."):
+                        # Prüfe den Dateityp und verwende die richtige Funktion
+                        if docx_file.type == "application/pdf":
+                            text_content = read_text_from_pdf(docx_file)
+                        else: # Annahme: ansonsten ist es docx
+                            text_content = read_text_from_docx(docx_file)
                     
                     if not text_content or not text_content.strip():
-                        st.warning("Das Word-Dokument scheint keinen Text zu enthalten.")
+                        st.warning("Das Dokument scheint keinen lesbaren Text zu enthalten.")
                     else:
                         st.info(f"Text mit {len(text_content)} Zeichen gelesen. Teile ihn in kleinere Stücke auf...")
                         
-                        # Den Text in Chunks aufteilen
                         text_chunks = chunk_text(text_content)
                         st.info(f"Text wurde in {len(text_chunks)} Teile aufgeteilt. Generiere jetzt Audio für jeden Teil...")
 
                         all_audio_bytes = []
                         progress_bar = st.progress(0, text="Audio-Generierung startet...")
 
-                        # Für jeden Chunk Audio generieren
                         for i, chunk in enumerate(text_chunks):
                             progress_text = f"Generiere Audio für Teil {i+1}/{len(text_chunks)}..."
                             progress_bar.progress((i) / len(text_chunks), text=progress_text)
@@ -300,13 +316,11 @@ if selected_tool == "Text-to-Speech":
                                 all_audio_bytes.append(audio_segment)
                             else:
                                 st.error(f"Fehler bei der Audio-Generierung für Teil {i+1}. Breche ab.")
-                                break # Schleife abbrechen bei einem Fehler
+                                break
 
                         progress_bar.progress(1.0, text="Verarbeitung abgeschlossen!")
 
-                        # Überprüfen, ob alle Teile erfolgreich waren
                         if len(all_audio_bytes) == len(text_chunks):
-                            # Alle Audio-Segmente zu einer Datei zusammenfügen
                             final_audio = b"".join(all_audio_bytes)
                             
                             st.success("Audio erfolgreich generiert!")
