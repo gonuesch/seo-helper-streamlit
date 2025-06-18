@@ -248,7 +248,7 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
             col2.metric("Fehlgeschlagen", failed_count, delta=None if failed_count == 0 else -failed_count, delta_color="inverse")
             st.success("Verarbeitung abgeschlossen.")
 
-lif selected_tool == "Text-to-Speech":
+if selected_tool == "Text-to-Speech":
     st.header("Text-to-Speech mit ElevenLabs")
     st.caption("Lade ein Word-Dokument (.docx) hoch, um den Text in eine Audiodatei umzuwandeln.")
     
