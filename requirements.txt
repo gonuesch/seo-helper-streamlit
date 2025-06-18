@@ -7,3 +7,4 @@ openpyxl
 streamlit-option-menu
 python-docx
 elevenlabs
+PyMuPDF

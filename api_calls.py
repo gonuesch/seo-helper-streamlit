@@ -97,19 +97,26 @@ def generate_accessibility_description_cached(image_bytes_for_api, file_name_for
         return None, None
 
 @st.cache_data(ttl=3600)
-def get_available_voices(api_key: str) -> Dict[str, str]:
+def get_available_voices(api_key: str) -> Dict[str, Dict[str, str]]:
     """
     Ruft die verfügbaren Stimmen von der ElevenLabs API ab.
-    Gibt ein Dictionary zurück: {'Stimmenname': 'stimmen_id'}
+    Gibt ein Dictionary zurück: 
+    {'Stimmenname': {'voice_id': 'xyz', 'preview_url': 'http://...'}}
     """
     try:
-        # HIER DEN TIMEOUT HINZUFÜGEN
-        client = ElevenLabs(api_key=api_key, timeout=60.0) # Timeout auf 60 Sekunden setzen
+        client = ElevenLabs(api_key=api_key, timeout=60.0)
         voices = client.voices.get_all()
-        return {voice.name: voice.voice_id for voice in voices.voices}
+        # Erstelle ein verschachteltes Dictionary mit allen relevanten Infos
+        return {
+            voice.name: {
+                "voice_id": voice.voice_id,
+                "preview_url": voice.preview_url
+            }
+            for voice in voices.voices if voice.preview_url
+        }
     except Exception as e:
         logger.error(f"Fehler beim Abrufen der ElevenLabs-Stimmen: {e}", exc_info=True)
-        return {"Fehler": "Stimmen konnten nicht geladen werden"}
+        return {"Fehler": {"voice_id": "", "preview_url": ""}}
 
 
 @st.cache_data
