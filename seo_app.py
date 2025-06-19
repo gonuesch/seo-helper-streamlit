@@ -31,11 +31,22 @@ if not all([google_client_id, google_client_secret, cookie_signature_key]):
     st.stop()
 
 config = {
-    'credentials': {'usernames': {}},
+    'credentials': {
+        'usernames': {
+            # +++ HIER DER TEST-EINTRAG +++
+            "testuser": {
+                "name": "Test User",
+                "password": "$2b$12$EixZaYVK1fsbw1ZfbX39DOqVmnnBIaXJt3r6scq2J2m7bT2v.O5/O" # Gehashtes Passwort für "test"
+            }
+        }
+    },
     'cookie': {
         'name': 'seo_toolbox_cookie',
         'key': cookie_signature_key,
         'expiry_days': 30
+    },
+    'preauthorized': { # Hinzugefügt für bessere Struktur
+        'emails': []
     },
     'providers': {
         'google': {
