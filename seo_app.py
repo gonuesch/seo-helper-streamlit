@@ -46,9 +46,21 @@ config = {
     }
 }
 
-# +++ NEUER DEBUGGING-CODE +++
-st.subheader("DEBUG-Ansicht der Konfiguration:")
+
+# +++ NEUER, ERWEITERTER DEBUGGING-CODE +++
+st.subheader("Tiefen-Analyse der Konfiguration:")
+st.write(f"Typ der 'config'-Variable: `{type(config)}`")
+
+# Wir prüfen jeden Schlüssel einzeln
+st.write("Existiert der Schlüssel 'credentials' in config?", 'credentials' in config)
+if 'credentials' in config:
+    st.write("Typ von 'config['credentials']':", type(config['credentials']))
+    st.write("Existiert der Schlüssel 'usernames' in config['credentials']?", 'usernames' in config['credentials'])
+
+st.write("---")
+st.write("Komplette Konfiguration zur visuellen Prüfung:")
 st.json(config)
+# +++ ENDE DEBUGGING-CODE +++
 # +++ ENDE DEBUGGING-CODE +++
 
 # Initialisiere den Authenticator mit dem config-Dictionary
