@@ -1,4 +1,5 @@
 # requirements.txt
+# seo-helper-streamlit/requirements.txt
 streamlit
 google-generativeai
 Pillow
@@ -8,3 +9,4 @@ streamlit-option-menu
 python-docx
 elevenlabs
 PyMuPDF
+streamlit-authenticator
