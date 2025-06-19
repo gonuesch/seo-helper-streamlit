@@ -15,13 +15,12 @@ from api_calls import generate_seo_tags_cached, generate_accessibility_descripti
 # --- Seitenkonfiguration ---
 st.set_page_config(page_title="Toolbox", page_icon="app_icon.png", layout="wide")
 
-
 # --- HAUPTLOGIK: LOGIN ODER APP ANZEIGEN ---
 
 # Prüfe, ob der Nutzer eingeloggt ist. st.user ist das neue, eingebaute Objekt.
 if not st.user:
     # Wenn nicht eingeloggt, zeige nur den Login-Button.
-    # st.login liest seine Konfiguration automatisch aus den Secrets,
+    # st.login() liest seine Konfiguration automatisch aus den Secrets,
     # wenn sie im Format [connections.google_oauth] vorliegen.
     st.title("🧰 Toolbox")
     st.info("Bitte melde dich an, um die KI-Tools zu nutzen.")
