@@ -15,56 +15,24 @@ from api_calls import generate_seo_tags_cached, generate_accessibility_descripti
 # --- Seitenkonfiguration ---
 st.set_page_config(page_title="Toolbox", page_icon="app_icon.png", layout="wide")
 
-
-#--Debug --
-
-st.set_page_config(page_title="Auth Debug", layout="wide")
-
-try:
-    st.write("Attempting to read secrets...")
-    client_id = st.secrets.connections.google_oauth.client_id
-    st.success("Successfully read client_id.")
-    client_secret = st.secrets.connections.google_oauth.client_secret
-    st.success("Successfully read client_secret.")
-    redirect_uri = st.secrets.connections.google_oauth.redirect_uri
-    st.success("Successfully read redirect_uri.")
-except Exception as e:
-    st.error(f"Failed to read secrets: {e}")
-
-st.info("Now attempting to display the login button...")
-
-# Your existing login button code
-if not st.user:
-    st.button("Mit Google einloggen", on_click=st.login, args=("google",))
-else:
-    st.write(f"Welcome, {st.user.email}")
-    st.button("Logout", on_click=st.logout)
-
 # --- HAUPTLOGIK: LOGIN ODER APP ANZEIGEN ---
-
-# Prüfe, ob der Nutzer eingeloggt ist. st.user ist das neue, eingebaute Objekt.
 if not st.user:
-    # Wenn nicht eingeloggt, zeige nur den Login-Button.
-    # st.login() liest seine Konfiguration automatisch aus den Secrets,
-    # wenn sie im Format [connections.google_oauth] vorliegen.
     st.title("🧰 Toolbox")
     st.info("Bitte melde dich an, um die KI-Tools zu nutzen.")
-    st.button("Mit Google einloggen", on_click=st.login, args=("google",))
+    # KEY HINZUGEFÜGT, UM DEN DUPLICATE ID FEHLER ZU BEHEBEN
+    st.button("Mit Google einloggen", on_click=st.login, args=("google",), key="google_login_button")
 else:
-    # Wenn der Nutzer eingeloggt ist:
     user_email = st.user.email
     allowed_domains = ["rowohlt.de"]
 
-    # Prüfe die E-Mail-Domain
     if user_email.split('@')[1] not in allowed_domains:
         st.error(f"Zugriff verweigert. Die E-Mail-Domain '@{user_email.split('@')[1]}' ist nicht für den Zugriff auf dieses Tool berechtigt.")
-        st.button("Logout", on_click=st.logout)
+        # KEY HINZUGEFÜGT
+        st.button("Logout", on_click=st.logout, key="logout_button_denied")
     else:
         # ==============================================================================
-        # HIER BEGINNT DIE VOLLSTÄNDIGE ANWENDUNG (für eingeloggte und berechtigte Nutzer)
+        # VOLLSTÄNDIGE ANWENDUNG
         # ==============================================================================
-
-        # Lade die API-Schlüssel für die Tools
         gemini_api_key = st.secrets.get("GOOGLE_API_KEY")
         elevenlabs_api_key = st.secrets.get("ELEVENLABS_API_KEY")
 
@@ -76,7 +44,8 @@ else:
         with st.sidebar:
             st.image("app_icon.png", width=100)
             st.markdown(f"Willkommen, **{st.user.name}**!")
-            st.button("Logout", on_click=st.logout)
+            # KEY HINZUGEFÜGT
+            st.button("Logout", on_click=st.logout, key="logout_button_sidebar")
             st.divider()
             st.markdown("# 🧰 Toolbox")
             st.markdown("##### AI-Tools für dich")
@@ -164,7 +133,7 @@ else:
                         except Exception as e:
                             st.error(f"🚨 Unerwarteter FEHLER bei '{file_name}': {e}")
                     st.success("SEO-Verarbeitung abgeschlossen.")
-        
+
         elif selected_tool == "Barrierefreie Bildbeschreibung":
             st.header("Barrierefreie Bildbeschreibung (Kurz & Lang)")
             st.caption("Dieses Werkzeug erstellt eine prägnante Kurzbeschreibung (Alt-Text) und eine detaillierte Langbeschreibung für E-Books und barrierefreie Inhalte.")
