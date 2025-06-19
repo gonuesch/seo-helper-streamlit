@@ -15,27 +15,17 @@ from api_calls import generate_seo_tags_cached, generate_accessibility_descripti
 # --- Seitenkonfiguration ---
 st.set_page_config(page_title="Toolbox", page_icon="app_icon.png", layout="wide")
 
-# Lade die OAuth-Anmeldedaten aus den Secrets
-try:
-    google_client_id = st.secrets["GOOGLE_CLIENT_ID"]
-    google_client_secret = st.secrets["GOOGLE_CLIENT_SECRET"]
-    redirect_uri = "https://seo-apper-develop-qeajnwycwxewxdwq4dtgwn.streamlit.app/oauth2callback"
-except KeyError:
-    st.error("🚨 Google OAuth-Anmeldedaten sind in den Secrets nicht korrekt konfiguriert.")
-    st.stop()
 
 # --- HAUPTLOGIK: LOGIN ODER APP ANZEIGEN ---
 
 # Prüfe, ob der Nutzer eingeloggt ist. st.user ist das neue, eingebaute Objekt.
 if not st.user:
-    # Wenn nicht eingeloggt, zeige nur den Login-Button
+    # Wenn nicht eingeloggt, zeige nur den Login-Button.
+    # st.login liest seine Konfiguration automatisch aus den Secrets,
+    # wenn sie im Format [connections.google_oauth] vorliegen.
     st.title("🧰 Toolbox")
     st.info("Bitte melde dich an, um die KI-Tools zu nutzen.")
-    st.button("Mit Google einloggen", on_click=st.login, args=("google",), kwargs={
-        "client_id": google_client_id,
-        "client_secret": google_client_secret,
-        "redirect_uri": redirect_uri,
-    })
+    st.button("Mit Google einloggen", on_click=st.login, args=("google",))
 else:
     # Wenn der Nutzer eingeloggt ist:
     user_email = st.user.email
