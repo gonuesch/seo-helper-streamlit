@@ -1,6 +1,6 @@
 # requirements.txt
-# seo-helper-streamlit/requirements.txt
-streamlit
+streamlit>=1.32.0
+Authlib>=1.3.2
 google-generativeai
 Pillow
 pandas
@@ -9,4 +9,3 @@ streamlit-option-menu
 python-docx
 elevenlabs
 PyMuPDF
-streamlit-authenticator==0.4.2
