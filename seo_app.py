@@ -30,7 +30,6 @@ if not all([google_client_id, google_client_secret, cookie_signature_key]):
     st.error("🚨 App ist nicht korrekt konfiguriert (OAuth oder Cookie-Schlüssel fehlt).")
     st.stop()
 
-# Erstelle das Konfigurations-Dictionary für den Authenticator
 config = {
     'credentials': {'usernames': {}},
     'cookie': {
@@ -46,6 +45,11 @@ config = {
         }
     }
 }
+
+# +++ NEUER DEBUGGING-CODE +++
+st.subheader("DEBUG-Ansicht der Konfiguration:")
+st.json(config)
+# +++ ENDE DEBUGGING-CODE +++
 
 # Initialisiere den Authenticator mit dem config-Dictionary
 authenticator = stauth.Authenticate(config)
