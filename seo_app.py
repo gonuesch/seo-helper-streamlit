@@ -33,43 +33,32 @@ if not all([google_client_id, google_client_secret, cookie_signature_key]):
 config = {
     'credentials': {
         'usernames': {
-            # +++ HIER DER TEST-EINTRAG +++
             "testuser": {
                 "name": "Test User",
-                "password": "$2b$12$EixZaYVK1fsbw1ZfbX39DOqVmnnBIaXJt3r6scq2J2m7bT2v.O5/O" # Gehashtes Passwort für "test"
-            }
-        }
+                "password": "$2b$12$EixZaYVK1fsbw1ZfbX39DOqVmnnBIaXJt3r6scq2J2m7bT2v.O5/O",
+            },
+        },
     },
     'cookie': {
         'name': 'seo_toolbox_cookie',
         'key': cookie_signature_key,
-        'expiry_days': 30
+        'expiry_days': 30,
     },
-    'preauthorized': { # Hinzugefügt für bessere Struktur
-        'emails': []
+    'preauthorized': {
+        'emails': [],
     },
     'providers': {
         'google': {
             'client_id': google_client_id,
             'client_secret': google_client_secret,
-            'redirect_uri': "https://seo-apper-develop-qeajnwycwxewxdwq4dtgwn.streamlit.app/"
-        }
-    }
+            'redirect_uri': "https://seo-apper-develop-qeajnwycwxewxdwq4dtgwn.streamlit.app/",
+        },
+    },
 }
 
 
-# +++ NEUER, ERWEITERTER DEBUGGING-CODE +++
-st.subheader("Tiefen-Analyse der Konfiguration:")
-st.write(f"Typ der 'config'-Variable: `{type(config)}`")
 
-# Wir prüfen jeden Schlüssel einzeln
-st.write("Existiert der Schlüssel 'credentials' in config?", 'credentials' in config)
-if 'credentials' in config:
-    st.write("Typ von 'config['credentials']':", type(config['credentials']))
-    st.write("Existiert der Schlüssel 'usernames' in config['credentials']?", 'usernames' in config['credentials'])
 
-st.write("---")
-st.write("Komplette Konfiguration zur visuellen Prüfung:")
 st.json(config)
 # +++ ENDE DEBUGGING-CODE +++
 # +++ ENDE DEBUGGING-CODE +++
