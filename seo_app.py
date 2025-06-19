@@ -16,7 +16,10 @@ from api_calls import generate_seo_tags_cached, generate_accessibility_descripti
 # --- Seitenkonfiguration ---
 st.set_page_config(page_title="Toolbox", page_icon="app_icon.png", layout="wide")
 
-# --- AUTHENTIFIZIERUNG ---
+# ==============================================================================
+# BLOCK 1: AUTHENTIFIZIERUNG - Dieser Block muss ganz am Anfang stehen
+# ==============================================================================
+
 # Lade die Anmeldedaten und Schlüssel aus den Secrets
 google_client_id = st.secrets.get("GOOGLE_CLIENT_ID")
 google_client_secret = st.secrets.get("GOOGLE_CLIENT_SECRET")
@@ -27,20 +30,33 @@ if not all([google_client_id, google_client_secret, cookie_signature_key]):
     st.error("🚨 App ist nicht korrekt konfiguriert (OAuth oder Cookie-Schlüssel fehlt).")
     st.stop()
 
-# Initialisiere den Authenticator mit den korrekten Werten
-authenticator = stauth.Authenticate(
-    google_client_id,
-    google_client_secret,
-    "seo_toolbox_cookie",
-    cookie_signature_key,
-    "google",
-    redirect_uri="https://seo-apper-develop-qeajnwycwxewxdwq4dtgwn.streamlit.app/"
-)
+# Erstelle das Konfigurations-Dictionary für den Authenticator
+config = {
+    'credentials': {'usernames': {}},
+    'cookie': {
+        'name': 'seo_toolbox_cookie',
+        'key': cookie_signature_key,
+        'expiry_days': 30
+    },
+    'providers': {
+        'google': {
+            'client_id': google_client_id,
+            'client_secret': google_client_secret,
+            'redirect_uri': "https://seo-apper-develop-qeajnwycwxewxdwq4dtgwn.streamlit.app/"
+        }
+    }
+}
+
+# Initialisiere den Authenticator mit dem config-Dictionary
+authenticator = stauth.Authenticate(config)
 
 # Zeige den Login-Button an der obersten Ebene der App
 authenticator.login()
 
-# Hauptlogik der App wird nur nach erfolgreichem Login ausgeführt
+
+# ==============================================================================
+# BLOCK 2: HAUPTANWENDUNG - Wird nur ausgeführt, wenn der Login erfolgreich war
+# ==============================================================================
 if st.session_state["authentication_status"]:
 
     # --- DOMAIN-PRÜFUNG ---
@@ -52,11 +68,7 @@ if st.session_state["authentication_status"]:
         authenticator.logout('Logout', 'main')
         st.stop()
 
-    # ==============================================================================
-    # HIER BEGINNT DIE VOLLSTÄNDIGE ANWENDUNG (verschachtelt im Login)
-    # ==============================================================================
-
-    # Lade die API-Schlüssel für die Tools (werden nur geladen, wenn Nutzer eingeloggt ist)
+    # Lade die API-Schlüssel für die Tools
     gemini_api_key = st.secrets.get("GOOGLE_API_KEY")
     elevenlabs_api_key = st.secrets.get("ELEVENLABS_API_KEY")
 
@@ -74,7 +86,6 @@ if st.session_state["authentication_status"]:
         st.markdown("##### AI-Tools für dich")
         st.divider()
         st.subheader("ℹ️ Info")
-        # (Der Rest der Sidebar-Info wird durch das option_menu unten gesteuert)
 
     # --- Hauptbereich mit Navigation ---
     selected_tool = option_menu(
@@ -330,7 +341,9 @@ if st.session_state["authentication_status"]:
                         st.error(f"Ein unerwarteter Fehler ist aufgetreten: {e}")
 
 
-# --- Fallback für nicht eingeloggte Nutzer ---
+# ==============================================================================
+# BLOCK 3: FALLBACK FÜR NICHT EINGELOGGTE NUTZER
+# ==============================================================================
 elif st.session_state["authentication_status"] is False:
     st.error('Login fehlgeschlagen. Bitte kontaktiere den Admin, wenn das Problem weiterhin besteht.')
 elif st.session_state["authentication_status"] is None:
