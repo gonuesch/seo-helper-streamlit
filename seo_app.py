@@ -25,7 +25,17 @@ if not st.user.is_logged_in:
 else:
     # Wenn der Nutzer eingeloggt ist:
     user_email = st.user.email
-    allowed_domains = ["rowohlt.de"]
+    allowed_domains = [
+    "rowohlt.de",
+    "droemer-knaur.de",
+    "fischerverlage.de",
+    "chaptr.xyz",
+    "kiwi-verlag.de",
+    "argon.de",
+    "hgv-online.de",
+    "fischer-sauerlaender.de",
+    "holtzbrinck-buchverlage.de"
+]
 
     # Prüfe die E-Mail-Domain
     if user_email.split('@')[1] not in allowed_domains:
