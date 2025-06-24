@@ -8,16 +8,68 @@ import google.generativeai as genai
 from google.api_core.exceptions import ResourceExhausted
 from elevenlabs.client import ElevenLabs
 import logging
+import re
 
 # Importiere die Prompt-Vorlagen aus der prompts.py Datei
-from prompts import ACCESSIBILITY_PROMPT_TEMPLATE, SEO_PROMPT
+from prompts import ACCESSIBILITY_PROMPT_TEMPLATE, SEO_PROMPT, SUMMARY_PROMPT, GUIDELINE_PROMPT_WITH_MATCHING, SSML_PROMPT
 
 # Richte ein einfaches Logging ein, um Fehler besser nachverfolgen zu können
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Gemini-Modell für die neuen Funktionen
+model_gemini = genai.GenerativeModel('gemini-2.5-pro')
 
 # --- Die Funktionen generate_seo_tags_cached und generate_accessibility_description_cached bleiben unverändert ---
+
+@st.cache_data(ttl=3600) # Cache das Ergebnis für eine Stunde
+def generate_text_summary(_text: str) -> str:
+    """Erstellt eine Zusammenfassung des übergebenen Textes."""
+    try:
+        full_prompt = SUMMARY_PROMPT + "\n\n--- ZU ZUSAMMENFASSENDER TEXT ---\n" + _text
+        response = model_gemini.generate_content(full_prompt)
+        return response.text
+    except Exception as e:
+        logger.error(f"Fehler bei der Text-Zusammenfassung: {e}", exc_info=True)
+        return f"Fehler bei der Zusammenfassung: {e}"
+
+@st.cache_data(ttl=3600)
+def get_voice_recommendations(_summary: str, _voices_info: str) -> Tuple[str, list]:
+    """Erstellt eine Regieleitlinie und extrahiert die Top 3 Stimmen."""
+    try:
+        full_prompt = GUIDELINE_PROMPT_WITH_MATCHING.format(summary=_summary, voices_with_descriptions=_voices_info)
+        response = model_gemini.generate_content(full_prompt)
+        guideline_text = response.text
+        
+        # Extrahiere die Top 3 Stimmen mit Regex
+        top_1 = re.search(r"TOP_STIMME_1:\s*(.*)", guideline_text)
+        top_2 = re.search(r"TOP_STIMME_2:\s*(.*)", guideline_text)
+        top_3 = re.search(r"TOP_STIMME_3:\s*(.*)", guideline_text)
+        
+        recommendations = []
+        if top_1: recommendations.append(top_1.group(1).strip())
+        if top_2: recommendations.append(top_2.group(1).strip())
+        if top_3: recommendations.append(top_3.group(1).strip())
+        
+        return guideline_text, recommendations
+    except Exception as e:
+        logger.error(f"Fehler bei der Regie-Erstellung: {e}", exc_info=True)
+        return f"Fehler bei der Regie-Erstellung: {e}", []
+
+@st.cache_data(ttl=3600)
+def generate_ssml_chunk(_guideline: str, _text_chunk: str) -> str:
+    """Reichert einen Text-Chunk mit SSML an."""
+    try:
+        full_prompt = SSML_PROMPT.format(guideline=_guideline, text_chunk=_text_chunk)
+        response = model_gemini.generate_content(full_prompt)
+        # Bereinige die XML-Deklaration, falls vorhanden
+        cleaned_ssml = re.sub(r'<\?xml.*?\?>\s*', '', response.text, flags=re.IGNORECASE)
+        return cleaned_ssml
+    except Exception as e:
+        logger.error(f"Fehler bei der SSML-Anreicherung: {e}", exc_info=True)
+        # Im Fehlerfall geben wir den Original-Chunk zurück
+        return _text_chunk
+
 
 @st.cache_data
 def generate_seo_tags_cached(image_bytes_for_api, file_name_for_log: str, model_name: str = "gemini-1.5-pro-latest") -> Tuple[Union[str, None], Union[str, None]]:

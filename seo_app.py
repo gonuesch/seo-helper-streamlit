@@ -10,7 +10,7 @@ from streamlit_option_menu import option_menu
 
 # Importiere Funktionen aus deinen Modulen
 from utils import convert_tiff_to_png_bytes, read_text_from_docx, read_text_from_pdf, chunk_text
-from api_calls import generate_seo_tags_cached, generate_accessibility_description_cached, generate_audio_from_text, get_available_voices
+from api_calls import generate_seo_tags_cached, generate_accessibility_description_cached, generate_audio_from_text, get_available_voices, generate_text_summary, get_voice_recommendations, generate_ssml_chunk
 
 # --- Seitenkonfiguration ---
 st.set_page_config(page_title="Toolbox", page_icon="app_icon.png", layout="wide")
@@ -242,78 +242,121 @@ else:
                     st.success("Verarbeitung abgeschlossen.")
 
         elif selected_tool == "Text-to-Speech":
-            st.header("Text-to-Speech mit ElevenLabs")
-            st.caption("Lade ein Word-Dokument (.docx) oder eine PDF-Datei (.pdf) hoch, um den Text in eine Audiodatei umzuwandeln.")
-        
-            with st.spinner("Lade verfügbare Stimmen von ElevenLabs..."):
-                available_voices = get_available_voices(elevenlabs_api_key)
-        
-            if "Fehler" in available_voices:
-                st.error("Stimmen konnten nicht von ElevenLabs geladen werden. Bitte API-Schlüssel prüfen.")
-            else:
-                selected_voice_name = st.selectbox(
-                    label="1. Wähle eine Stimme", options=list(available_voices.keys()), key="voice_selection"
-                )
-                
-                if selected_voice_name:
-                    st.write("Stimmprobe:")
-                    preview_url = available_voices[selected_voice_name].get("preview_url")
-                    if preview_url: st.audio(preview_url)
-                    else: st.info("Für diese Stimme ist keine Vorschau verfügbar.")
-                
-                st.divider()
+            st.header("Text-to-Speech mit KI-Regieanweisung")
+            st.caption("Dieses Tool analysiert deinen Text, um eine passende Stimme vorzuschlagen und eine natürliche Sprachausgabe zu erzeugen.")
 
-                uploaded_file = st.file_uploader(
-                    label="2. Lade deine Datei hoch", type=['docx', 'pdf'], key="tts_uploader"
-                )
+            # Session State initialisieren, um den Fortschritt zu speichern
+            if "tts_step" not in st.session_state:
+                st.session_state.tts_step = 1
+                st.session_state.guideline = None
+                st.session_state.top_3_voices = []
+                st.session_state.text_content = None
 
-                if uploaded_file and selected_voice_name:
-                    selected_voice_id = available_voices[selected_voice_name]["voice_id"]
+            # --- SCHRITT 1: DATEI HOCHLADEN ---
+            st.subheader("1. Dokument hochladen")
+            uploaded_file = st.file_uploader(
+                label="Lade dein Dokument hoch (.docx oder .pdf)",
+                type=['docx', 'pdf'],
+                key="tts_uploader"
+            )
+
+            if uploaded_file and st.session_state.tts_step == 1:
+                # --- SCHRITT 2: ANALYSE STARTEN ---
+                if st.button("Text analysieren & Stimmen empfehlen", type="primary"):
+                    with st.spinner("Lese Text aus Datei..."):
+                        if uploaded_file.name.lower().endswith('.pdf'):
+                            text_content = read_text_from_pdf(uploaded_file)
+                        else:
+                            text_content = read_text_from_docx(uploaded_file)
                     
-                    if st.button("🎙️ Audio generieren", type="primary", key="process_tts_button"):
-                        try:
-                            text_content = ""
-                            with st.spinner("Lese Text aus Datei..."):
-                                if uploaded_file.name.lower().endswith('.pdf'):
-                                    text_content = read_text_from_pdf(uploaded_file)
-                                else:
-                                    text_content = read_text_from_docx(uploaded_file)
+                    if not text_content or not text_content.strip():
+                        st.error("Das Dokument scheint keinen lesbaren Text zu enthalten.")
+                    else:
+                        st.session_state.text_content = text_content
+                        
+                        # Starte den mehrstufigen Analyseprozess mit Status-Updates
+                        with st.status("Führe KI-Analyse aus...", expanded=True) as status:
+                            st.write("Schritt 1/3: Erstelle Zusammenfassung des Textes...")
+                            summary = generate_text_summary(text_content)
                             
-                            if not text_content or not text_content.strip():
-                                st.warning("Das Dokument scheint keinen lesbaren Text zu enthalten.")
-                            elif text_content == "NO_TEXT_IN_PDF":
-                                st.warning("Die PDF-Datei enthält keinen extrahierbaren Text. Möglicherweise ist es ein reines Bild-Dokument (Scan).")
-                            else:
-                                st.info(f"Text mit {len(text_content)} Zeichen gelesen. Teile ihn in kleinere Stücke auf...")
-                                text_chunks = chunk_text(text_content)
-                                st.info(f"Text wurde in {len(text_chunks)} Teile aufgeteilt. Generiere jetzt Audio für jeden Teil...")
+                            st.write("Schritt 2/3: Rufe verfügbare Stimmen ab...")
+                            available_voices = get_available_voices(elevenlabs_api_key)
+                            voice_id_map = {v['voice_id']: n for n, v in available_voices.items()} # Umgekehrte Map für späteren Gebrauch
+                            voices_info_for_prompt = "\n".join([f"Name: {n} (Beschreibung: {', '.join(f'{k}: {v}' for k, v in details.get('labels', {}).items())})" for n, details in available_voices.items()])
+                            
+                            st.write("Schritt 3/3: Erstelle Regieleitlinie und finde passende Stimmen...")
+                            guideline, recommendations = get_voice_recommendations(summary, voices_info_for_prompt)
+                            
+                            st.session_state.guideline = guideline
+                            st.session_state.top_3_voices = recommendations
+                            status.update(label="Analyse abgeschlossen!", state="complete", expanded=False)
+                        
+                        st.session_state.tts_step = 2
+                        st.rerun() # Lade die App neu, um zum nächsten Schritt zu gelangen
 
-                                all_audio_bytes = []
-                                progress_bar = st.progress(0, text="Audio-Generierung startet...")
+            # Nach erfolgreicher Analyse wird Schritt 2 (Auswahl) angezeigt
+            if st.session_state.tts_step >= 2:
+                st.divider()
+                st.subheader("2. Stimme auswählen")
+                
+                with st.expander("KI-Regieanweisung und Stimmen-Empfehlung anzeigen"):
+                    st.markdown(st.session_state.guideline)
 
-                                for i, chunk in enumerate(text_chunks):
-                                    progress_text = f"Generiere Audio für Teil {i+1}/{len(text_chunks)}..."
-                                    progress_bar.progress((i) / len(text_chunks), text=progress_text)
-                                    
-                                    audio_segment = generate_audio_from_text(chunk, elevenlabs_api_key, selected_voice_id)
-                                    if audio_segment:
-                                        all_audio_bytes.append(audio_segment)
-                                    else:
-                                        st.error(f"Fehler bei der Audio-Generierung für Teil {i+1}. Breche ab.")
-                                        break
+                st.write("**Top 3 Empfehlungen der KI:**")
+                st.success(f"🥇 **{st.session_state.top_3_voices[0]}**")
+                st.info(f"🥈 {st.session_state.top_3_voices[1]}")
+                st.info(f"🥉 {st.session_state.top_3_voices[2]}")
 
-                                progress_bar.progress(1.0, text="Verarbeitung abgeschlossen!")
+                available_voices = get_available_voices(elevenlabs_api_key)
+                voice_names = list(available_voices.keys())
+                
+                try:
+                    # Setze die Vorauswahl auf die beste Empfehlung
+                    default_index = voice_names.index(st.session_state.top_3_voices[0])
+                except ValueError:
+                    default_index = 0
 
-                                if len(all_audio_bytes) == len(text_chunks):
-                                    final_audio = b"".join(all_audio_bytes)
-                                    st.success("Audio erfolgreich generiert!")
-                                    st.audio(final_audio, format="audio/mpeg")
-                                    st.download_button(
-                                        label="MP3-Datei herunterladen", data=final_audio,
-                                        file_name=f"{Path(uploaded_file.name).stem}.mp3", mime="audio/mpeg"
-                                    )
-                                else:
-                                    st.error("Nicht alle Audio-Teile konnten erfolgreich generiert werden.")
+                selected_voice_name = st.selectbox(
+                    "Wähle eine Stimme (Top-Empfehlung ist vorausgewählt)",
+                    options=voice_names,
+                    index=default_index
+                )
+                if selected_voice_name:
+                    st.audio(available_voices[selected_voice_name].get("preview_url"))
 
-                        except Exception as e:
-                            st.error(f"Ein unerwarteter Fehler ist aufgetreten: {e}")
+                st.divider()
+                st.subheader("3. Finale Audio-Datei generieren")
+                if st.button("🎙️ Audio mit KI-Regie generieren", type="primary"):
+                    st.session_state.tts_step = 3
+
+            # Nach Klick auf "Generieren" wird die Verarbeitung gestartet
+            if st.session_state.tts_step == 3:
+                with st.status("Generiere Audio-Datei...", expanded=True) as status:
+                    status.write("Teile Text in Stücke (Chunks)...")
+                    text_chunks = chunk_text(st.session_state.text_content)
+                    
+                    all_audio_bytes = []
+                    for i, chunk in enumerate(text_chunks):
+                        status.write(f"Verarbeite Teil {i+1}/{len(text_chunks)}: Erzeuge SSML...")
+                        ssml_chunk = generate_ssml_chunk(st.session_state.guideline, chunk)
+                        
+                        status.write(f"Verarbeite Teil {i+1}/{len(text_chunks)}: Generiere Audio...")
+                        selected_voice_id = available_voices[selected_voice_name]["voice_id"]
+                        audio_segment = generate_audio_from_text(ssml_chunk, elevenlabs_api_key, selected_voice_id)
+                        
+                        if audio_segment:
+                            all_audio_bytes.append(audio_segment)
+                        else:
+                            status.update(label=f"Fehler bei Teil {i+1}", state="error")
+                            break
+                    
+                    if len(all_audio_bytes) == len(text_chunks):
+                        status.update(label="Audio-Generierung abgeschlossen!", state="complete")
+                        final_audio = b"".join(all_audio_bytes)
+                        st.success("Finale Audiodatei erfolgreich erstellt!")
+                        st.audio(final_audio, format="audio/mpeg")
+                        st.download_button(
+                            "MP3-Datei herunterladen", final_audio, 
+                            file_name=f"{Path(uploaded_file.name).stem}_mit_regie.mp3",
+                            mime="audio/mpeg"
+                        )
