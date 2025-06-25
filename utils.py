@@ -4,81 +4,90 @@ from PIL import Image
 from io import BytesIO
 import docx
 import fitz
+import json
+import csv
+from datetime import datetime
+import os
+import threading
 
+# --- LOGGING FUNKTION (unverändert) ---
+log_lock = threading.Lock()
+LOG_FILE = "usage_log.csv"
+
+def log_usage(user_email: str, feature: str, action: str, details: dict = None):
+    timestamp = datetime.now().isoformat()
+    details_str = json.dumps(details) if details else ""
+    log_entry = [timestamp, user_email, feature, action, details_str]
+    with log_lock:
+        file_exists = os.path.isfile(LOG_FILE)
+        with open(LOG_FILE, 'a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            if not file_exists:
+                writer.writerow(["timestamp", "user_email", "feature", "action", "details"])
+            writer.writerow(log_entry)
+
+
+# --- BILD- & DOKUMENTEN-FUNKTIONEN (unverändert) ---
 def convert_tiff_to_png_bytes(tiff_bytes: bytes) -> bytes:
-    """Konvertiert eine TIFF-Datei (als Bytes) in PNG-Bytes."""
     pil_image = Image.open(BytesIO(tiff_bytes))
     if getattr(pil_image, "n_frames", 1) > 1:
         pil_image.seek(0)
     if pil_image.mode not in ('RGB', 'RGBA', 'L'):
         pil_image = pil_image.convert('RGB')
-    
     output_buffer = BytesIO()
     pil_image.save(output_buffer, format="PNG")
     return output_buffer.getvalue()
 
 def read_text_from_docx(file_object: BytesIO) -> str:
-    """Liest den gesamten Text aus einem DOCX-Dokument."""
     doc = docx.Document(file_object)
     full_text = [para.text for para in doc.paragraphs]
     return '\n'.join(full_text)
 
 def read_text_from_pdf(file_object: BytesIO) -> str:
-    """
-    Liest den gesamten Text aus einer PDF-Datei.
-    WIRFT EINEN FEHLER, WENN ETWAS SCHIEFGEHT (ZUM DEBUGGEN).
-    """
-    # Öffne das PDF-Dokument aus den Bytes
-    # Der try...except Block wurde bewusst entfernt, um den echten Fehler zu sehen.
-    pdf_document = fitz.open(stream=file_object.read(), filetype="pdf")
-    full_text = ""
-    # Iteriere durch jede Seite und extrahiere den Text
-    for page_num in range(len(pdf_document)):
-        page = pdf_document.load_page(page_num)
-        full_text += page.get_text()
-    
-    # Wenn nach dem Lesen aller Seiten kein Text da ist, ist es wahrscheinlich eine Bild-PDF
-    if not full_text.strip():
-        # Wir geben eine spezifische Meldung zurück, die wir in der App anzeigen können
-        return "NO_TEXT_IN_PDF"
-        
-    return full_text
+    try:
+        pdf_document = fitz.open(stream=file_object.read(), filetype="pdf")
+        full_text = ""
+        for page_num in range(len(pdf_document)):
+            page = pdf_document.load_page(page_num)
+            full_text += page.get_text()
+        if not full_text.strip():
+            return "NO_TEXT_IN_PDF"
+        return full_text
+    except Exception as e:
+        log_usage("error", "pdf_reading", "exception", {"error_message": str(e)})
+        return "" # Im Fehlerfall leeren String zurückgeben
 
+
+# +++ NEUE, ROBUSTERE CHUNKING-FUNKTION +++
 def chunk_text(text: str, chunk_size: int = 9500) -> list[str]:
     """
-    Teilt einen langen Text in kleinere Chunks auf, ohne Sätze zu zerschneiden.
-    Diese Version kann auch Absätze aufteilen, die selbst zu lang sind.
+    Teilt einen langen Text in Chunks auf, die die chunk_size garantiert nicht überschreiten.
+    Sucht rückwärts nach dem besten Trennpunkt (Absatz, Satz, Leerzeichen).
     """
     chunks = []
-    current_chunk = ""
-    # Teile den Text zuerst in Absätze auf
-    paragraphs = text.split('\n')
+    text_remaining = text
     
-    for paragraph in paragraphs:
-        # Wenn der Absatz selbst schon zu groß ist, müssen wir ihn aufteilen
-        if len(paragraph) > chunk_size:
-            sentences = paragraph.split('.')
-            temp_para_chunk = ""
-            for sentence in sentences:
-                if not sentence: continue
-                sentence += "."
-                if len(temp_para_chunk) + len(sentence) <= chunk_size:
-                    temp_para_chunk += sentence
-                else:
-                    chunks.append(temp_para_chunk)
-                    temp_para_chunk = sentence
-            if temp_para_chunk:
-                chunks.append(temp_para_chunk)
-        else:
-            # Füge Absätze zum aktuellen Chunk hinzu, bis er voll ist
-            if len(current_chunk) + len(paragraph) + 1 <= chunk_size:
-                current_chunk += paragraph + '\n'
-            else:
-                chunks.append(current_chunk)
-                current_chunk = paragraph + '\n'
-    
-    # Füge den letzten verbleibenden Chunk hinzu
-    if current_chunk:
-        chunks.append(current_chunk)
+    while len(text_remaining) > 0:
+        if len(text_remaining) <= chunk_size:
+            chunks.append(text_remaining)
+            break
+            
+        # Finde den letzten möglichen Trennpunkt innerhalb des Chunks
+        # Wir suchen von hinten nach vorne, um so viel wie möglich in einen Chunk zu bekommen
+        chunk_end = text_remaining.rfind('\n', 0, chunk_size)
+        if chunk_end == -1:
+            chunk_end = text_remaining.rfind('.', 0, chunk_size)
+        if chunk_end == -1:
+            chunk_end = text_remaining.rfind(' ', 0, chunk_size)
+            
+        # Wenn gar kein Trennzeichen gefunden wird, machen wir einen harten Schnitt
+        # um einen unendlichen Loop zu vermeiden
+        if chunk_end == -1:
+            chunk_end = chunk_size
+            
+        # Erstelle den Chunk und aktualisiere den verbleibenden Text
+        # Wir nehmen chunk_end + 1, um das Trennzeichen (Punkt, Leerzeichen) mitzunehmen
+        chunks.append(text_remaining[:chunk_end + 1])
+        text_remaining = text_remaining[chunk_end + 1:]
         
-    return [chunk for chunk in chunks if chunk.strip()]
+    return [c for c in chunks if c.strip()]
