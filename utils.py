@@ -47,6 +47,7 @@ def read_text_from_pdf(file_object: BytesIO) -> str:
 def chunk_text(text: str, chunk_size: int = 9500) -> list[str]:
     """
     Teilt einen langen Text in kleinere Chunks auf, ohne Sätze zu zerschneiden.
+    Diese Version kann auch Absätze aufteilen, die selbst zu lang sind.
     """
     chunks = []
     current_chunk = ""
