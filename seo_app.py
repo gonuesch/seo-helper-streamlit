@@ -245,13 +245,13 @@ else:
             st.header("Text-to-Speech mit KI-Regieanweisung")
             st.caption("Dieses Tool analysiert deinen Text, um eine passende Stimme vorzuschlagen und eine natürliche Sprachausgabe zu erzeugen.")
 
-            # Session State initialisieren
+            # Session State initialisieren, um den Fortschritt zu speichern
             if "tts_step" not in st.session_state:
                 st.session_state.tts_step = 1
                 st.session_state.guideline = None
                 st.session_state.top_3_voices = []
                 st.session_state.text_content = None
-                st.session_state.summary = None # NEU: Session State für die Zusammenfassung
+                st.session_state.summary = None
 
             # --- SCHRITT 1: DATEI HOCHLADEN ---
             st.subheader("1. Dokument hochladen")
@@ -260,6 +260,17 @@ else:
                 type=['docx', 'pdf'],
                 key="tts_uploader"
             )
+
+            # Button zum Zurücksetzen/Neustarten, erscheint nach dem ersten Durchlauf
+            if st.session_state.tts_step > 1:
+                if st.button("Neue Analyse starten"):
+                    # Setze alle relevanten Session States zurück
+                    st.session_state.tts_step = 1
+                    st.session_state.guideline = None
+                    st.session_state.top_3_voices = []
+                    st.session_state.text_content = None
+                    st.session_state.summary = None
+                    st.rerun()
 
             if uploaded_file and st.session_state.tts_step == 1:
                 # --- SCHRITT 2: ANALYSE STARTEN ---
@@ -276,12 +287,19 @@ else:
                         st.session_state.text_content = text_content
                         
                         with st.status("Führe KI-Analyse aus...", expanded=True) as status:
-                            st.write("Schritt 1/3: Erstelle Zusammenfassung des Textes...")
+                            status.write("Schritt 1/3: Erstelle Zusammenfassung des Textes...")
                             summary = generate_text_summary(text_content)
-                            st.session_state.summary = summary # Speichere die Zusammenfassung
+                            st.session_state.summary = summary
                             
-                            st.write("Schritt 2/3: Rufe verfügbare Stimmen ab...")
-                            # ... (Rest der Analyse bleibt unverändert) ...
+                            status.write("Schritt 2/3: Rufe verfügbare Stimmen ab...")
+                            available_voices = get_available_voices(elevenlabs_api_key)
+                            if "Fehler" in available_voices:
+                                status.update(label="Fehler beim Abrufen der Stimmen.", state="error")
+                                st.stop()
+                            
+                            voices_info_for_prompt = "\n".join([f"Name: {n} (Beschreibung: {', '.join(f'{k}: {v}' for k, v in details.get('labels', {}).items())})" for n, details in available_voices.items() if details.get('labels')])
+
+                            status.write("Schritt 3/3: Erstelle Regieleitlinie und finde passende Stimmen...")
                             guideline, recommendations = get_voice_recommendations(summary, voices_info_for_prompt)
                             
                             st.session_state.guideline = guideline
@@ -293,38 +311,42 @@ else:
 
             # Nach erfolgreicher Analyse werden die Ergebnisse angezeigt
             if st.session_state.tts_step >= 2:
-                
-                # --- NEU: ZUSAMMENFASSUNG ANZEIGEN UND HERUNTERLADEN ---
+                st.divider()
+                st.subheader("2. Analyse-Ergebnisse")
+
+                # Expander für die Regieanweisung
+                with st.expander("KI-Regieanweisung und Stimmen-Empfehlung anzeigen"):
+                    st.markdown(st.session_state.guideline)
+
+                # Expander für die Zusammenfassung
                 if st.session_state.summary:
                     with st.expander("Inhaltliche Zusammenfassung des Textes anzeigen"):
                         st.markdown(st.session_state.summary)
                         st.download_button(
                             label="Zusammenfassung herunterladen (.txt)",
                             data=st.session_state.summary.encode('utf-8'),
-                            file_name=f"{Path(uploaded_file.name).stem}_zusammenfassung.txt",
+                            file_name=f"zusammenfassung_{uploaded_file.name}.txt",
                             mime="text/plain"
                         )
-
-            # Nach erfolgreicher Analyse wird Schritt 2 (Auswahl) angezeigt
-            if st.session_state.tts_step >= 2:
-                st.divider()
-                st.subheader("2. Stimme auswählen")
                 
-                with st.expander("KI-Regieanweisung und Stimmen-Empfehlung anzeigen"):
-                    st.markdown(st.session_state.guideline)
-
-                st.write("**Top 3 Empfehlungen der KI:**")
-                st.success(f"🥇 **{st.session_state.top_3_voices[0]}**")
-                st.info(f"🥈 {st.session_state.top_3_voices[1]}")
-                st.info(f"🥉 {st.session_state.top_3_voices[2]}")
-
+                st.divider()
+                st.subheader("3. Stimme auswählen")
+                
+                if st.session_state.top_3_voices:
+                    st.write("**Top 3 Empfehlungen der KI:**")
+                    st.success(f"🥇 **{st.session_state.top_3_voices[0]}**")
+                    if len(st.session_state.top_3_voices) > 1:
+                        st.info(f"🥈 {st.session_state.top_3_voices[1]}")
+                    if len(st.session_state.top_3_voices) > 2:
+                        st.info(f"🥉 {st.session_state.top_3_voices[2]}")
+                
                 available_voices = get_available_voices(elevenlabs_api_key)
                 voice_names = list(available_voices.keys())
                 
                 try:
                     # Setze die Vorauswahl auf die beste Empfehlung
                     default_index = voice_names.index(st.session_state.top_3_voices[0])
-                except ValueError:
+                except (ValueError, IndexError):
                     default_index = 0
 
                 selected_voice_name = st.selectbox(
@@ -333,15 +355,19 @@ else:
                     index=default_index
                 )
                 if selected_voice_name:
-                    st.audio(available_voices[selected_voice_name].get("preview_url"))
-
+                    preview_url = available_voices[selected_voice_name].get("preview_url")
+                    if preview_url:
+                        st.audio(preview_url)
+                
                 st.divider()
-                st.subheader("3. Finale Audio-Datei generieren")
+                st.subheader("4. Finale Audio-Datei generieren")
                 if st.button("🎙️ Audio mit KI-Regie generieren", type="primary"):
                     st.session_state.tts_step = 3
 
             # Nach Klick auf "Generieren" wird die Verarbeitung gestartet
             if st.session_state.tts_step == 3:
+                selected_voice_name = st.session_state.get('selected_voice_name', st.session_state.top_3_voices[0]) # Fallback
+                
                 with st.status("Generiere Audio-Datei...", expanded=True) as status:
                     status.write("Teile Text in Stücke (Chunks)...")
                     text_chunks = chunk_text(st.session_state.text_content)
@@ -352,6 +378,7 @@ else:
                         ssml_chunk = generate_ssml_chunk(st.session_state.guideline, chunk)
                         
                         status.write(f"Verarbeite Teil {i+1}/{len(text_chunks)}: Generiere Audio...")
+                        available_voices = get_available_voices(elevenlabs_api_key) # Erneut abrufen für ID
                         selected_voice_id = available_voices[selected_voice_name]["voice_id"]
                         audio_segment = generate_audio_from_text(ssml_chunk, elevenlabs_api_key, selected_voice_id)
                         
