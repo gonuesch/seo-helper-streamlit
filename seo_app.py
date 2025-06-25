@@ -252,6 +252,7 @@ else:
                 st.session_state.top_3_voices = []
                 st.session_state.text_content = None
                 st.session_state.summary = None
+                st.session_state.selected_voice_name = "" # Wichtig für die Speicherung der Auswahl
 
             # --- SCHRITT 1: DATEI HOCHLADEN ---
             st.subheader("1. Dokument hochladen")
@@ -270,6 +271,7 @@ else:
                     st.session_state.top_3_voices = []
                     st.session_state.text_content = None
                     st.session_state.summary = None
+                    st.session_state.selected_voice_name = ""
                     st.rerun()
 
             if uploaded_file and st.session_state.tts_step == 1:
@@ -281,7 +283,7 @@ else:
                         else:
                             text_content = read_text_from_docx(uploaded_file)
                     
-                    if not text_content or not text_content.strip():
+                    if not text_content or not text_content.strip() or text_content == "NO_TEXT_IN_PDF":
                         st.error("Das Dokument scheint keinen lesbaren Text zu enthalten.")
                     else:
                         st.session_state.text_content = text_content
@@ -314,11 +316,9 @@ else:
                 st.divider()
                 st.subheader("2. Analyse-Ergebnisse")
 
-                # Expander für die Regieanweisung
                 with st.expander("KI-Regieanweisung und Stimmen-Empfehlung anzeigen"):
                     st.markdown(st.session_state.guideline)
 
-                # Expander für die Zusammenfassung
                 if st.session_state.summary:
                     with st.expander("Inhaltliche Zusammenfassung des Textes anzeigen"):
                         st.markdown(st.session_state.summary)
@@ -344,42 +344,49 @@ else:
                 voice_names = list(available_voices.keys())
                 
                 try:
-                    # Setze die Vorauswahl auf die beste Empfehlung
                     default_index = voice_names.index(st.session_state.top_3_voices[0])
                 except (ValueError, IndexError):
                     default_index = 0
 
-                selected_voice_name = st.selectbox(
+                # Speichere die Auswahl des Nutzers explizit im Session State
+                st.session_state.selected_voice_name = st.selectbox(
                     "Wähle eine Stimme (Top-Empfehlung ist vorausgewählt)",
                     options=voice_names,
-                    index=default_index
+                    index=default_index,
+                    key="voice_selector"
                 )
-                if selected_voice_name:
-                    preview_url = available_voices[selected_voice_name].get("preview_url")
+                
+                if st.session_state.selected_voice_name:
+                    preview_url = available_voices[st.session_state.selected_voice_name].get("preview_url")
                     if preview_url:
                         st.audio(preview_url)
                 
                 st.divider()
                 st.subheader("4. Finale Audio-Datei generieren")
-                if st.button("🎙️ Audio mit KI-Regie generieren", type="primary"):
+                if st.button("🎙️ Audio mit KI-Regie generieren", type="primary", key="generate_audio_button"):
                     st.session_state.tts_step = 3
+                    st.rerun() # Neu laden, um den Generierungs-Block zu aktivieren
 
             # Nach Klick auf "Generieren" wird die Verarbeitung gestartet
             if st.session_state.tts_step == 3:
-                selected_voice_name = st.session_state.get('selected_voice_name', st.session_state.top_3_voices[0]) # Fallback
+                # Hole die Auswahl zuverlässig aus dem Session State
+                final_selected_voice = st.session_state.selected_voice_name
                 
+                st.info(f"Audio-Generierung mit der Stimme '{final_selected_voice}' wird vorbereitet...")
+
                 with st.status("Generiere Audio-Datei...", expanded=True) as status:
                     status.write("Teile Text in Stücke (Chunks)...")
                     text_chunks = chunk_text(st.session_state.text_content)
                     
                     all_audio_bytes = []
+                    available_voices = get_available_voices(elevenlabs_api_key)
+                    selected_voice_id = available_voices[final_selected_voice]["voice_id"]
+                    
                     for i, chunk in enumerate(text_chunks):
                         status.write(f"Verarbeite Teil {i+1}/{len(text_chunks)}: Erzeuge SSML...")
                         ssml_chunk = generate_ssml_chunk(st.session_state.guideline, chunk)
                         
                         status.write(f"Verarbeite Teil {i+1}/{len(text_chunks)}: Generiere Audio...")
-                        available_voices = get_available_voices(elevenlabs_api_key) # Erneut abrufen für ID
-                        selected_voice_id = available_voices[selected_voice_name]["voice_id"]
                         audio_segment = generate_audio_from_text(ssml_chunk, elevenlabs_api_key, selected_voice_id)
                         
                         if audio_segment:
@@ -398,3 +405,5 @@ else:
                             file_name=f"{Path(uploaded_file.name).stem}_mit_regie.mp3",
                             mime="audio/mpeg"
                         )
+                # Setze den Schritt zurück, damit man eine neue Generierung starten kann
+                st.session_state.tts_step = 2
