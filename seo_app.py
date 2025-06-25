@@ -34,7 +34,8 @@ else:
     "argon.de",
     "hgv-online.de",
     "fischer-sauerlaender.de",
-    "holtzbrinck-buchverlage.de"
+    "holtzbrinck-buchverlage.de",
+    "galiani.de"
 ]
 
     # Prüfe die E-Mail-Domain

@@ -59,7 +59,7 @@ def read_text_from_pdf(file_object: BytesIO) -> str:
 
 
 # +++ FINALE, ROBUSTE CHUNKING-FUNKTION +++
-def chunk_text(text: str, chunk_size: int = 9500) -> list[str]:
+def chunk_text(text: str, chunk_size: int = 7500) -> list[str]:
     """
     Teilt einen langen Text in Chunks auf, die die chunk_size garantiert nicht überschreiten.
     Sucht rückwärts nach dem besten Trennpunkt (Absatz, Satz, Leerzeichen).
