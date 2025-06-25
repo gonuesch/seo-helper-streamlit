@@ -44,45 +44,34 @@ TITLE: [Hier der generierte Title-Text]
 
 # Schritt 1: Zusammenfassung des Manuskripts (Genre-agnostisch)
 SUMMARY_PROMPT = """
-Rolle und Ziel
+Rolle: Du bist ein KI-Assistent für präzises Lektorat.
+Aufgabe: Erstelle eine rein inhaltliche Zusammenfassung des folgenden Textes.
+WICHTIGE ANWEISUNG: Beginne deine Antwort direkt mit dem ersten Wort der Zusammenfassung. Formuliere absolut keine Einleitungssätze wie "Hier ist die Zusammenfassung" oder ähnliches.
 
-Du bist ein KI-gestützter Assistent für literarisches Lektorat. Dein Ziel ist es, eine ausführliche, rein
-inhaltliche Zusammenfassung des folgenden Textes zu erstellen. Diese dient als Grundlage für weitere Bearbeitungsschritte.
+Kontext: Der Text kann ein Roman, hohe Literatur oder ein Sachbuch sein.
 
-Kontext
+Anleitung:
+1. Analysiere den Text.
+2. Erfasse bei fiktionalen Texten die Figuren/Schauplätze; bei Sachtexten das Kernthema/die Argumente.
+3. Skizziere den Inhalt chronologisch oder gemäß der Gliederung.
+4. Verfasse eine sachliche, strukturierte Inhaltsangabe.
 
-Dir liegt ein Manuskript vor. Dies kann ein Werk der literarischen Prosa (Roman, hohe Literatur) oder ein Sachbuch sein.
-
-Schritt-für-Schritt-Anleitung
-
-1. Analysiere den gesamten Text sorgfältig.
-2. Bei fiktionalen Texten: Erfasse die zentralen Figuren und Schauplätze.
-3. Bei Sachtexten: Erfasse das Kernthema, die Hauptargumente und die Struktur.
-4. Skizziere die wesentlichen Inhalts-Stationen chronologisch oder entsprechend der Gliederung des Textes.
-5. Verfasse eine sachliche, strukturierte Inhaltsangabe.
-
-Ausgabeformat und Anforderungen
-
-Format: Fließtext
-Stil: Sachlich, neutral, nicht werbend
-Länge: Maximal 6.000 Zeichen inkl. Leerzeichen
-Sprache: Klar, strukturiert, ohne Interpretation oder Wertung
+Ausgabeformat: Reiner Fließtext, maximal 6.000 Zeichen.
 """
 
 # Schritt 2: Regieleitlinie und Top-3-Stimmen
 GUIDELINE_PROMPT_WITH_MATCHING = """
-Basierend auf der folgenden Text-Zusammenfassung, erstelle eine prägnante, konsistente Regieleitlinie für eine Hörbuch- oder Audio-Produktion.
+Basierend auf der folgenden Text-Zusammenfassung, erstelle eine prägnante, konsistente Regieleitlinie und wähle die drei passendsten Stimmen aus der bereitgestellten Liste.
 
 **Zusammenfassung des Textes:**
 ---
 {summary}
 ---
 
-**Regeln für die Auswahl der Stimmen:**
-1.  Lies die Beschreibungen der verfügbaren Stimmen sorgfältig durch.
-2.  Wähle die DREI Stimmen aus, deren Beschreibung am besten zur Grundstimmung und zum Inhalt des Textes passen.
-3.  Die von dir zurückgegebenen Namen müssen **exakt und zeichengenau** mit den Namen aus der Liste übereinstimmen.
-4.  Erfinde keine neuen Namen.
+**SEHR WICHTIGE REGELN:**
+1.  Du musst DREI Stimmen aus der unten stehenden Liste "Verfügbare ElevenLabs-Stimmen" auswählen.
+2.  Der Name, den du zurückgibst, muss **EXAKT UND ZEICHENGENAU** mit einem Namen aus der Liste übereinstimmen (z.B. "Thomas Candia", nicht nur "Thomas").
+3.  Erfinde keine neuen Namen und kürze keine Namen ab. Wähle nur aus der bereitgestellten Liste.
 
 **Verfügbare ElevenLabs-Stimmen (Name und Beschreibung):**
 ---
@@ -90,16 +79,16 @@ Basierend auf der folgenden Text-Zusammenfassung, erstelle eine prägnante, kons
 ---
 
 **Deine Aufgaben:**
-1.  Definiere eine GRUNDSTIMMUNG (z.B. sachlich-informativ, nachdenklich, spannend).
-2.  Definiere ein SPRECHTEMPO (z.B. moderat und klar, ruhig, dynamisch).
-3.  Wähle die Top 3 passendsten Stimmen aus der Liste aus.
+1.  Definiere eine GRUNDSTIMMUNG.
+2.  Definiere ein SPRECHTEMPO.
+3.  Wähle unter Einhaltung der Regeln die Top 3 passendsten Stimmen aus und liste sie auf.
 
 Gib das Ergebnis ausschließlich in diesem Format zurück, jeder Punkt in einer neuen Zeile:
 GRUNDSTIMMUNG: [Deine Analyse hier]
 SPRECHTEMPO: [Deine Analyse hier]
-TOP_STIMME_1: [Exakter Name der besten Stimme]
-TOP_STIMME_2: [Exakter Name der zweitbesten Stimme]
-TOP_STIMME_3: [Exakter Name der drittbesten Stimme]
+TOP_STIMME_1: [Exakter Name der besten Stimme aus der Liste]
+TOP_STIMME_2: [Exakter Name der zweitbesten Stimme aus der Liste]
+TOP_STIMME_3: [Exakter Name der drittbesten Stimme aus der Liste]
 """
 
 # Schritt 3: SSML-Anreicherung
@@ -124,4 +113,41 @@ Deine Aufgabe ist es, den folgenden Text-Abschnitt mit SSML-Tags anzureichern, u
 ---
 
 Gib als Antwort **ausschließlich den mit SSML-Tags angereicherten Text** zurück.
+"""
+
+SCENE_ANALYSIS_PROMPT = """
+Rolle: Du bist ein erfahrener Dramaturg und Lektor.
+Aufgabe: Analysiere den folgenden Text und zerlege ihn in logische, inhaltliche Szenen. Identifiziere für jede Szene den Inhalt, den Typ und die Stimmung.
+
+Kontext: Der Text kann ein Roman, eine Kurzgeschichte oder ein Sachbuch sein. Eine "Szene" ist ein in sich geschlossener Abschnitt, der durch einen Orts-, Zeit- oder Stimmungswechsel von der nächsten Szene getrennt ist.
+
+Anleitung:
+1.  Lies den gesamten Text.
+2.  Identifiziere die einzelnen Szenen in chronologischer Reihenfolge.
+3.  Bestimme für jede Szene:
+    - `scene_content`: Eine sehr kurze Zusammenfassung dessen, was in der Szene passiert (1-2 Sätze).
+    - `scene_type`: Der Typ der Szene. Wähle aus: 'Action', 'Dialog', 'Reflexion', 'Beschreibung', 'Exposition'.
+    - `scene_mood`: Die vorherrschende Stimmung in der Szene. Wähle aus: 'Spannend', 'Ruhig', 'Melancholisch', 'Neutral', 'Fröhlich', 'Dramatisch', 'Wütend'.
+4.  Fasse die allgemeine Grundstimmung des gesamten Textes zusammen.
+
+Ausgabeformat: Gib das Ergebnis AUSSCHLIESSLICH als valides JSON-Objekt zurück. Verwende keine einleitenden Sätze.
+
+Beispiel für das JSON-Format:
+{
+  "overall_mood": "Melancholisch mit einem Hoffnungsschimmer",
+  "scenes": [
+    {
+      "scene_number": 1,
+      "scene_content": "Elias und sein Hund Buster durchstreifen eine verlassene Stadt auf der Suche nach Vorräten.",
+      "scene_type": "Beschreibung",
+      "scene_mood": "Melancholisch"
+    },
+    {
+      "scene_number": 2,
+      "scene_content": "Ein plötzliches Grollen und eine unerklärliche Finsternis brechen über die Stadt herein.",
+      "scene_type": "Action",
+      "scene_mood": "Spannend"
+    }
+  ]
+}
 """
