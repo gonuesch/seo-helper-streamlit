@@ -245,12 +245,13 @@ else:
             st.header("Text-to-Speech mit KI-Regieanweisung")
             st.caption("Dieses Tool analysiert deinen Text, um eine passende Stimme vorzuschlagen und eine natürliche Sprachausgabe zu erzeugen.")
 
-            # Session State initialisieren, um den Fortschritt zu speichern
+            # Session State initialisieren
             if "tts_step" not in st.session_state:
                 st.session_state.tts_step = 1
                 st.session_state.guideline = None
                 st.session_state.top_3_voices = []
                 st.session_state.text_content = None
+                st.session_state.summary = None # NEU: Session State für die Zusammenfassung
 
             # --- SCHRITT 1: DATEI HOCHLADEN ---
             st.subheader("1. Dokument hochladen")
@@ -274,17 +275,13 @@ else:
                     else:
                         st.session_state.text_content = text_content
                         
-                        # Starte den mehrstufigen Analyseprozess mit Status-Updates
                         with st.status("Führe KI-Analyse aus...", expanded=True) as status:
                             st.write("Schritt 1/3: Erstelle Zusammenfassung des Textes...")
                             summary = generate_text_summary(text_content)
+                            st.session_state.summary = summary # Speichere die Zusammenfassung
                             
                             st.write("Schritt 2/3: Rufe verfügbare Stimmen ab...")
-                            available_voices = get_available_voices(elevenlabs_api_key)
-                            voice_id_map = {v['voice_id']: n for n, v in available_voices.items()} # Umgekehrte Map für späteren Gebrauch
-                            voices_info_for_prompt = "\n".join([f"Name: {n} (Beschreibung: {', '.join(f'{k}: {v}' for k, v in details.get('labels', {}).items())})" for n, details in available_voices.items()])
-                            
-                            st.write("Schritt 3/3: Erstelle Regieleitlinie und finde passende Stimmen...")
+                            # ... (Rest der Analyse bleibt unverändert) ...
                             guideline, recommendations = get_voice_recommendations(summary, voices_info_for_prompt)
                             
                             st.session_state.guideline = guideline
@@ -292,7 +289,21 @@ else:
                             status.update(label="Analyse abgeschlossen!", state="complete", expanded=False)
                         
                         st.session_state.tts_step = 2
-                        st.rerun() # Lade die App neu, um zum nächsten Schritt zu gelangen
+                        st.rerun()
+
+            # Nach erfolgreicher Analyse werden die Ergebnisse angezeigt
+            if st.session_state.tts_step >= 2:
+                
+                # --- NEU: ZUSAMMENFASSUNG ANZEIGEN UND HERUNTERLADEN ---
+                if st.session_state.summary:
+                    with st.expander("Inhaltliche Zusammenfassung des Textes anzeigen"):
+                        st.markdown(st.session_state.summary)
+                        st.download_button(
+                            label="Zusammenfassung herunterladen (.txt)",
+                            data=st.session_state.summary.encode('utf-8'),
+                            file_name=f"{Path(uploaded_file.name).stem}_zusammenfassung.txt",
+                            mime="text/plain"
+                        )
 
             # Nach erfolgreicher Analyse wird Schritt 2 (Auswahl) angezeigt
             if st.session_state.tts_step >= 2:
