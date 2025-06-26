@@ -37,7 +37,14 @@ def generate_text_summary(_text: str) -> str:
 def get_voice_recommendations(_summary: str, _voices_info: str) -> Tuple[str, list]:
     """Erstellt eine Regieleitlinie und extrahiert die Top 3 Stimmen."""
     try:
-        full_prompt = GUIDELINE_PROMPT_WITH_MATCHING.format(summary=_summary, voices_with_descriptions=_voices_info)
+        # Stelle sicher, dass _voices_info nicht leer ist, bevor der Prompt erstellt wird
+        if not _voices_info or not _voices_info.strip():
+            return "Fehler: Keine verfügbaren Stimmen mit Beschreibungen gefunden, um eine Empfehlung abzugeben.", []
+
+        full_prompt = GUIDELINE_PROMPT_WITH_MATCHING.format(
+            summary=_summary, 
+            voices_with_descriptions=_voices_info
+        )
         response = model_gemini.generate_content(full_prompt)
         guideline_text = response.text
         
@@ -51,6 +58,10 @@ def get_voice_recommendations(_summary: str, _voices_info: str) -> Tuple[str, li
         if top_2: recommendations.append(top_2.group(1).strip())
         if top_3: recommendations.append(top_3.group(1).strip())
         
+        # Fallback, falls die KI die Anweisungen nicht befolgt
+        if not recommendations:
+             return guideline_text, ["KI konnte keine Stimmen auswählen."]
+
         return guideline_text, recommendations
     except Exception as e:
         logger.error(f"Fehler bei der Regie-Erstellung: {e}", exc_info=True)

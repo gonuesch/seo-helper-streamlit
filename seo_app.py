@@ -380,21 +380,18 @@ else:
                 with st.status("Generiere Audio-Datei...", expanded=True) as status:
                     final_ssml_chunks = []
                     
-                    # --- KORREKTUR DES FUNKTIONSAUFRUFS ---
-                    # Wir verwenden den korrekten Namen der robusten Funktion: chunk_text
+                    # Intelligente Zwei-Passen-Verarbeitung
                     initial_chunks = chunk_text(st.session_state.text_content, 9500)
                     
                     for i, chunk in enumerate(initial_chunks):
                         status.write(f"Verarbeite initialen Chunk {i+1}/{len(initial_chunks)}: Erzeuge SSML...")
                         ssml_chunk = generate_ssml_chunk(st.session_state.guideline, chunk)
                         
-                        # Überprüfe die Länge des SSML-Chunks
                         if len(ssml_chunk) < 9800:
                             final_ssml_chunks.append(ssml_chunk)
                         else:
                             status.warning(f"Chunk {i+1} ist nach SSML zu lang. Teile ihn rekursiv auf...")
-                            # Wir verwenden hier die gleiche, robuste Funktion
-                            sub_chunks = chunk_text(chunk, 4500) 
+                            sub_chunks = chunk_text(chunk, 4500) # Kleinere Größe für SSML-Overhead
                             
                             for sub_chunk in sub_chunks:
                                 final_ssml_chunks.append(generate_ssml_chunk(st.session_state.guideline, sub_chunk))
