@@ -375,28 +375,53 @@ else:
             # Nach Klick auf "Generieren" wird die Verarbeitung gestartet
             if st.session_state.tts_step == 3:
                 final_selected_voice = st.session_state.selected_voice_name
-                
                 st.info(f"Audio-Generierung mit der Stimme '{final_selected_voice}' wird vorbereitet...")
 
                 with st.status("Generiere Audio-Datei...", expanded=True) as status:
-                    status.write("Teile Text in Stücke (Chunks)...")
-                    text_chunks = chunk_text(st.session_state.text_content)
+                    status.write("Teile Text in initiale Stücke (Chunks)...")
+                    # Wir starten mit einer optimistischen, großen Chunk-Größe
+                    initial_chunks = chunk_text(st.session_state.text_content, 9500)
                     
+                    final_ssml_chunks = []
+                    
+                    # --- INTELLIGENTE ZWEI-PASSEN-VERARBEITUNG ---
+                    for i, chunk in enumerate(initial_chunks):
+                        status.write(f"Verarbeite initialen Chunk {i+1}/{len(initial_chunks)}: Erzeuge SSML...")
+                        ssml_chunk = generate_ssml_chunk(st.session_state.guideline, chunk)
+                        
+                        # Überprüfe die Länge des SSML-Chunks
+                        if len(ssml_chunk) < 9800:
+                            # Der Chunk ist in Ordnung, füge ihn zur finalen Liste hinzu
+                            final_ssml_chunks.append(ssml_chunk)
+                        else:
+                            # Der SSML-Chunk ist zu lang, wir müssen den Original-Chunk aufteilen
+                            status.warning(f"Chunk {i+1} ist nach SSML zu lang. Teile ihn auf...")
+                            
+                            # Teile den problematischen Plain-Text-Chunk in der Mitte
+                            half_point = len(chunk) // 2
+                            sub_chunk_1 = chunk[:half_point]
+                            sub_chunk_2 = chunk[half_point:]
+                            
+                            # Generiere SSML für die beiden Hälften separat
+                            ssml_sub_chunk_1 = generate_ssml_chunk(st.session_state.guideline, sub_chunk_1)
+                            ssml_sub_chunk_2 = generate_ssml_chunk(st.session_state.guideline, sub_chunk_2)
+                            
+                            final_ssml_chunks.append(ssml_sub_chunk_1)
+                            final_ssml_chunks.append(ssml_sub_chunk_2)
+                    
+                    status.write(f"Finale Audio-Generierung aus {len(final_ssml_chunks)} SSML-Blöcken...")
                     all_audio_bytes = []
                     available_voices = get_available_voices(elevenlabs_api_key)
                     selected_voice_id = available_voices[final_selected_voice]["voice_id"]
-                    
-                    for i, chunk in enumerate(text_chunks):
-                        status.write(f"Verarbeite Teil {i+1}/{len(text_chunks)}: Erzeuge SSML...")
-                        ssml_chunk = generate_ssml_chunk(st.session_state.guideline, chunk)
-                        
-                        status.write(f"Verarbeite Teil {i+1}/{len(text_chunks)}: Generiere Audio...")
-                        audio_segment = generate_audio_from_text(ssml_chunk, elevenlabs_api_key, selected_voice_id)
+
+                    for i, final_chunk in enumerate(final_ssml_chunks):
+                        status.write(f"Generiere Audio für finalen Block {i+1}/{len(final_ssml_chunks)}...")
+                        audio_segment = generate_audio_from_text(final_chunk, elevenlabs_api_key, selected_voice_id)
                         
                         if audio_segment:
                             all_audio_bytes.append(audio_segment)
                         else:
-                            status.update(label=f"Fehler bei Teil {i+1}", state="error")
+                            status.update(label=f"Fehler bei Block {i+1}", state="error")
                             break
                     
                     if len(all_audio_bytes) == len(text_chunks):
