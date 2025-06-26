@@ -254,6 +254,16 @@ else:
                 st.session_state.text_content = None
                 st.session_state.summary = None
                 st.session_state.selected_voice_name = ""
+                st.session_state.uploaded_file_name = None
+
+            # --- SCHRITT 1: DATEI HOCHLADEN ---
+            if st.session_state.tts_step < 3: # Verstecke den Uploader während der Generierung
+                st.subheader("1. Dokument hochladen")
+                uploaded_file = st.file_uploader(
+                    label="Lade dein Dokument hoch (.docx oder .pdf)",
+                    type=['docx', 'pdf'],
+                    key="tts_uploader"
+                )
 
             # Button zum Zurücksetzen/Neustarten
             if st.session_state.tts_step > 1:
@@ -265,61 +275,62 @@ else:
                     st.session_state.text_content = None
                     st.session_state.summary = None
                     st.session_state.selected_voice_name = ""
+                    st.session_state.uploaded_file_name = None
                     st.rerun()
 
-            # --- SCHRITT 1: DATEI HOCHLADEN ---
-            if st.session_state.tts_step == 1:
-                st.subheader("1. Dokument hochladen")
-                uploaded_file = st.file_uploader(
-                    label="Lade dein Dokument hoch (.docx oder .pdf)",
-                    type=['docx', 'pdf'],
-                    key="tts_uploader"
-                )
+            if 'uploaded_file' not in locals():
+                uploaded_file = None # Stelle sicher, dass die Variable existiert
 
-                if uploaded_file:
-                    # --- SCHRITT 2: ANALYSE STARTEN ---
-                    if st.button("Text analysieren & Stimmen empfehlen", type="primary"):
-                        with st.spinner("Lese Text aus Datei..."):
-                            if uploaded_file.name.lower().endswith('.pdf'):
-                                text_content = read_text_from_pdf(uploaded_file)
-                            else:
-                                text_content = read_text_from_docx(uploaded_file)
-                        
-                        if not text_content or not text_content.strip() or text_content == "NO_TEXT_IN_PDF":
-                            st.error("Das Dokument scheint keinen lesbaren Text zu enthalten.")
+            if uploaded_file and st.session_state.tts_step == 1:
+                # --- SCHRITT 2: ANALYSE STARTEN ---
+                if st.button("Text analysieren & Stimmen empfehlen", type="primary"):
+                    st.session_state.uploaded_file_name = uploaded_file.name # Dateinamen für später speichern
+                    with st.spinner("Lese Text aus Datei..."):
+                        if uploaded_file.name.lower().endswith('.pdf'):
+                            text_content = read_text_from_pdf(uploaded_file)
                         else:
-                            st.session_state.uploaded_file_name = uploaded_file.name # Dateinamen speichern
-                            st.session_state.text_content = text_content
+                            text_content = read_text_from_docx(uploaded_file)
+                    
+                    if not text_content or not text_content.strip() or text_content == "NO_TEXT_IN_PDF":
+                        st.error("Das Dokument scheint keinen lesbaren Text zu enthalten.")
+                    else:
+                        st.session_state.text_content = text_content
+                        
+                        with st.status("Führe KI-Analyse aus...", expanded=True) as status:
+                            status.write("Schritt 1/3: Erstelle Zusammenfassung des Textes...")
+                            summary = generate_text_summary(text_content)
+                            st.session_state.summary = summary
                             
-                            with st.status("Führe KI-Analyse aus...", expanded=True) as status:
-                                status.write("Schritt 1/3: Erstelle Zusammenfassung des Textes...")
-                                summary = generate_text_summary(text_content)
-                                st.session_state.summary = summary
-                                
-                                status.write("Schritt 2/3: Rufe verfügbare Stimmen ab...")
-                                available_voices = get_available_voices(elevenlabs_api_key)
-                                if "Fehler" in available_voices:
-                                    status.update(label="Fehler beim Abrufen der Stimmen.", state="error")
-                                    st.stop()
-                                
-                                voices_info_for_prompt = "\n".join([f"Name: {n} (Beschreibung: {', '.join(f'{k}: {v}' for k, v in details.get('labels', {}).items())})" for n, details in available_voices.items() if details.get('labels')])
+                            status.write("Schritt 2/3: Rufe verfügbare Stimmen ab...")
+                            available_voices = get_available_voices(elevenlabs_api_key)
+                            if "Fehler" in available_voices:
+                                status.update(label="Fehler beim Abrufen der Stimmen.", state="error")
+                                st.stop()
+                            
+                            # ROBUSTE LOGIK: Versuche, Stimmen mit Beschreibungen zu finden
+                            voices_info_for_prompt = "\n".join([f"Name: {n} (Beschreibung: {', '.join(f'{k}: {v}' for k, v in details.get('labels', {}).items())})" for n, details in available_voices.items() if details.get('labels')])
+                            
+                            # FALLBACK: Wenn keine Beschreibungen da sind, nutze nur Namen
+                            if not voices_info_for_prompt:
+                                status.warning("Keine Stimmen mit detaillierten Beschreibungen gefunden. Verwende stattdessen nur die Namen für die Empfehlung.")
+                                voices_info_for_prompt = "\n".join([f"Name: {n}" for n in available_voices.keys()])
 
-                                status.write("Schritt 3/3: Erstelle Regieleitlinie und finde passende Stimmen...")
-                                guideline, recommendations = get_voice_recommendations(summary, voices_info_for_prompt)
-                                
-                                st.session_state.guideline = guideline
-                                st.session_state.top_3_voices = recommendations
-                                status.update(label="Analyse abgeschlossen!", state="complete", expanded=False)
+                            status.write("Schritt 3/3: Erstelle Regieleitlinie und finde passende Stimmen...")
+                            guideline, recommendations = get_voice_recommendations(summary, voices_info_for_prompt)
                             
-                            st.session_state.tts_step = 2
-                            st.rerun()
+                            st.session_state.guideline = guideline
+                            st.session_state.top_3_voices = recommendations
+                            status.update(label="Analyse abgeschlossen!", state="complete", expanded=False)
+                        
+                        st.session_state.tts_step = 2
+                        st.rerun()
 
             # Nach erfolgreicher Analyse werden die Ergebnisse angezeigt
             if st.session_state.tts_step >= 2:
                 st.divider()
                 st.subheader("2. Analyse-Ergebnisse")
 
-                with st.expander("KI-Regieanweisung und Stimmen-Empfehlung anzeigen"):
+                with st.expander("KI-Regieanweisung und Stimmen-Empfehlung anzeigen", expanded=True):
                     st.markdown(st.session_state.guideline)
 
                 if st.session_state.summary:
@@ -337,7 +348,9 @@ else:
                 
                 if st.session_state.top_3_voices:
                     st.write("**Top 3 Empfehlungen der KI:**")
-                    st.success(f"🥇 **{st.session_state.top_3_voices[0]}**")
+                    # Stelle sicher, dass die Liste nicht leer ist
+                    if len(st.session_state.top_3_voices) > 0:
+                        st.success(f"🥇 **{st.session_state.top_3_voices[0]}**")
                     if len(st.session_state.top_3_voices) > 1:
                         st.info(f"🥈 {st.session_state.top_3_voices[1]}")
                     if len(st.session_state.top_3_voices) > 2:
@@ -346,13 +359,14 @@ else:
                 available_voices = get_available_voices(elevenlabs_api_key)
                 voice_names = list(available_voices.keys())
                 
-                # --- HIER IST DIE LÖSUNG FÜR PROBLEM B ---
-                try:
-                    # Finde den Index der empfohlenen Stimme für die Vorauswahl im Dropdown
-                    default_index = voice_names.index(st.session_state.top_3_voices[0])
-                except (ValueError, IndexError):
-                    # Fallback, falls die Stimme nicht gefunden wird oder die Liste leer ist
-                    default_index = 0
+                default_index = 0
+                if st.session_state.top_3_voices:
+                    try:
+                        # Setze die Vorauswahl auf die beste Empfehlung
+                        default_index = voice_names.index(st.session_state.top_3_voices[0])
+                    except ValueError:
+                        st.warning(f"Empfohlene Stimme '{st.session_state.top_3_voices[0]}' nicht in der Liste gefunden. Wähle manuell.")
+                        default_index = 0
 
                 st.session_state.selected_voice_name = st.selectbox(
                     "Wähle eine Stimme (Top-Empfehlung ist vorausgewählt)",
@@ -375,45 +389,36 @@ else:
             # Nach Klick auf "Generieren" wird die Verarbeitung gestartet
             if st.session_state.tts_step == 3:
                 final_selected_voice = st.session_state.selected_voice_name
+                
                 st.info(f"Audio-Generierung mit der Stimme '{final_selected_voice}' wird vorbereitet...")
 
                 with st.status("Generiere Audio-Datei...", expanded=True) as status:
-                    final_ssml_chunks = []
+                    status.write("Teile Text in Stücke (Chunks)...")
+                    text_chunks = chunk_text(st.session_state.text_content)
                     
-                    # Intelligente Zwei-Passen-Verarbeitung
-                    initial_chunks = chunk_text(st.session_state.text_content, 9500)
-                    
-                    for i, chunk in enumerate(initial_chunks):
-                        status.write(f"Verarbeite initialen Chunk {i+1}/{len(initial_chunks)}: Erzeuge SSML...")
-                        ssml_chunk = generate_ssml_chunk(st.session_state.guideline, chunk)
-                        
-                        if len(ssml_chunk) < 9800:
-                            final_ssml_chunks.append(ssml_chunk)
-                        else:
-                            status.warning(f"Chunk {i+1} ist nach SSML zu lang. Teile ihn rekursiv auf...")
-                            sub_chunks = chunk_text(chunk, 4500) # Kleinere Größe für SSML-Overhead
-                            
-                            for sub_chunk in sub_chunks:
-                                final_ssml_chunks.append(generate_ssml_chunk(st.session_state.guideline, sub_chunk))
-                    
-                    status.write(f"Finale Audio-Generierung aus {len(final_ssml_chunks)} SSML-Blöcken...")
                     all_audio_bytes = []
                     available_voices = get_available_voices(elevenlabs_api_key)
                     selected_voice_id = available_voices[final_selected_voice]["voice_id"]
+                    
+                    for i, chunk in enumerate(text_chunks):
+                        status.write(f"Verarbeite Teil {i+1}/{len(text_chunks)}: Erzeuge SSML...")
+                        ssml_chunk = generate_ssml_chunk(st.session_state.guideline, chunk)
+                        
+                        text_to_synthesize = ssml_chunk
+                        if len(ssml_chunk) > 9800:
+                            status.warning(f"Teil {i+1}: SSML-Version ist zu lang ({len(ssml_chunk)} Zeichen). Verwende reinen Text als Fallback.")
+                            text_to_synthesize = chunk
 
-                    for i, final_chunk in enumerate(final_ssml_chunks):
-                        status.write(f"Generiere Audio für finalen Block {i+1}/{len(final_ssml_chunks)}...")
-                        audio_segment = generate_audio_from_text(final_chunk, elevenlabs_api_key, selected_voice_id)
+                        status.write(f"Verarbeite Teil {i+1}/{len(text_chunks)}: Generiere Audio...")
+                        audio_segment = generate_audio_from_text(text_to_synthesize, elevenlabs_api_key, selected_voice_id)
                         
                         if audio_segment:
                             all_audio_bytes.append(audio_segment)
                         else:
-                            status.update(label=f"Fehler bei Block {i+1}", state="error")
+                            status.update(label=f"Fehler bei Teil {i+1}", state="error")
                             break
                     
-                    # --- KORREKTUR FÜR NameError ---
-                    # Vergleiche mit der Länge der finalen SSML-Chunk-Liste
-                    if len(all_audio_bytes) == len(final_ssml_chunks):
+                    if len(all_audio_bytes) == len(text_chunks):
                         status.update(label="Audio-Generierung abgeschlossen!", state="complete")
                         final_audio = b"".join(all_audio_bytes)
                         st.success("Finale Audiodatei erfolgreich erstellt!")
@@ -423,3 +428,6 @@ else:
                             file_name=f"{Path(st.session_state.uploaded_file_name).stem}_mit_regie.mp3",
                             mime="audio/mpeg"
                         )
+                
+                # Setze den Schritt zurück, damit man direkt eine neue Stimme für dasselbe Dokument testen kann
+                st.session_state.tts_step = 2 

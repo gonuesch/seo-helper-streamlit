@@ -69,11 +69,11 @@ Basierend auf der folgenden Text-Zusammenfassung, erstelle eine prägnante, kons
 ---
 
 **SEHR WICHTIGE REGELN:**
-1.  Du musst DREI Stimmen aus der unten stehenden Liste "Verfügbare ElevenLabs-Stimmen" auswählen.
-2.  Der Name, den du zurückgibst, muss **EXAKT UND ZEICHENGENAU** mit einem Namen aus der Liste übereinstimmen (z.B. "Thomas Candia", nicht nur "Thomas").
-3.  Erfinde keine neuen Namen und kürze keine Namen ab. Wähle nur aus der bereitgestellten Liste.
+1.  Analysiere die Liste der verfügbaren Stimmen. Wenn Beschreibungen vorhanden sind, nutze sie. Wenn nur Namen vorhanden sind, schließe aus dem Namen auf den Charakter der Stimme.
+2.  Wähle die DREI passendsten Stimmen aus.
+3.  Der Name, den du zurückgibst, muss **EXAKT UND ZEICHENGENAU** mit einem Namen aus der Liste übereinstimmen.
 
-**Verfügbare ElevenLabs-Stimmen (Name und Beschreibung):**
+**Verfügbare ElevenLabs-Stimmen (können Beschreibungen enthalten oder auch nicht):**
 ---
 {voices_with_descriptions}
 ---
