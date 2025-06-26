@@ -58,40 +58,38 @@ def read_text_from_pdf(file_object: BytesIO) -> str:
         return ""
 
 
-# +++ FINALE, ROBUSTE CHUNKING-FUNKTION +++
-def chunk_text(text: str, chunk_size: int = 7500) -> list[str]:
+def chunk_text(text: str, chunk_size: int = 8000) -> list[str]:
     """
-    Teilt einen langen Text in Chunks auf, die die chunk_size garantiert nicht überschreiten.
-    Sucht rückwärts nach dem besten Trennpunkt (Absatz, Satz, Leerzeichen).
+    Teilt einen langen Text rekursiv in Chunks auf, die die chunk_size
+    garantiert nicht überschreiten.
     """
-    chunks = []
-    text_remaining = str(text)
-    
-    while len(text_remaining) > 0:
-        if len(text_remaining) <= chunk_size:
-            chunks.append(text_remaining)
-            break
-            
-        # Nimm einen vorläufigen Chunk
-        chunk = text_remaining[:chunk_size]
+    if not isinstance(text, str):
+        return []
         
-        # Finde den letzten sinnvollen Trennpunkt von hinten
-        # Bevorzuge Absätze > Sätze > Leerzeichen
-        chunk_end = -1
+    chunks = []
+    
+    def chunk_recursively(sub_text):
+        if len(sub_text) <= chunk_size:
+            if sub_text.strip():
+                chunks.append(sub_text)
+            return
+
+        # Finde den besten möglichen Trennpunkt von hinten
+        break_point = -1
         for delimiter in ['\n\n', '.', ' ']:
-            chunk_end = chunk.rfind(delimiter)
-            if chunk_end != -1:
+            # rfind gibt den letzten Index des Delimiters vor dem Ende zurück
+            p = sub_text.rfind(delimiter, 0, chunk_size)
+            if p != -1:
+                break_point = p + len(delimiter)
                 break
         
         # Wenn gar kein Trennzeichen gefunden wird, mache einen harten Schnitt
-        # um einen unendlichen Loop zu vermeiden
-        if chunk_end == -1:
-            chunk_end = chunk_size
+        if break_point == -1:
+            break_point = chunk_size
             
-        # Erstelle den Chunk und aktualisiere den verbleibenden Text
-        # Wir nehmen chunk_end + 1, um das Trennzeichen (Punkt, Leerzeichen) mitzunehmen
-        final_chunk = text_remaining[:chunk_end + 1]
-        chunks.append(final_chunk)
-        text_remaining = text_remaining[chunk_end + 1:]
-        
+        # Füge den Chunk hinzu und verarbeite den Rest rekursiv
+        chunks.append(sub_text[:break_point])
+        chunk_recursively(sub_text[break_point:])
+
+    chunk_recursively(text)
     return [c for c in chunks if c.strip()]

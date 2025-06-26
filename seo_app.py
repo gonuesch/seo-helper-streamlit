@@ -378,36 +378,26 @@ else:
                 st.info(f"Audio-Generierung mit der Stimme '{final_selected_voice}' wird vorbereitet...")
 
                 with st.status("Generiere Audio-Datei...", expanded=True) as status:
-                    status.write("Teile Text in initiale Stücke (Chunks)...")
-                    # Wir starten mit einer optimistischen, großen Chunk-Größe
-                    initial_chunks = chunk_text(st.session_state.text_content, 9500)
-                    
                     final_ssml_chunks = []
                     
                     # --- INTELLIGENTE ZWEI-PASSEN-VERARBEITUNG ---
+                    # Wir verwenden die robustere, rekursive Chunking-Funktion
+                    initial_chunks = chunk_text_recursively(st.session_state.text_content, 9500)
+                    
                     for i, chunk in enumerate(initial_chunks):
                         status.write(f"Verarbeite initialen Chunk {i+1}/{len(initial_chunks)}: Erzeuge SSML...")
                         ssml_chunk = generate_ssml_chunk(st.session_state.guideline, chunk)
                         
                         # Überprüfe die Länge des SSML-Chunks
                         if len(ssml_chunk) < 9800:
-                            # Der Chunk ist in Ordnung, füge ihn zur finalen Liste hinzu
                             final_ssml_chunks.append(ssml_chunk)
                         else:
-                            # Der SSML-Chunk ist zu lang, wir müssen den Original-Chunk aufteilen
-                            status.warning(f"Chunk {i+1} ist nach SSML zu lang. Teile ihn auf...")
+                            status.warning(f"Chunk {i+1} ist nach SSML zu lang. Teile ihn rekursiv auf...")
+                            # Teile den problematischen Plain-Text-Chunk rekursiv auf
+                            sub_chunks = chunk_text_recursively(chunk, 4500) # Kleinere Größe für SSML-Overhead
                             
-                            # Teile den problematischen Plain-Text-Chunk in der Mitte
-                            half_point = len(chunk) // 2
-                            sub_chunk_1 = chunk[:half_point]
-                            sub_chunk_2 = chunk[half_point:]
-                            
-                            # Generiere SSML für die beiden Hälften separat
-                            ssml_sub_chunk_1 = generate_ssml_chunk(st.session_state.guideline, sub_chunk_1)
-                            ssml_sub_chunk_2 = generate_ssml_chunk(st.session_state.guideline, sub_chunk_2)
-                            
-                            final_ssml_chunks.append(ssml_sub_chunk_1)
-                            final_ssml_chunks.append(ssml_sub_chunk_2)
+                            for sub_chunk in sub_chunks:
+                                final_ssml_chunks.append(generate_ssml_chunk(st.session_state.guideline, sub_chunk))
                     
                     status.write(f"Finale Audio-Generierung aus {len(final_ssml_chunks)} SSML-Blöcken...")
                     all_audio_bytes = []
@@ -424,7 +414,9 @@ else:
                             status.update(label=f"Fehler bei Block {i+1}", state="error")
                             break
                     
-                    if len(all_audio_bytes) == len(text_chunks):
+                    # --- KORREKTUR FÜR NameError ---
+                    # Vergleiche mit der Länge der finalen SSML-Chunk-Liste
+                    if len(all_audio_bytes) == len(final_ssml_chunks):
                         status.update(label="Audio-Generierung abgeschlossen!", state="complete")
                         final_audio = b"".join(all_audio_bytes)
                         st.success("Finale Audiodatei erfolgreich erstellt!")
@@ -434,6 +426,3 @@ else:
                             file_name=f"{Path(st.session_state.uploaded_file_name).stem}_mit_regie.mp3",
                             mime="audio/mpeg"
                         )
-                
-                # Setze den Schritt zurück, damit man direkt eine neue Stimme für dasselbe Dokument testen kann
-                st.session_state.tts_step = 2
