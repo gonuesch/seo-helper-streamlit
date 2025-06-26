@@ -257,7 +257,7 @@ else:
                 st.session_state.uploaded_file_name = None
 
             # --- SCHRITT 1: DATEI HOCHLADEN ---
-            if st.session_state.tts_step < 3: # Verstecke den Uploader während der Generierung
+            if st.session_state.tts_step < 3:
                 st.subheader("1. Dokument hochladen")
                 uploaded_file = st.file_uploader(
                     label="Lade dein Dokument hoch (.docx oder .pdf)",
@@ -279,12 +279,12 @@ else:
                     st.rerun()
 
             if 'uploaded_file' not in locals():
-                uploaded_file = None # Stelle sicher, dass die Variable existiert
+                uploaded_file = None 
 
             if uploaded_file and st.session_state.tts_step == 1:
                 # --- SCHRITT 2: ANALYSE STARTEN ---
                 if st.button("Text analysieren & Stimmen empfehlen", type="primary"):
-                    st.session_state.uploaded_file_name = uploaded_file.name # Dateinamen für später speichern
+                    st.session_state.uploaded_file_name = uploaded_file.name 
                     with st.spinner("Lese Text aus Datei..."):
                         if uploaded_file.name.lower().endswith('.pdf'):
                             text_content = read_text_from_pdf(uploaded_file)
@@ -307,10 +307,8 @@ else:
                                 status.update(label="Fehler beim Abrufen der Stimmen.", state="error")
                                 st.stop()
                             
-                            # ROBUSTE LOGIK: Versuche, Stimmen mit Beschreibungen zu finden
                             voices_info_for_prompt = "\n".join([f"Name: {n} (Beschreibung: {', '.join(f'{k}: {v}' for k, v in details.get('labels', {}).items())})" for n, details in available_voices.items() if details.get('labels')])
                             
-                            # FALLBACK: Wenn keine Beschreibungen da sind, nutze nur Namen
                             if not voices_info_for_prompt:
                                 status.warning("Keine Stimmen mit detaillierten Beschreibungen gefunden. Verwende stattdessen nur die Namen für die Empfehlung.")
                                 voices_info_for_prompt = "\n".join([f"Name: {n}" for n in available_voices.keys()])
@@ -348,7 +346,6 @@ else:
                 
                 if st.session_state.top_3_voices:
                     st.write("**Top 3 Empfehlungen der KI:**")
-                    # Stelle sicher, dass die Liste nicht leer ist
                     if len(st.session_state.top_3_voices) > 0:
                         st.success(f"🥇 **{st.session_state.top_3_voices[0]}**")
                     if len(st.session_state.top_3_voices) > 1:
@@ -362,7 +359,6 @@ else:
                 default_index = 0
                 if st.session_state.top_3_voices:
                     try:
-                        # Setze die Vorauswahl auf die beste Empfehlung
                         default_index = voice_names.index(st.session_state.top_3_voices[0])
                     except ValueError:
                         st.warning(f"Empfohlene Stimme '{st.session_state.top_3_voices[0]}' nicht in der Liste gefunden. Wähle manuell.")
@@ -393,32 +389,40 @@ else:
                 st.info(f"Audio-Generierung mit der Stimme '{final_selected_voice}' wird vorbereitet...")
 
                 with st.status("Generiere Audio-Datei...", expanded=True) as status:
-                    status.write("Teile Text in Stücke (Chunks)...")
-                    text_chunks = chunk_text(st.session_state.text_content)
+                    status.write("Teile Text in initiale Stücke (Chunks)...")
+                    initial_chunks = chunk_text(st.session_state.text_content, 8000)
                     
+                    final_ssml_chunks = []
+                    
+                    for i, chunk in enumerate(initial_chunks):
+                        status.write(f"Verarbeite initialen Chunk {i+1}/{len(initial_chunks)}: Erzeuge SSML...")
+                        ssml_chunk = generate_ssml_chunk(st.session_state.guideline, chunk)
+                        
+                        if len(ssml_chunk) < 9800:
+                            final_ssml_chunks.append(ssml_chunk)
+                        else:
+                            status.warning(f"Chunk {i+1} ist nach SSML zu lang ({len(ssml_chunk)} Zeichen). Teile ihn auf...")
+                            sub_chunks = chunk_text(chunk, 4000)
+                            
+                            for sub_chunk in sub_chunks:
+                                final_ssml_chunks.append(generate_ssml_chunk(st.session_state.guideline, sub_chunk))
+                    
+                    status.write(f"Finale Audio-Generierung aus {len(final_ssml_chunks)} SSML-Blöcken...")
                     all_audio_bytes = []
                     available_voices = get_available_voices(elevenlabs_api_key)
                     selected_voice_id = available_voices[final_selected_voice]["voice_id"]
                     
-                    for i, chunk in enumerate(text_chunks):
-                        status.write(f"Verarbeite Teil {i+1}/{len(text_chunks)}: Erzeuge SSML...")
-                        ssml_chunk = generate_ssml_chunk(st.session_state.guideline, chunk)
-                        
-                        text_to_synthesize = ssml_chunk
-                        if len(ssml_chunk) > 9800:
-                            status.warning(f"Teil {i+1}: SSML-Version ist zu lang ({len(ssml_chunk)} Zeichen). Verwende reinen Text als Fallback.")
-                            text_to_synthesize = chunk
-
-                        status.write(f"Verarbeite Teil {i+1}/{len(text_chunks)}: Generiere Audio...")
-                        audio_segment = generate_audio_from_text(text_to_synthesize, elevenlabs_api_key, selected_voice_id)
+                    for i, final_chunk in enumerate(final_ssml_chunks):
+                        status.write(f"Generiere Audio für finalen Block {i+1}/{len(final_ssml_chunks)}...")
+                        audio_segment = generate_audio_from_text(final_chunk, elevenlabs_api_key, selected_voice_id)
                         
                         if audio_segment:
                             all_audio_bytes.append(audio_segment)
                         else:
-                            status.update(label=f"Fehler bei Teil {i+1}", state="error")
+                            status.update(label=f"Fehler bei Block {i+1}", state="error")
                             break
                     
-                    if len(all_audio_bytes) == len(text_chunks):
+                    if len(all_audio_bytes) == len(final_ssml_chunks):
                         status.update(label="Audio-Generierung abgeschlossen!", state="complete")
                         final_audio = b"".join(all_audio_bytes)
                         st.success("Finale Audiodatei erfolgreich erstellt!")
@@ -429,5 +433,4 @@ else:
                             mime="audio/mpeg"
                         )
                 
-                # Setze den Schritt zurück, damit man direkt eine neue Stimme für dasselbe Dokument testen kann
-                st.session_state.tts_step = 2 
+                st.session_state.tts_step = 2

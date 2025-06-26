@@ -22,7 +22,7 @@ model_gemini = genai.GenerativeModel('gemini-2.5-pro')
 
 # --- Die Funktionen generate_seo_tags_cached und generate_accessibility_description_cached bleiben unverändert ---
 
-@st.cache_data(ttl=3600) # Cache das Ergebnis für eine Stunde
+
 def generate_text_summary(_text: str) -> str:
     """Erstellt eine Zusammenfassung des übergebenen Textes."""
     try:
@@ -33,7 +33,7 @@ def generate_text_summary(_text: str) -> str:
         logger.error(f"Fehler bei der Text-Zusammenfassung: {e}", exc_info=True)
         return f"Fehler bei der Zusammenfassung: {e}"
 
-@st.cache_data(ttl=3600)
+
 def get_voice_recommendations(_summary: str, _voices_info: str) -> Tuple[str, list]:
     """Erstellt eine Regieleitlinie und extrahiert die Top 3 Stimmen."""
     try:
@@ -67,7 +67,7 @@ def get_voice_recommendations(_summary: str, _voices_info: str) -> Tuple[str, li
         logger.error(f"Fehler bei der Regie-Erstellung: {e}", exc_info=True)
         return f"Fehler bei der Regie-Erstellung: {e}", []
 
-@st.cache_data(ttl=3600)
+
 def generate_ssml_chunk(_guideline: str, _text_chunk: str) -> str:
     """Reichert einen Text-Chunk mit SSML an."""
     try:
