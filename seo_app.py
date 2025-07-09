@@ -93,40 +93,45 @@ else:
         st.divider()
 
         # --- Logik für jedes Werkzeug ---
-        if selected_tool == "SEO Tags":
-            st.header("SEO Tags (Alt & Title) generieren")
-            st.caption("Dieses Werkzeug erstellt prägnante `alt`- und `title`-Tags für Bilder zur Suchmaschinenoptimierung und grundlegenden Barrierefreiheit.")
-            
+        # --- Logik für jedes Werkzeug ---
+    if selected_tool == "SEO Tags":
+        st.header("SEO Tags (Alt & Title) generieren")
+        st.caption("Dieses Werkzeug erstellt prägnante `alt`- und `title`-Tags für Bilder.")
+
+        # Tab-Auswahl für Upload oder URL
+        input_method = st.radio(
+            "Wähle die Eingabemethode:", 
+            ("Datei-Upload", "Bild-URL"), 
+            horizontal=True,
+            key="seo_input_method"
+        )
+        st.divider()
+
+        # --- Logik für Datei-Upload ---
+        if input_method == "Datei-Upload":
             seo_uploaded_files = st.file_uploader(
                 "Bilder für SEO Tags hochladen...", accept_multiple_files=True,
                 type=['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'tif', 'tiff'], key="seo_uploader"
             )
 
             if seo_uploaded_files:
-                if st.button("🚀 SEO Tags verarbeiten", type="primary", key="process_seo_button"):
+                if st.button("🚀 SEO Tags für Dateien verarbeiten", type="primary", key="process_seo_files_button"):
                     st.subheader("Verarbeitungsergebnisse")
                     for i, uploaded_file in enumerate(seo_uploaded_files):
                         file_name = uploaded_file.name
                         safe_file_name_part = "".join(c if c.isalnum() else "_" for c in file_name)
-                        base_id = f"seo_{i}_{safe_file_name_part}"
+                        base_id = f"seo_file_{i}_{safe_file_name_part}"
                         try:
                             original_image_bytes = uploaded_file.getvalue()
-                            image_bytes_for_api = original_image_bytes
-                            
-                            if Path(file_name).suffix.lower() in ['.tif', '.tiff']:
-                                with st.spinner(f"Konvertiere {file_name} (TIFF) zu PNG..."):
-                                    try:
-                                        image_bytes_for_api = convert_tiff_to_png_bytes(original_image_bytes)
-                                    except Exception as conv_e:
-                                        st.error(f"🚨 Fehler beim Konvertieren von '{file_name}': {conv_e}")
-                                        continue
                             
                             with st.spinner(f"Generiere SEO Tags für {file_name}..."):
-                                title, alt = generate_seo_tags_cached(image_bytes_for_api, file_name)
+                                # Wir übergeben die Bytes direkt an unsere aktualisierte Funktion
+                                title, alt = generate_seo_tags_cached(original_image_bytes, file_name)
                             
                             if title and alt:
                                 with st.expander(f"✅ SEO Tags für: {file_name}", expanded=True):
-                                    alt_button_id, title_button_id = f"alt_btn_{base_id}", f"title_btn_{base_id}"
+                                    alt_button_id = f"alt_btn_{base_id}"
+                                    title_button_id = f"title_btn_{base_id}"
                                     col1, col2 = st.columns([1, 3], gap="medium")
                                     with col1:
                                         st.image(original_image_bytes, width=150, caption="Vorschau")
@@ -147,6 +152,33 @@ else:
                         except Exception as e:
                             st.error(f"🚨 Unerwarteter FEHLER bei '{file_name}': {e}")
                     st.success("SEO-Verarbeitung abgeschlossen.")
+        
+        # --- Logik für Bild-URL ---
+        elif input_method == "Bild-URL":
+            image_url = st.text_input("Bild-URL einfügen:", placeholder="https://...", key="seo_url_input")
+
+            if image_url:
+                if st.button("🚀 SEO Tags für URL verarbeiten", type="primary", key="process_seo_url_button"):
+                    with st.spinner(f"Verarbeite Bild von URL..."):
+                        try:
+                            # Wir übergeben die URL direkt an unsere aktualisierte Funktion
+                            title, alt = generate_seo_tags_cached(image_url, image_url)
+                            
+                            if title and alt:
+                                st.subheader("Verarbeitungsergebnis")
+                                with st.expander(f"✅ SEO Tags für die URL", expanded=True):
+                                    col1, col2 = st.columns([1, 3], gap="medium")
+                                    with col1:
+                                        st.image(image_url, width=150, caption="Vorschau")
+                                    with col2:
+                                        st.text("ALT Tag:")
+                                        st.code(alt, language="text") # st.code für einfache Anzeige
+                                        st.text("TITLE Tag:")
+                                        st.code(title, language="text")
+                            else:
+                                st.error(f"❌ Fehler bei SEO Tag-Generierung für die URL.")
+                        except Exception as e:
+                            st.error(f"🚨 Unerwarteter FEHLER bei der Verarbeitung der URL: {e}")
 
         elif selected_tool == "Barrierefreie Bildbeschreibung":
             st.header("Barrierefreie Bildbeschreibung (Kurz & Lang)")

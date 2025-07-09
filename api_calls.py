@@ -9,6 +9,7 @@ from google.api_core.exceptions import ResourceExhausted
 from elevenlabs.client import ElevenLabs
 import logging
 import re
+import requests
 
 # Importiere die Prompt-Vorlagen aus der prompts.py Datei
 from prompts import ACCESSIBILITY_PROMPT_TEMPLATE, SEO_PROMPT, SUMMARY_PROMPT, GUIDELINE_PROMPT_WITH_MATCHING, SSML_PROMPT
@@ -83,18 +84,33 @@ def generate_ssml_chunk(_guideline: str, _text_chunk: str) -> str:
 
 
 @st.cache_data
-def generate_seo_tags_cached(image_bytes_for_api, file_name_for_log: str, model_name: str = "gemini-1.5-pro-latest") -> Tuple[Union[str, None], Union[str, None]]:
+def generate_seo_tags_cached(image_source: Union[bytes, str], file_name_for_log: str, model_name: str = "gemini-1.5-pro-latest") -> Tuple[Union[str, None], Union[str, None]]:
     """
-    Nimmt Bild-Bytes, ruft die Gemini API mit dem SEO-Prompt auf
+    Nimmt Bild-Bytes oder eine URL, ruft die Gemini API mit dem SEO-Prompt auf
     und gibt (title, alt) als Tupel zurück.
     """
     try:
-        img = Image.open(BytesIO(image_bytes_for_api))
+        image_bytes = None
+        # Prüft, ob die Quelle eine URL (string) ist
+        if isinstance(image_source, str): 
+            response = requests.get(image_source)
+            # Löst einen Fehler aus, wenn der Download fehlschlägt (z.B. 404 Not Found)
+            response.raise_for_status() 
+            image_bytes = response.content
+        else: # Ansonsten sind es Bytes von einem Upload
+            image_bytes = image_source
+        
+        # Stellt sicher, dass wir am Ende gültige Bild-Bytes haben
+        if not image_bytes:
+            raise ValueError("Keine validen Bilddaten für die Verarbeitung erhalten.")
+
+        img = Image.open(BytesIO(image_bytes))
         model = genai.GenerativeModel(model_name)
+        
         try:
             response = model.generate_content([SEO_PROMPT, img], request_options={"timeout": 120})
         except ResourceExhausted as e:
-            logger.warning(f"Rate limit exceeded for SEO tags {file_name_for_log}: {e}")
+            print(f"Rate limit exceeded for SEO tags {file_name_for_log}: {e}")
             st.warning(f"Rate Limit für SEO-Tags bei '{file_name_for_log}' erreicht. Bitte versuche es später erneut oder mit weniger Bildern.")
             return None, None
         
@@ -109,11 +125,15 @@ def generate_seo_tags_cached(image_bytes_for_api, file_name_for_log: str, model_
         if alt_tag and title_tag:
             return title_tag, alt_tag
         else:
-            logger.warning(f"Warning: Could not extract SEO tags for {file_name_for_log}. Raw response: {generated_text}")
+            print(f"Warning: Could not extract SEO tags for {file_name_for_log}. Raw response: {generated_text}")
             return None, None
             
+    except requests.exceptions.RequestException as e:
+        print(f"Error downloading image from URL for {file_name_for_log}: {e}")
+        st.error(f"Bild konnte von der URL nicht heruntergeladen werden: {e}")
+        return None, None
     except Exception as e:
-        logger.error(f"Error during SEO tag generation for {file_name_for_log}: {e}", exc_info=True)
+        print(f"Error during SEO tag generation for {file_name_for_log}: {e}")
         st.error(f"Ein unerwarteter Fehler ist bei der Generierung der SEO-Tags für '{file_name_for_log}' aufgetreten.")
         return None, None
 
