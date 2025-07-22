@@ -250,13 +250,27 @@ def generate_translation_guide(full_text: str) -> dict:
         full_prompt = TRANSLATION_GUIDE_PROMPT.format(full_text=full_text)
         response = model_gemini.generate_content(full_prompt)
         
+        # Bereinige die Antwort von Markdown-Codeblöcken
+        cleaned_response = response.text.strip()
+        
+        # Entferne Markdown-Codeblock-Formatierung (```json ... ```)
+        if cleaned_response.startswith("```json"):
+            cleaned_response = cleaned_response[7:]  # Entferne "```json"
+        if cleaned_response.startswith("```"):
+            cleaned_response = cleaned_response[3:]  # Entferne "```"
+        if cleaned_response.endswith("```"):
+            cleaned_response = cleaned_response[:-3]  # Entferne "```" am Ende
+        
+        cleaned_response = cleaned_response.strip()
+        
         # Versuche das JSON zu parsen
         try:
-            guide_dict = json.loads(response.text.strip())
+            guide_dict = json.loads(cleaned_response)
             return guide_dict
         except json.JSONDecodeError as e:
             logger.error(f"Fehler beim Parsen des JSON-Responses: {e}")
             logger.error(f"Raw response: {response.text}")
+            logger.error(f"Cleaned response: {cleaned_response}")
             # Fallback: Erstelle ein minimales Guide-Dictionary
             return {
                 "plot_summary": "Fehler beim Parsen der KI-Antwort",
