@@ -133,23 +133,23 @@ Anleitung:
 Ausgabeformat: Gib das Ergebnis AUSSCHLIESSLICH als valides JSON-Objekt zurück. Verwende keine einleitenden Sätze.
 
 Beispiel für das JSON-Format:
-{
+{{
   "overall_mood": "Melancholisch mit einem Hoffnungsschimmer",
   "scenes": [
-    {
+    {{
       "scene_number": 1,
       "scene_content": "Elias und sein Hund Buster durchstreifen eine verlassene Stadt auf der Suche nach Vorräten.",
       "scene_type": "Beschreibung",
       "scene_mood": "Melancholisch"
-    },
-    {
+    }},
+    {{
       "scene_number": 2,
       "scene_content": "Ein plötzliches Grollen und eine unerklärliche Finsternis brechen über die Stadt herein.",
       "scene_type": "Action",
       "scene_mood": "Spannend"
-    }
+    }}
   ]
-}
+}}
 """
 
 # Neue Prompts für die Manuskript-Übersetzung
@@ -171,18 +171,18 @@ Deine Aufgabe ist es, einen "Style & Glossar"-Leitfaden für die Übersetzung ei
 4. Erstelle ein Glossar wichtiger Begriffe mit ihren englischen Entsprechungen
 
 **Ausgabeformat (JSON):**
-{
+{{
   "plot_summary": "Kurze Zusammenfassung der Handlung/Thematik (max. 200 Wörter)",
   "main_characters": ["Liste der wichtigsten Figuren mit kurzen Beschreibungen"],
   "key_locations": ["Liste wichtiger Orte/Schauplätze"],
   "tone_style": "Beschreibung des Tons (z.B. 'sachlich', 'melancholisch', 'humorvoll', 'dramatisch')",
   "writing_style": "Beschreibung des Schreibstils (z.B. 'direkt', 'lyrisch', 'akademisch')",
-  "glossary": {
+  "glossary": {{
     "deutscher_begriff_1": "englische_übersetzung_1",
     "deutscher_begriff_2": "englische_übersetzung_2"
-  },
+  }},
   "special_instructions": "Besondere Anweisungen für die Übersetzung (z.B. Dialekte, Fachbegriffe, etc.)"
-}
+}}
 """
 
 TRANSLATE_CHUNK_PROMPT = """
