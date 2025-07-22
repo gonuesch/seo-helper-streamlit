@@ -10,7 +10,7 @@ from streamlit_option_menu import option_menu
 
 # Importiere Funktionen aus deinen Modulen
 from utils import convert_tiff_to_png_bytes, read_text_from_docx, read_text_from_pdf, chunk_text
-from api_calls import generate_seo_tags_cached, generate_accessibility_description_cached, generate_audio_from_text, get_available_voices, generate_text_summary, get_voice_recommendations, generate_ssml_chunk
+from api_calls import generate_seo_tags_cached, generate_accessibility_description_cached, generate_audio_from_text, get_available_voices, generate_text_summary, get_voice_recommendations, generate_ssml_chunk, generate_translation_guide, translate_chunk
 
 # --- Seitenkonfiguration ---
 st.set_page_config(page_title="Toolbox", page_icon="app_icon.png", layout="wide")
@@ -69,8 +69,8 @@ else:
         # --- Hauptbereich mit Navigation ---
         selected_tool = option_menu(
             menu_title=None,
-            options=["SEO Tags", "Barrierefreie Bildbeschreibung", "Text-to-Speech"],
-            icons=['search', 'universal-access-circle', 'sound-wave'],
+            options=["SEO Tags", "Barrierefreie Bildbeschreibung", "Text-to-Speech", "Manuskript-Übersetzung"],
+            icons=['search', 'universal-access-circle', 'sound-wave', 'translate'],
             menu_icon="cast", default_index=0, orientation="horizontal",
             styles={
                 "container": {"padding": "5px !important", "background-color": "#fafafa", "border-radius": "10px"},
@@ -89,6 +89,8 @@ else:
                 st.markdown(f"Erzeuge **Bildbeschreibungen** mit Gemini.\n\n**Unterstützte Formate:** `{supported_formats_images}`\n\n**Download möglich:** Die Ergebnisse können als Excel-Datei heruntergeladen werden.\n\nBei Fragen -> Gordon")
             elif selected_tool == "Text-to-Speech":
                 st.markdown("Wandle Text aus **Word-Dokumenten** oder **PDFs** in gesprochene Sprache um.\n\n**Unterstützte Formate:** `.docx`, `.pdf`\n\n**API:** ElevenLabs\n\nBei Fragen -> Gordon")
+            elif selected_tool == "Manuskript-Übersetzung":
+                st.markdown("Übersetze **deutsche Manuskripte** ins Englische mit kontext-bewusster KI.\n\n**Unterstützte Formate:** `.docx`, `.pdf`\n\n**Features:** Style & Glossar-Leitfaden, konsistente Terminologie\n\nBei Fragen -> Gordon")
 
         st.divider()
 
@@ -467,3 +469,83 @@ else:
                             mime="audio/mpeg"
                         )
                 st.session_state.tts_step = 2
+
+        elif selected_tool == "Manuskript-Übersetzung":
+            st.header("Manuskript-Übersetzung (Deutsch → Englisch)")
+            st.caption("Dieses Tool übersetzt deutsche Manuskripte ins Englische mit kontext-bewusster KI für hohe stilistische und terminologische Konsistenz.")
+
+            uploaded_file = st.file_uploader(
+                label="Lade dein deutsches Manuskript hoch (.docx oder .pdf)",
+                type=['docx', 'pdf'],
+                key="translation_uploader"
+            )
+
+            if uploaded_file:
+                if st.button("🚀 Übersetzung starten", type="primary", key="start_translation_button"):
+                    with st.status("Übersetzung läuft...", expanded=True) as status:
+                        # Status 1: Text extrahieren
+                        status.write("1. Extrahiere Text aus Dokument...")
+                        if uploaded_file.name.lower().endswith('.pdf'):
+                            german_text = read_text_from_pdf(uploaded_file)
+                        else:
+                            german_text = read_text_from_docx(uploaded_file)
+                        
+                        if not german_text or not german_text.strip() or german_text == "NO_TEXT_IN_PDF":
+                            status.update(label="Fehler: Kein lesbarer Text gefunden", state="error")
+                            st.error("Das Dokument scheint keinen lesbaren Text zu enthalten.")
+                            st.stop()
+                        
+                        # Status 2: Übersetzungs-Leitfaden erstellen
+                        status.write("2. Erstelle Übersetzungs-Leitfaden...")
+                        translation_guide = generate_translation_guide(german_text)
+                        
+                        if not translation_guide or "Fehler" in str(translation_guide.get("plot_summary", "")):
+                            status.update(label="Fehler beim Erstellen des Leitfadens", state="error")
+                            st.error("Fehler beim Erstellen des Übersetzungs-Leitfadens.")
+                            st.stop()
+                        
+                        # Status 3: Text in Chunks aufteilen
+                        status.write("3. Teile Text in Abschnitte...")
+                        german_chunks = chunk_text(german_text, max_chunk_size=3000)
+                        
+                        # Status 4: Chunks übersetzen
+                        status.write(f"4. Übersetze {len(german_chunks)} Abschnitte...")
+                        english_chunks = []
+                        
+                        for i, german_chunk in enumerate(german_chunks):
+                            status.write(f"   Übersetze Abschnitt {i+1} von {len(german_chunks)}...")
+                            
+                            # Übergebe den vorherigen englischen Chunk für flüssige Übergänge
+                            previous_english_chunk = english_chunks[-1] if english_chunks else None
+                            
+                            english_chunk = translate_chunk(translation_guide, german_chunk, previous_english_chunk)
+                            english_chunks.append(english_chunk)
+                        
+                        # Status 5: Übersetztes Manuskript zusammenfügen
+                        status.write("5. Setze übersetztes Manuskript zusammen...")
+                        final_english_text = "\n\n".join(english_chunks)
+                        
+                        status.update(label="Übersetzung abgeschlossen!", state="complete", expanded=False)
+                    
+                    # Erfolgsmeldung anzeigen
+                    st.success("✅ Übersetzung erfolgreich abgeschlossen!")
+                    
+                    # Style & Glossar-Leitfaden anzeigen
+                    with st.expander("📋 Style & Glossar-Leitfaden anzeigen", expanded=False):
+                        st.json(translation_guide)
+                    
+                    # Download-Button für das übersetzte Manuskript
+                    st.download_button(
+                        label="💾 Übersetztes Manuskript herunterladen (.txt)",
+                        data=final_english_text.encode('utf-8'),
+                        file_name=f"übersetzung_{Path(uploaded_file.name).stem}.txt",
+                        mime="text/plain"
+                    )
+                    
+                    # Statistiken anzeigen
+                    st.divider()
+                    st.subheader("📊 Übersetzungs-Statistiken")
+                    col1, col2, col3 = st.columns(3)
+                    col1.metric("Deutsche Wörter", len(german_text.split()))
+                    col2.metric("Englische Wörter", len(final_english_text.split()))
+                    col3.metric("Verarbeitete Abschnitte", len(german_chunks))

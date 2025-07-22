@@ -10,9 +10,10 @@ from elevenlabs.client import ElevenLabs
 import logging
 import re
 import requests
+import json
 
 # Importiere die Prompt-Vorlagen aus der prompts.py Datei
-from prompts import ACCESSIBILITY_PROMPT_TEMPLATE, SEO_PROMPT, SUMMARY_PROMPT, GUIDELINE_PROMPT_WITH_MATCHING, SSML_PROMPT
+from prompts import ACCESSIBILITY_PROMPT_TEMPLATE, SEO_PROMPT, SUMMARY_PROMPT, GUIDELINE_PROMPT_WITH_MATCHING, SSML_PROMPT, TRANSLATION_GUIDE_PROMPT, TRANSLATE_CHUNK_PROMPT
 
 # Richte ein einfaches Logging ein, um Fehler besser nachverfolgen zu können
 logging.basicConfig(level=logging.INFO)
@@ -241,3 +242,61 @@ def generate_audio_from_text(text: str, api_key: str, voice_id: str) -> Union[by
     except Exception as e:
         logger.error(f"Fehler bei der Audio-Generierung durch ElevenLabs: {e}", exc_info=True)
         return None
+
+
+def generate_translation_guide(full_text: str) -> dict:
+    """Erstellt einen Style & Glossar-Leitfaden für die Übersetzung."""
+    try:
+        full_prompt = TRANSLATION_GUIDE_PROMPT.format(full_text=full_text)
+        response = model_gemini.generate_content(full_prompt)
+        
+        # Versuche das JSON zu parsen
+        try:
+            guide_dict = json.loads(response.text.strip())
+            return guide_dict
+        except json.JSONDecodeError as e:
+            logger.error(f"Fehler beim Parsen des JSON-Responses: {e}")
+            logger.error(f"Raw response: {response.text}")
+            # Fallback: Erstelle ein minimales Guide-Dictionary
+            return {
+                "plot_summary": "Fehler beim Parsen der KI-Antwort",
+                "main_characters": [],
+                "key_locations": [],
+                "tone_style": "neutral",
+                "writing_style": "direkt",
+                "glossary": {},
+                "special_instructions": "Fehler beim Erstellen des Leitfadens"
+            }
+    except Exception as e:
+        logger.error(f"Fehler bei der Erstellung des Übersetzungs-Leitfadens: {e}", exc_info=True)
+        return {
+            "plot_summary": f"Fehler: {e}",
+            "main_characters": [],
+            "key_locations": [],
+            "tone_style": "neutral",
+            "writing_style": "direkt",
+            "glossary": {},
+            "special_instructions": f"Fehler beim Erstellen des Leitfadens: {e}"
+        }
+
+
+def translate_chunk(guide: dict, german_chunk: str, previous_english_chunk: str = None) -> str:
+    """Übersetzt einen deutschen Textabschnitt ins Englische basierend auf dem Leitfaden."""
+    try:
+        # Konvertiere das Guide-Dictionary zu einem String für den Prompt
+        guide_str = json.dumps(guide, ensure_ascii=False, indent=2)
+        
+        # Verwende leeren String falls kein vorheriger Chunk vorhanden
+        prev_chunk = previous_english_chunk if previous_english_chunk else ""
+        
+        full_prompt = TRANSLATE_CHUNK_PROMPT.format(
+            guide=guide_str,
+            german_chunk=german_chunk,
+            previous_english_chunk=prev_chunk
+        )
+        
+        response = model_gemini.generate_content(full_prompt)
+        return response.text.strip()
+    except Exception as e:
+        logger.error(f"Fehler bei der Übersetzung des Chunks: {e}", exc_info=True)
+        return f"[Übersetzungsfehler: {e}]"

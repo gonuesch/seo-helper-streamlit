@@ -9,7 +9,7 @@ Zweck und Zielgruppe:
 Stil und Formulierung:
 - Neutral und deskriptiv: Beschreibe objektiv, was visuell wahrnehmbar ist.
 - Keine Interpretation: Vermeide persönliche Deutungen oder Wertungen.
-- Direkter Einstieg: Verzichte zwingend auf einleitende Formulierungen wie „Das Foto zeigt…“, „Die Illustration stellt dar…“, „Auf dem Bild ist zu sehen…“ oder ähnliche Phrasen.
+- Direkter Einstieg: Verzichte zwingend auf einleitende Formulierungen wie „Das Foto zeigt…", „Die Illustration stellt dar…", „Auf dem Bild ist zu sehen…" oder ähnliche Phrasen.
 - Anführungszeichen: Verwende für Anführungszeichen ausschließlich französische Guillemets («Beispiel»).
 - Sprache: Klar, präzise und allgemein verständlich.
 Inhalt und Struktur:
@@ -150,4 +150,66 @@ Beispiel für das JSON-Format:
     }
   ]
 }
+"""
+
+# Neue Prompts für die Manuskript-Übersetzung
+TRANSLATION_GUIDE_PROMPT = """
+Du bist ein erfahrener Literaturübersetzer und Lektor.
+Deine Aufgabe ist es, einen "Style & Glossar"-Leitfaden für die Übersetzung eines deutschen Manuskripts ins Englische zu erstellen.
+
+**WICHTIGE ANWEISUNG:** Gib deine Antwort AUSSCHLIESSLICH als valides JSON-Objekt zurück. Verwende keine einleitenden Sätze oder Erklärungen.
+
+**Deutsche Originaltext:**
+---
+{full_text}
+---
+
+**Deine Aufgaben:**
+1. Analysiere den Text gründlich und erstelle eine kurze Zusammenfassung der Handlung/Thematik
+2. Identifiziere die Hauptfiguren, Orte und wiederkehrende Schlüsselbegriffe
+3. Bestimme den allgemeinen Ton und Stil des Textes
+4. Erstelle ein Glossar wichtiger Begriffe mit ihren englischen Entsprechungen
+
+**Ausgabeformat (JSON):**
+{
+  "plot_summary": "Kurze Zusammenfassung der Handlung/Thematik (max. 200 Wörter)",
+  "main_characters": ["Liste der wichtigsten Figuren mit kurzen Beschreibungen"],
+  "key_locations": ["Liste wichtiger Orte/Schauplätze"],
+  "tone_style": "Beschreibung des Tons (z.B. 'sachlich', 'melancholisch', 'humorvoll', 'dramatisch')",
+  "writing_style": "Beschreibung des Schreibstils (z.B. 'direkt', 'lyrisch', 'akademisch')",
+  "glossary": {
+    "deutscher_begriff_1": "englische_übersetzung_1",
+    "deutscher_begriff_2": "englische_übersetzung_2"
+  },
+  "special_instructions": "Besondere Anweisungen für die Übersetzung (z.B. Dialekte, Fachbegriffe, etc.)"
+}
+"""
+
+TRANSLATE_CHUNK_PROMPT = """
+Du bist ein professioneller Literaturübersetzer.
+Deine Aufgabe ist es, einen deutschen Textabschnitt ins Englische zu übersetzen, wobei du strikt den vorgegebenen "Style & Glossar"-Leitfaden befolgst.
+
+**WICHTIGE REGELN:**
+1. Übersetze den Text wortgetreu, aber idiomatisch korrekt
+2. Halte dich strikt an das vorgegebene Glossar
+3. Bewahre den ursprünglichen Ton und Stil
+4. Stelle sicher, dass Übergänge zum vorherigen englischen Abschnitt flüssig sind
+5. Gib AUSSCHLIESSLICH die englische Übersetzung zurück, ohne zusätzliche Kommentare
+
+**Style & Glossar-Leitfaden:**
+---
+{guide}
+---
+
+**Deutscher Textabschnitt:**
+---
+{german_chunk}
+---
+
+**Vorheriger englischer Abschnitt (für Übergang):**
+---
+{previous_english_chunk}
+---
+
+**Englische Übersetzung:**
 """
