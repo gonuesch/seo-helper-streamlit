@@ -506,7 +506,7 @@ else:
                         
                         # Status 3: Text in Chunks aufteilen
                         status.write("3. Teile Text in Abschnitte...")
-                        german_chunks = chunk_text(german_text, max_chunk_size=3000)
+                        german_chunks = chunk_text(german_text, chunk_size=3000)
                         
                         # Status 4: Chunks übersetzen
                         status.write(f"4. Übersetze {len(german_chunks)} Abschnitte...")
