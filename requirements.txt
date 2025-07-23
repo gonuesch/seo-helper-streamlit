@@ -1,10 +1,13 @@
-# requirements.txt - Minimale Version ohne pyarrow-Abhängigkeiten
-streamlit==1.32.0
-Authlib==1.3.2
-google-generativeai==0.8.3
-Pillow==10.0.0
-streamlit-option-menu==0.3.12
-python-docx==1.1.0
-elevenlabs==0.2.27
-PyMuPDF==1.23.8
-requests==2.31.0
+# requirements.txt
+
+streamlit==1.35.0
+pandas==2.1.4
+pyarrow==14.0.1
+google-generativeai
+elevenlabs
+python-docx
+PyMuPDF
+Authlib
+streamlit-option-menu
+requests
+google-cloud-logging
