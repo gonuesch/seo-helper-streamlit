@@ -7,6 +7,6 @@ Pillow
 # openpyxl  # Temporarily removed due to pyarrow compilation issues
 streamlit-option-menu
 python-docx
-elevenlabs
+elevenlabs==0.3.0
 PyMuPDF==1.23.8
 requests
