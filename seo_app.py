@@ -2,7 +2,7 @@
 
 import streamlit as st
 from pathlib import Path
-import pandas as pd
+# import pandas as pd  # Temporarily removed due to pyarrow compilation issues
 from io import BytesIO
 import json
 import streamlit.components.v1 as components
@@ -267,16 +267,17 @@ else:
                     if results_for_export:
                         st.divider()
                         st.subheader("📊 Ergebnisse exportieren")
-                        df = pd.DataFrame(results_for_export)
-                        output = BytesIO()
-                        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                            df.to_excel(writer, index=False, sheet_name='Bildbeschreibungen')
-                        excel_data = output.getvalue()
-                        st.download_button(
-                            label="💾 Excel-Datei herunterladen", data=excel_data,
-                            file_name="barrierefreie_bildbeschreibungen.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        )
+                        st.info("Excel-Export temporär deaktiviert aufgrund von Kompatibilitätsproblemen.")
+                        # df = pd.DataFrame(results_for_export)
+                        # output = BytesIO()
+                        # with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                        #     df.to_excel(writer, index=False, sheet_name='Bildbeschreibungen')
+                        # excel_data = output.getvalue()
+                        # st.download_button(
+                        #     label="💾 Excel-Datei herunterladen", data=excel_data,
+                        #     file_name="barrierefreie_bildbeschreibungen.xlsx",
+                        #     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        # )
                     
                     st.divider()
                     st.subheader("🏁 Zusammenfassung")
