@@ -6,7 +6,7 @@ pyarrow==14.0.1
 google-generativeai
 elevenlabs
 python-docx
-PyMuPDF
+PyMuPDF==1.23.8
 Authlib
 streamlit-option-menu
 requests
