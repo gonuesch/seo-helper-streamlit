@@ -4,7 +4,7 @@ Authlib>=1.3.2
 google-generativeai
 Pillow
 # pandas==1.4.4  # Temporarily removed due to pyarrow compilation issues
-openpyxl
+# openpyxl  # Temporarily removed due to pyarrow compilation issues
 streamlit-option-menu
 python-docx
 elevenlabs
