@@ -19,9 +19,5 @@ automatic_scaling:
 # Startbefehl für die Anwendung
 entrypoint: streamlit run seo_app.py --server.port $PORT --server.address=0.0.0.0
 
-# Umgebungsvariablen für API-Schlüssel
-# WARNING: Do not put actual API keys here - they will be exposed in version control!
-# Use Google Cloud Secret Manager or set them via the Google Cloud Console instead
-# env_variables:
-#   GOOGLE_API_KEY: ""
-#   ELEVENLABS_API_KEY: ""
+network:
+  session_affinity: true

@@ -98,8 +98,7 @@ else:
         user_name = st.user.name
     else:
         # Demo-Modus
-        user_email = st.session_state.get("user_email", "demo@example.com")
-        user_name = st.session_state.get("user_name", "Demo User")
+
     
     allowed_domains = [
         "rowohlt.de",
@@ -112,7 +111,6 @@ else:
         "fischer-sauerlaender.de",
         "holtzbrinck-buchverlage.de",
         "galiani.de",
-        "example.com"  # Für Demo-Modus
     ]
 
     # Prüfe die E-Mail-Domain
@@ -180,8 +178,7 @@ else:
 
         st.divider()
 
-        # --- Logik für jedes Werkzeug ---
-        # --- Logik für jedes Werkzeug ---
+
     # --- Logik für jedes Werkzeug ---
         if selected_tool == "SEO Tags":
             st.header("SEO Tags (Alt & Title) generieren")

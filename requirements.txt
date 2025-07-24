@@ -11,3 +11,4 @@ Authlib
 streamlit-option-menu
 requests
 google-cloud-logging
+google-cloud-secret-manager
