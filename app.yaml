@@ -17,7 +17,7 @@ automatic_scaling:
   target_cpu_utilization: 0.75 # Neue Instanz starten, wenn CPU-Last > 75%
 
 # Startbefehl für die Anwendung
-entrypoint: streamlit run seo_app.py --server.port $PORT --server.enableCORS false
+entrypoint: streamlit run seo_app.py --server.port $PORT --server.address=0.0.0.0
 
 # Umgebungsvariablen für API-Schlüssel
 env_variables:
