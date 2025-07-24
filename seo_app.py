@@ -7,21 +7,61 @@ from io import BytesIO
 import json
 import streamlit.components.v1 as components
 from streamlit_option_menu import option_menu
+from google.cloud import secretmanager
 
 # Importiere Funktionen aus deinen Modulen
 from utils import convert_tiff_to_png_bytes, read_text_from_docx, read_text_from_pdf, chunk_text
 from api_calls import generate_seo_tags_cached, generate_accessibility_description_cached, generate_audio_from_text, get_available_voices, generate_text_summary, get_voice_recommendations, generate_ssml_chunk, generate_translation_guide, translate_chunk
 
+# --- Google Cloud Secret Manager Konfiguration ---
+PROJECT_ID = "avid-infinity-458913-p3"
+
+@st.cache_data
+def load_secrets(project_id: str):
+    """Lädt alle benötigten Secrets aus dem Google Secret Manager."""
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+
+        secret_names = [
+            "gemini-api-key", "elevenlabs-api-key", "auth-client-id", 
+            "auth-client-secret", "auth-redirect-uri", "auth-cookie-secret", 
+            "auth-server-metadata-url", "admin-email"
+        ]
+
+        app_secrets = {}
+        for name in secret_names:
+            response = client.access_secret_version(
+                name=f"projects/{project_id}/secrets/{name}/versions/latest"
+            )
+            # Konvertiere den Secret-Namen in einen gültigen Python-Variablennamen (ersetze '-' durch '_')
+            secret_key = name.replace('-', '_')
+            app_secrets[secret_key] = response.payload.data.decode("UTF-8")
+        return app_secrets
+    except Exception as e:
+        st.error(f"Fehler beim Laden der Secrets aus dem Secret Manager: {e}")
+        return None
+
+# Secrets beim App-Start laden
+secrets = load_secrets(PROJECT_ID)
+
+if not secrets:
+    st.error("🚨 Fehler beim Laden der Secrets aus dem Google Secret Manager. Die App kann nicht gestartet werden.")
+    st.stop()
+
 # --- Seitenkonfiguration ---
 st.set_page_config(page_title="Toolbox", page_icon="app_icon.png", layout="wide")
 
 # --- HAUPTLOGIK: LOGIN ODER APP ANZEIGEN ---
-# st.login() liest seine Konfiguration automatisch aus den Secrets,
-# wenn sie mit "auth_" beginnen (z.B. auth_client_id).
+# Login-Konfiguration aus dem Google Secret Manager
 if not st.user.is_logged_in:
     st.title("🧰 Toolbox")
     st.info("Bitte melde dich an, um die KI-Tools zu nutzen.")
-    st.button("Mit Google einloggen", on_click=st.login, args=("google",), key="google_login_button")
+    st.button("Mit Google einloggen", on_click=st.login, args=("google",), kwargs={
+        "client_id": secrets.get("auth_client_id"),
+        "client_secret": secrets.get("auth_client_secret"),
+        "redirect_uri": secrets.get("auth_redirect_uri"),
+        "server_metadata_url": secrets.get("auth_server_metadata_url"),
+    }, key="google_login_button")
 else:
     # Wenn der Nutzer eingeloggt ist:
     user_email = st.user.email
@@ -47,16 +87,16 @@ else:
         # HIER BEGINNT DIE VOLLSTÄNDIGE ANWENDUNG
         # ==============================================================================
         
-        # Lade die API-Schlüssel für die Tools
-        gemini_api_key = st.secrets.get("GOOGLE_API_KEY")
-        elevenlabs_api_key = st.secrets.get("ELEVENLABS_API_KEY")
+        # Lade die API-Schlüssel für die Tools aus dem Secret Manager
+        gemini_api_key = secrets.get("gemini_api_key")
+        elevenlabs_api_key = secrets.get("elevenlabs_api_key")
 
         # Prüfe API-Schlüssel und zeige entsprechende Meldung
         missing_keys = []
         if not gemini_api_key:
-            missing_keys.append("GOOGLE_API_KEY")
+            missing_keys.append("gemini-api-key")
         if not elevenlabs_api_key:
-            missing_keys.append("ELEVENLABS_API_KEY")
+            missing_keys.append("elevenlabs-api-key")
         
         if missing_keys:
             st.error(f"🚨 Folgende API-Schlüssel sind nicht konfiguriert: {', '.join(missing_keys)}")
