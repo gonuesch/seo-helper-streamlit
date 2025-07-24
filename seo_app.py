@@ -61,7 +61,7 @@ else:
         if missing_keys:
             st.error(f"🚨 Folgende API-Schlüssel sind nicht konfiguriert: {', '.join(missing_keys)}")
             st.info("Die App läuft im Demo-Modus. Funktionen sind eingeschränkt.")
-            st.stop()
+            # Don't stop the app, just continue with limited functionality
 
         # --- Seitenleiste ---
         with st.sidebar:
