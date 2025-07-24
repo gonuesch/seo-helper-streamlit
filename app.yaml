@@ -18,3 +18,8 @@ automatic_scaling:
 
 # Startbefehl für die Anwendung
 entrypoint: streamlit run seo_app.py --server.port $PORT --server.enableCORS false
+
+# Umgebungsvariablen für API-Schlüssel
+env_variables:
+  GOOGLE_API_KEY: "your-gemini-api-key-here"
+  ELEVENLABS_API_KEY: "your-elevenlabs-api-key-here"

@@ -51,8 +51,16 @@ else:
         gemini_api_key = st.secrets.get("GOOGLE_API_KEY")
         elevenlabs_api_key = st.secrets.get("ELEVENLABS_API_KEY")
 
-        if not all([gemini_api_key, elevenlabs_api_key]):
-            st.error("🚨 Tool-API-Schlüssel sind nicht konfiguriert. Bitte den Admin informieren.")
+        # Prüfe API-Schlüssel und zeige entsprechende Meldung
+        missing_keys = []
+        if not gemini_api_key:
+            missing_keys.append("GOOGLE_API_KEY")
+        if not elevenlabs_api_key:
+            missing_keys.append("ELEVENLABS_API_KEY")
+        
+        if missing_keys:
+            st.error(f"🚨 Folgende API-Schlüssel sind nicht konfiguriert: {', '.join(missing_keys)}")
+            st.info("Die App läuft im Demo-Modus. Funktionen sind eingeschränkt.")
             st.stop()
 
         # --- Seitenleiste ---
