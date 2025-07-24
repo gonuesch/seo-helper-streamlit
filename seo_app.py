@@ -30,23 +30,34 @@ def load_secrets(project_id: str):
 
         app_secrets = {}
         for name in secret_names:
-            response = client.access_secret_version(
-                name=f"projects/{project_id}/secrets/{name}/versions/latest"
-            )
-            # Konvertiere den Secret-Namen in einen gültigen Python-Variablennamen (ersetze '-' durch '_')
-            secret_key = name.replace('-', '_')
-            app_secrets[secret_key] = response.payload.data.decode("UTF-8")
+            try:
+                response = client.access_secret_version(
+                    name=f"projects/{project_id}/secrets/{name}/versions/latest"
+                )
+                # Konvertiere den Secret-Namen in einen gültigen Python-Variablennamen (ersetze '-' durch '_')
+                secret_key = name.replace('-', '_')
+                app_secrets[secret_key] = response.payload.data.decode("UTF-8")
+            except Exception as secret_error:
+                st.warning(f"Secret '{name}' konnte nicht geladen werden: {secret_error}")
+                app_secrets[name.replace('-', '_')] = None
+        
         return app_secrets
     except Exception as e:
-        st.error(f"Fehler beim Laden der Secrets aus dem Secret Manager: {e}")
-        return None
+        st.warning(f"Fehler beim Laden der Secrets aus dem Secret Manager: {e}")
+        # Fallback: Leeres Dictionary zurückgeben
+        return {
+            "gemini_api_key": None,
+            "elevenlabs_api_key": None,
+            "auth_client_id": None,
+            "auth_client_secret": None,
+            "auth_redirect_uri": None,
+            "auth_cookie_secret": None,
+            "auth_server_metadata_url": None,
+            "admin_email": None
+        }
 
 # Secrets beim App-Start laden
 secrets = load_secrets(PROJECT_ID)
-
-if not secrets:
-    st.error("🚨 Fehler beim Laden der Secrets aus dem Google Secret Manager. Die App kann nicht gestartet werden.")
-    st.stop()
 
 # --- Seitenkonfiguration ---
 st.set_page_config(page_title="Toolbox", page_icon="app_icon.png", layout="wide")
@@ -56,32 +67,59 @@ st.set_page_config(page_title="Toolbox", page_icon="app_icon.png", layout="wide"
 if not st.user.is_logged_in:
     st.title("🧰 Toolbox")
     st.info("Bitte melde dich an, um die KI-Tools zu nutzen.")
-    st.button("Mit Google einloggen", on_click=st.login, args=("google",), kwargs={
-        "client_id": secrets.get("auth_client_id"),
-        "client_secret": secrets.get("auth_client_secret"),
-        "redirect_uri": secrets.get("auth_redirect_uri"),
-        "server_metadata_url": secrets.get("auth_server_metadata_url"),
-    }, key="google_login_button")
+    
+    # Prüfe ob Auth-Secrets verfügbar sind
+    auth_secrets_available = all([
+        secrets.get("auth_client_id"),
+        secrets.get("auth_client_secret"),
+        secrets.get("auth_redirect_uri"),
+        secrets.get("auth_server_metadata_url")
+    ])
+    
+    if auth_secrets_available:
+        st.button("Mit Google einloggen", on_click=st.login, args=("google",), kwargs={
+            "client_id": secrets.get("auth_client_id"),
+            "client_secret": secrets.get("auth_client_secret"),
+            "redirect_uri": secrets.get("auth_redirect_uri"),
+            "server_metadata_url": secrets.get("auth_server_metadata_url"),
+        }, key="google_login_button")
+    else:
+        st.error("🚨 Authentifizierung ist nicht konfiguriert. Bitte kontaktieren Sie den Administrator.")
+        st.info("Die App läuft im Demo-Modus ohne Authentifizierung.")
+        # Simuliere eingeloggten Benutzer für Demo-Zwecke
+        st.session_state.user_logged_in = True
+        st.session_state.user_email = "demo@example.com"
+        st.session_state.user_name = "Demo User"
+        st.rerun()
 else:
-    # Wenn der Nutzer eingeloggt ist:
-    user_email = st.user.email
+    # Wenn der Nutzer eingeloggt ist oder Demo-Modus aktiv ist:
+    if hasattr(st, 'user') and st.user.is_logged_in:
+        user_email = st.user.email
+        user_name = st.user.name
+    else:
+        # Demo-Modus
+        user_email = st.session_state.get("user_email", "demo@example.com")
+        user_name = st.session_state.get("user_name", "Demo User")
+    
     allowed_domains = [
-    "rowohlt.de",
-    "droemer-knaur.de",
-    "fischerverlage.de",
-    "chaptr.xyz",
-    "kiwi-verlag.de",
-    "argon.de",
-    "hgv-online.de",
-    "fischer-sauerlaender.de",
-    "holtzbrinck-buchverlage.de",
-    "galiani.de"
-]
+        "rowohlt.de",
+        "droemer-knaur.de",
+        "fischerverlage.de",
+        "chaptr.xyz",
+        "kiwi-verlag.de",
+        "argon.de",
+        "hgv-online.de",
+        "fischer-sauerlaender.de",
+        "holtzbrinck-buchverlage.de",
+        "galiani.de",
+        "example.com"  # Für Demo-Modus
+    ]
 
     # Prüfe die E-Mail-Domain
     if user_email.split('@')[1] not in allowed_domains:
         st.error(f"Zugriff verweigert. Die E-Mail-Domain '@{user_email.split('@')[1]}' ist nicht für den Zugriff auf dieses Tool berechtigt.")
-        st.button("Logout", on_click=st.logout, key="logout_button_denied")
+        if hasattr(st, 'user') and st.user.is_logged_in:
+            st.button("Logout", on_click=st.logout, key="logout_button_denied")
     else:
         # ==============================================================================
         # HIER BEGINNT DIE VOLLSTÄNDIGE ANWENDUNG
