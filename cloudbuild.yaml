@@ -13,14 +13,17 @@ steps:
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   entrypoint: gcloud
   args:
-  - 'run'
-  - 'deploy'
-  - 'seo-helper-streamlit' # Name deines Cloud Run Service
-  - '--image=europe-west1-docker.pkg.dev/$PROJECT_ID/seo-helper-repo/seo-helper-image:$COMMIT_SHA'
-  - '--region=europe-west1'
-  - '--platform=managed'
-  - '--allow-unauthenticated'
+    - 'run'
+    - 'deploy'
+    - 'seo-helper-streamlit'
+    - '--image'
+    - 'europe-west1-docker.pkg.dev/$PROJECT_ID/seo-helper-repo/seo-helper-image:$COMMIT_SHA'
+    - '--region'
+    - 'europe-west1'
+    - '--platform'
+    - 'managed'
+    - '--allow-unauthenticated'
 
-# Globale Konfiguration für diesen Build, um den Fehler zu beheben
+
 options:
   logging: CLOUD_LOGGING_ONLY
