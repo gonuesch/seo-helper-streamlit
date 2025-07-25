@@ -3,11 +3,11 @@
 steps:
 # 1. Baue den Container mit Docker
 - name: 'gcr.io/cloud-builders/docker'
-  args: ['build', '-t', 'europe-west3-docker.pkg.dev/$PROJECT_ID/seo-helper-repo/seo-helper-image:$COMMIT_SHA', '.']
+  args: ['build', '-t', 'europe-west1-docker.pkg.dev/$PROJECT_ID/seo-helper-repo/seo-helper-image:$COMMIT_SHA', '.']
 
 # 2. Pushe den Container in die Artifact Registry
 - name: 'gcr.io/cloud-builders/docker'
-  args: ['push', 'europe-west3-docker.pkg.dev/$PROJECT_ID/seo-helper-repo/seo-helper-image:$COMMIT_SHA']
+  args: ['push', 'europe-west1-docker.pkg.dev/$PROJECT_ID/seo-helper-repo/seo-helper-image:$COMMIT_SHA']
 
 # 3. Deploye den Container auf Cloud Run
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -16,8 +16,8 @@ steps:
   - 'run'
   - 'deploy'
   - 'seo-helper-streamlit' # Name deines Cloud Run Service
-  - '--image=europe-west3-docker.pkg.dev/$PROJECT_ID/seo-helper-repo/seo-helper-image:$COMMIT_SHA'
-  - '--region=europe-west3'
+  - '--image=europe-west1-docker.pkg.dev/$PROJECT_ID/seo-helper-repo/seo-helper-image:$COMMIT_SHA'
+  - '--region=europe-west1'
   - '--platform=managed'
   - '--allow-unauthenticated'
 
