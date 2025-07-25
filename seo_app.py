@@ -1,4 +1,5 @@
-# seo_app.py (Finale Version mit Google Secret Manager)
+# seo_app.py 
+# Toolbox für KI-Tools
 
 import streamlit as st
 from pathlib import Path
