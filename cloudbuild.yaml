@@ -21,6 +21,5 @@ steps:
   - '--platform=managed'
   - '--allow-unauthenticated'
 
-# Globale Optionen für den gesamten Build-Prozess
-options:
-  logging: CLOUD_LOGGING_ONLY
+# Globale Konfiguration für diesen Build, um den Fehler zu beheben
+logsBucket: 'gs://seo-helper-430211-build-logs'
