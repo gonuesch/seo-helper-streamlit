@@ -22,4 +22,5 @@ steps:
   - '--allow-unauthenticated'
 
 # Globale Konfiguration für diesen Build, um den Fehler zu beheben
-logsBucket: 'gs://seo-helper-430211-build-logs'
+options:
+  logging: CLOUD_LOGGING_ONLY
