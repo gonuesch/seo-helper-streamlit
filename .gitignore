@@ -21,3 +21,8 @@ pics_done/
 
 # Jupyter Notebook Checkpoints
 .ipynb_checkpoints/
+
+# Google Cloud SDK files (should not be tracked)
+google-cloud-sdk/
+*.tar.gz
+anthoscli
