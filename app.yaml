@@ -1,23 +1,14 @@
 # app.yaml
-
-# Laufzeitumgebung festlegen
 runtime: python39
-
-# Umgebungstyp
 env: standard
-
-# Leistungsklasse der Server-Instanz
-# F4_1G ist eine gute, flexible Option mit 1GB Arbeitsspeicher
 instance_class: F4_1G
 
-# Einstellungen für die automatische Skalierung
 automatic_scaling:
-  min_instances: 0      # Kann auf 0 herunterfahren, um Kosten zu sparen
-  max_instances: 2      # Maximal 2 Instanzen bei hoher Last
-  target_cpu_utilization: 0.75 # Neue Instanz starten, wenn CPU-Last > 75%
-
-# Startbefehl für die Anwendung
-entrypoint: streamlit run seo_app.py --server.port $PORT --server.address=0.0.0.0
+  min_instances: 0
+  max_instances: 2
+  target_cpu_utilization: 0.75
 
 network:
   session_affinity: true
+
+entrypoint: streamlit run seo_app.py --server.port $PORT --server.address=0.0.0.0

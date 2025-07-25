@@ -1,13 +1,12 @@
 # requirements.txt
-
 streamlit==1.35.0
 pandas==2.1.4
 pyarrow==14.0.1
 google-generativeai
-elevenlabs
+elevenlabs==0.3.2
 python-docx
 PyMuPDF==1.23.8
-Authlib
+Authlib>=1.3.2
 streamlit-option-menu
 requests
 google-cloud-logging

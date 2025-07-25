@@ -1,103 +1,80 @@
-# seo_app.py
+# seo_app.py (Finale Version mit Google Secret Manager)
 
 import streamlit as st
 from pathlib import Path
-# import pandas as pd  # Temporarily removed due to pyarrow compilation issues
+import pandas as pd
 from io import BytesIO
 import json
 import streamlit.components.v1 as components
 from streamlit_option_menu import option_menu
+import os
 from google.cloud import secretmanager
+import google.auth
 
 # Importiere Funktionen aus deinen Modulen
 from utils import convert_tiff_to_png_bytes, read_text_from_docx, read_text_from_pdf, chunk_text
-from api_calls import generate_seo_tags_cached, generate_accessibility_description_cached, generate_audio_from_text, get_available_voices, generate_text_summary, get_voice_recommendations, generate_ssml_chunk, generate_translation_guide, translate_chunk
+from api_calls import generate_seo_tags_cached, generate_accessibility_description_cached, generate_audio_from_text, get_available_voices, generate_text_summary, get_voice_recommendations, generate_ssml_chunk
 
-# --- Google Cloud Secret Manager Konfiguration ---
-PROJECT_ID = "avid-infinity-458913-p3"
-
-@st.cache_data
-def load_secrets(project_id: str):
+# --- FUNKTION ZUM LADEN DER SECRETS AUS DEM GOOGLE SECRET MANAGER ---
+@st.cache_data(ttl=600) # Cache für 10 Minuten
+def load_secrets():
     """Lädt alle benötigten Secrets aus dem Google Secret Manager."""
     try:
-        client = secretmanager.SecretManagerServiceClient()
+        # Versuche, die Projekt-ID automatisch zu ermitteln
+        try:
+            _, project_id = google.auth.default()
+        except google.auth.exceptions.DefaultCredentialsError:
+            # Fallback für lokale Entwicklung, falls GOOGLE_CLOUD_PROJECT gesetzt ist
+            project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
 
+        if not project_id:
+            st.error("FEHLER: Google Cloud Projekt-ID konnte nicht ermittelt werden.")
+            return None
+            
+        client = secretmanager.SecretManagerServiceClient()
+        
         secret_names = [
             "gemini-api-key", "elevenlabs-api-key", "auth-client-id", 
             "auth-client-secret", "auth-redirect-uri", "auth-cookie-secret", 
             "auth-server-metadata-url", "admin-email"
         ]
-
+        
         app_secrets = {}
         for name in secret_names:
-            try:
-                response = client.access_secret_version(
-                    name=f"projects/{project_id}/secrets/{name}/versions/latest"
-                )
-                # Konvertiere den Secret-Namen in einen gültigen Python-Variablennamen (ersetze '-' durch '_')
-                secret_key = name.replace('-', '_')
-                app_secrets[secret_key] = response.payload.data.decode("UTF-8")
-            except Exception as secret_error:
-                st.warning(f"Secret '{name}' konnte nicht geladen werden: {secret_error}")
-                app_secrets[name.replace('-', '_')] = None
-        
+            response = client.access_secret_version(
+                name=f"projects/{project_id}/secrets/{name}/versions/latest"
+            )
+            secret_key = name.replace('-', '_')
+            app_secrets[secret_key] = response.payload.data.decode("UTF-8")
         return app_secrets
     except Exception as e:
-        st.warning(f"Fehler beim Laden der Secrets aus dem Secret Manager: {e}")
-        # Fallback: Leeres Dictionary zurückgeben
-        return {
-            "gemini_api_key": None,
-            "elevenlabs_api_key": None,
-            "auth_client_id": None,
-            "auth_client_secret": None,
-            "auth_redirect_uri": None,
-            "auth_cookie_secret": None,
-            "auth_server_metadata_url": None,
-            "admin_email": None
-        }
+        st.error(f"Fehler beim Laden der Secrets aus dem Secret Manager: {e}")
+        return None
 
-# Secrets beim App-Start laden
-secrets = load_secrets(PROJECT_ID)
+# --- App-Start & Laden der Secrets ---
+secrets = load_secrets()
+
+if not secrets:
+    st.warning("Secrets konnten nicht geladen werden. Die App wird angehalten.")
+    st.stop()
 
 # --- Seitenkonfiguration ---
 st.set_page_config(page_title="Toolbox", page_icon="app_icon.png", layout="wide")
 
 # --- HAUPTLOGIK: LOGIN ODER APP ANZEIGEN ---
-# Login-Konfiguration aus dem Google Secret Manager
 if not st.user.is_logged_in:
     st.title("🧰 Toolbox")
     st.info("Bitte melde dich an, um die KI-Tools zu nutzen.")
-    
-    # Prüfe ob Auth-Secrets verfügbar sind
-    auth_secrets_available = all([
-        secrets.get("auth_client_id"),
-        secrets.get("auth_client_secret"),
-        secrets.get("auth_redirect_uri"),
-        secrets.get("auth_server_metadata_url")
-    ])
-    
-    if auth_secrets_available:
-        st.button("Mit Google einloggen", on_click=st.login, args=("google",), kwargs={
-            "client_id": secrets.get("auth_client_id"),
-            "client_secret": secrets.get("auth_client_secret"),
-            "redirect_uri": secrets.get("auth_redirect_uri"),
-            "server_metadata_url": secrets.get("auth_server_metadata_url"),
-        }, key="google_login_button")
-    else:
-        st.error("🚨 Authentifizierung ist nicht konfiguriert. Bitte kontaktieren Sie den Administrator.")
-        st.info("Die App läuft im Demo-Modus ohne Authentifizierung.")
-        # Simuliere eingeloggten Benutzer für Demo-Zwecke
-        st.session_state.user_logged_in = True
-        st.session_state.user_email = "demo@example.com"
-        st.session_state.user_name = "Demo User"
-        st.rerun()
+    st.button("Mit Google einloggen", on_click=st.login, args=("google",), kwargs={
+        "client_id": secrets.get("auth_client_id"),
+        "client_secret": secrets.get("auth_client_secret"),
+        "redirect_uri": secrets.get("auth_redirect_uri"),
+        "server_metadata_url": secrets.get("auth_server_metadata_url"),
+    }, key="google_login_button")
 else:
-    # Wenn der Nutzer eingeloggt ist oder Demo-Modus aktiv ist:
-    if hasattr(st, 'user') and st.user.is_logged_in:
-        user_email = st.user.email
-        user_name = st.user.name
-    else:
-        # Demo-Modus
+    # Wenn der Nutzer eingeloggt ist:
+    user_email = st.user.email
+    user_name = st.user.name
 
     
     allowed_domains = [
