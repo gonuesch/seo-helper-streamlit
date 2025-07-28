@@ -1,16 +1,15 @@
-# cloudbuild.yaml - Finale Version mit dynamischen Secrets UND Config
+# cloudbuild.yaml - NUR ZUM TESTEN mit hartcodierten Platzhaltern
 
 steps:
-# Step #0: Erstelle config.toml und secrets.toml
+# Step #0: Erstelle config.toml und secrets.toml mit PLATZHALTERN
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   entrypoint: 'bash'
   args:
     - '-c'
     - |
-      # Erstelle das Verzeichnis sicher
       mkdir -p .streamlit
 
-      # Erstelle die config.toml mit explizitem Login-Provider
+      # Schreibe die config.toml
       echo '[server]' > .streamlit/config.toml
       echo 'headless = true' >> .streamlit/config.toml
       echo 'enableCORS = false' >> .streamlit/config.toml
@@ -19,26 +18,21 @@ steps:
       echo 'require_login = true' >> .streamlit/config.toml
       echo 'login_providers = ["google"]' >> .streamlit/config.toml
 
-      # Erstelle die secrets.toml
+      # Schreibe die secrets.toml mit Platzhaltern statt echten Secrets
       echo '[connections.google_oauth]' > .streamlit/secrets.toml
-      echo 'client_id = "'$(gcloud secrets versions access latest --secret=auth-client-id)'"' >> .streamlit/secrets.toml
-      echo 'client_secret = "'$(gcloud secrets versions access latest --secret=auth-client-secret)'"' >> .streamlit/secrets.toml
-      echo 'redirect_uri = "'$(gcloud secrets versions access latest --secret=auth-redirect-uri)'"' >> .streamlit/secrets.toml
-      echo 'server_metadata_url = "'$(gcloud secrets versions access latest --secret=auth-server-metadata-url)'"' >> .streamlit/secrets.toml
+      echo 'client_id = "test-client-id"' >> .streamlit/secrets.toml
+      echo 'client_secret = "test-client-secret"' >> .streamlit/secrets.toml
+      echo 'redirect_uri = "https://placeholder.com"' >> .streamlit/secrets.toml
+      echo 'server_metadata_url = "https://accounts.google.com/.well-known/openid-configuration"' >> .streamlit/secrets.toml
       
-      # Füge andere API-Keys hinzu
       echo '' >> .streamlit/secrets.toml
-      echo 'gemini_api_key = "'$(gcloud secrets versions access latest --secret=gemini-api-key)'"' >> .streamlit/secrets.toml
+      echo 'gemini_api_key = "test-gemini-key"' >> .streamlit/secrets.toml
 
-# Step #1: Docker-Container bauen
+# Steps #1, #2, #3 bleiben unverändert...
 - name: 'gcr.io/cloud-builders/docker'
   args: ['build', '-t', 'europe-west1-docker.pkg.dev/$PROJECT_ID/seo-helper-repo/seo-helper-image:$COMMIT_SHA', '.']
-
-# Step #2: Container in die Artifact Registry pushen
 - name: 'gcr.io/cloud-builders/docker'
   args: ['push', 'europe-west1-docker.pkg.dev/$PROJECT_ID/seo-helper-repo/seo-helper-image:$COMMIT_SHA']
-
-# Step #3: Container auf Cloud Run deployen
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   entrypoint: gcloud
   args:
