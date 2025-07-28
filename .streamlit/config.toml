@@ -2,3 +2,6 @@
 headless = true
 enableCORS = false
 enableWebsocketCompression = false
+
+[auth]
+require_login = true
