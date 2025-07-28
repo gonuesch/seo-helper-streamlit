@@ -25,9 +25,12 @@ model_gemini = genai.GenerativeModel('gemini-2.5-pro')
 # --- Die Funktionen generate_seo_tags_cached und generate_accessibility_description_cached bleiben unverändert ---
 
 
-def generate_text_summary(_text: str) -> str:
+def generate_text_summary(_text: str, gemini_api_key: str = None) -> str:
     """Erstellt eine Zusammenfassung des übergebenen Textes."""
     try:
+        if gemini_api_key:
+            genai.configure(api_key=gemini_api_key)
+        
         full_prompt = SUMMARY_PROMPT + "\n\n--- ZU ZUSAMMENFASSENDER TEXT ---\n" + _text
         response = model_gemini.generate_content(full_prompt)
         return response.text
@@ -36,9 +39,12 @@ def generate_text_summary(_text: str) -> str:
         return f"Fehler bei der Zusammenfassung: {e}"
 
 
-def get_voice_recommendations(_summary: str, _voices_info: str) -> Tuple[str, list]:
+def get_voice_recommendations(_summary: str, _voices_info: str, gemini_api_key: str = None) -> Tuple[str, list]:
     """Erstellt eine Regieleitlinie und extrahiert die Top 3 Stimmen."""
     try:
+        if gemini_api_key:
+            genai.configure(api_key=gemini_api_key)
+            
         # Stelle sicher, dass _voices_info nicht leer ist, bevor der Prompt erstellt wird
         if not _voices_info or not _voices_info.strip():
             return "Fehler: Keine verfügbaren Stimmen mit Beschreibungen gefunden, um eine Empfehlung abzugeben.", []
@@ -70,9 +76,12 @@ def get_voice_recommendations(_summary: str, _voices_info: str) -> Tuple[str, li
         return f"Fehler bei der Regie-Erstellung: {e}", []
 
 
-def generate_ssml_chunk(_guideline: str, _text_chunk: str) -> str:
+def generate_ssml_chunk(_guideline: str, _text_chunk: str, gemini_api_key: str = None) -> str:
     """Reichert einen Text-Chunk mit SSML an."""
     try:
+        if gemini_api_key:
+            genai.configure(api_key=gemini_api_key)
+            
         full_prompt = SSML_PROMPT.format(guideline=_guideline, text_chunk=_text_chunk)
         response = model_gemini.generate_content(full_prompt)
         # Bereinige die XML-Deklaration, falls vorhanden
@@ -85,12 +94,15 @@ def generate_ssml_chunk(_guideline: str, _text_chunk: str) -> str:
 
 
 @st.cache_data
-def generate_seo_tags_cached(image_source: Union[bytes, str], file_name_for_log: str, model_name: str = "gemini-1.5-pro-latest") -> Tuple[Union[str, None], Union[str, None]]:
+def generate_seo_tags_cached(image_source: Union[bytes, str], file_name_for_log: str, gemini_api_key: str = None, model_name: str = "gemini-1.5-pro-latest") -> Tuple[Union[str, None], Union[str, None]]:
     """
     Nimmt Bild-Bytes oder eine URL, ruft die Gemini API mit dem SEO-Prompt auf
     und gibt (title, alt) als Tupel zurück.
     """
     try:
+        if gemini_api_key:
+            genai.configure(api_key=gemini_api_key)
+            
         image_bytes = None
         # Prüft, ob die Quelle eine URL (string) ist
         if isinstance(image_source, str): 
@@ -139,12 +151,15 @@ def generate_seo_tags_cached(image_source: Union[bytes, str], file_name_for_log:
         return None, None
 
 @st.cache_data
-def generate_accessibility_description_cached(image_bytes_for_api, file_name_for_log: str, ebook_context: str = "", model_name: str = "gemini-1.5-pro-latest") -> Tuple[Union[str, None], Union[str, None]]:
+def generate_accessibility_description_cached(image_bytes_for_api, file_name_for_log: str, ebook_context: str = "", gemini_api_key: str = None, model_name: str = "gemini-1.5-pro-latest") -> Tuple[Union[str, None], Union[str, None]]:
     """
     Nimmt Bild-Bytes und Kontext, ruft die Gemini API mit dem Barrierefreiheits-Prompt auf
     und gibt (kurzbeschreibung, langbeschreibung) als Tupel zurück.
     """
     try:
+        if gemini_api_key:
+            genai.configure(api_key=gemini_api_key)
+            
         img = Image.open(BytesIO(image_bytes_for_api))
         model = genai.GenerativeModel(model_name)
         context_for_prompt = ebook_context if ebook_context and ebook_context.strip() else "Es wurde kein spezifischer Buchkontext für dieses Bild bereitgestellt."
@@ -244,9 +259,12 @@ def generate_audio_from_text(text: str, api_key: str, voice_id: str) -> Union[by
         return None
 
 
-def generate_translation_guide(full_text: str) -> dict:
+def generate_translation_guide(full_text: str, gemini_api_key: str = None) -> dict:
     """Erstellt einen Style & Glossar-Leitfaden für die Übersetzung."""
     try:
+        if gemini_api_key:
+            genai.configure(api_key=gemini_api_key)
+            
         full_prompt = TRANSLATION_GUIDE_PROMPT.format(full_text=full_text)
         response = model_gemini.generate_content(full_prompt)
         
@@ -294,9 +312,12 @@ def generate_translation_guide(full_text: str) -> dict:
         }
 
 
-def translate_chunk(guide: dict, german_chunk: str, previous_english_chunk: str = None) -> str:
+def translate_chunk(guide: dict, german_chunk: str, previous_english_chunk: str = None, gemini_api_key: str = None) -> str:
     """Übersetzt einen deutschen Textabschnitt ins Englische basierend auf dem Leitfaden."""
     try:
+        if gemini_api_key:
+            genai.configure(api_key=gemini_api_key)
+            
         # Konvertiere das Guide-Dictionary zu einem String für den Prompt
         guide_str = json.dumps(guide, ensure_ascii=False, indent=2)
         
