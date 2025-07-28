@@ -16,67 +16,24 @@ import google.auth
 from utils import convert_tiff_to_png_bytes, read_text_from_docx, read_text_from_pdf, chunk_text
 from api_calls import generate_seo_tags_cached, generate_accessibility_description_cached, generate_audio_from_text, get_available_voices, generate_text_summary, get_voice_recommendations, generate_ssml_chunk
 
-# KORREKT: st.set_page_config() als ALLERERSTER Streamlit-Befehl.
 st.set_page_config(page_title="Toolbox", page_icon="app_icon.png", layout="wide")
-
-# KORREKT: st.secrets kann jetzt sicher aufgerufen werden.
-secrets = st.secrets["connections"]["google_oauth"]
-
-# --- FUNKTION ZUM LADEN DER SECRETS AUS DEM GOOGLE SECRET MANAGER ---
-@st.cache_data(ttl=600) # Cache für 10 Minuten
-def load_secrets():
-    """Lädt alle benötigten Secrets aus dem Google Secret Manager."""
-    try:
-        # Versuche, die Projekt-ID automatisch zu ermitteln
-        try:
-            _, project_id = google.auth.default()
-        except google.auth.exceptions.DefaultCredentialsError:
-            # Fallback für lokale Entwicklung, falls GOOGLE_CLOUD_PROJECT gesetzt ist
-            project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
-
-        if not project_id:
-            st.error("FEHLER: Google Cloud Projekt-ID konnte nicht ermittelt werden.")
-            return None
-            
-        client = secretmanager.SecretManagerServiceClient()
-        
-        secret_names = [
-            "gemini-api-key", "elevenlabs-api-key", "auth-client-id", 
-            "auth-client-secret", "auth-redirect-uri", "auth-cookie-secret", 
-            "auth-server-metadata-url", "admin-email"
-        ]
-        
-        app_secrets = {}
-        for name in secret_names:
-            response = client.access_secret_version(
-                name=f"projects/{project_id}/secrets/{name}/versions/latest"
-            )
-            secret_key = name.replace('-', '_')
-            app_secrets[secret_key] = response.payload.data.decode("UTF-8")
-        return app_secrets
-    except Exception as e:
-        st.error(f"Fehler beim Laden der Secrets aus dem Secret Manager: {e}")
-        return None
-
-
 
 
 # --- HAUPTLOGIK: LOGIN ODER APP ANZEIGEN ---
 if not st.user.is_logged_in:
     st.title("🧰 Toolbox")
     st.info("Bitte melde dich an, um die KI-Tools zu nutzen.")
-    st.button("Mit Google einloggen", on_click=st.login, args=("google",), kwargs={
-        "client_id": secrets.get("auth_client_id"),
-        "client_secret": secrets.get("auth_client_secret"),
-        "redirect_uri": secrets.get("auth_redirect_uri"),
-        "server_metadata_url": secrets.get("auth_server_metadata_url"),
-    }, key="google_login_button")
+    st.button("Mit Google einloggen", on_click=st.login, args=("google",))
+
 else:
     # Wenn der Nutzer eingeloggt ist:
     user_email = st.user.email
     user_name = st.user.name
-
     
+    # API-Schlüssel direkt aus st.secrets laden
+    gemini_api_key = st.secrets.get("gemini_api_key")
+    elevenlabs_api_key = st.secrets.get("elevenlabs_api_key")
+
     allowed_domains = [
         "rowohlt.de",
         "droemer-knaur.de",
@@ -93,18 +50,15 @@ else:
     # Prüfe die E-Mail-Domain
     if user_email.split('@')[1] not in allowed_domains:
         st.error(f"Zugriff verweigert. Die E-Mail-Domain '@{user_email.split('@')[1]}' ist nicht für den Zugriff auf dieses Tool berechtigt.")
-        if hasattr(st, 'user') and st.user.is_logged_in:
-            st.button("Logout", on_click=st.logout, key="logout_button_denied")
+        st.button("Logout", on_click=st.logout, key="logout_button_denied")
+    
     else:
         # ==============================================================================
         # HIER BEGINNT DIE VOLLSTÄNDIGE ANWENDUNG
         # ==============================================================================
         
-        # Lade die API-Schlüssel für die Tools aus dem Secret Manager
-        gemini_api_key = secrets.get("gemini_api_key")
-        elevenlabs_api_key = secrets.get("elevenlabs_api_key")
-
-        # Prüfe API-Schlüssel und zeige entsprechende Meldung
+        # Prüfe, ob die API-Schlüssel vorhanden sind.
+        # Der untere, doppelte Lade-Block wurde entfernt.
         missing_keys = []
         if not gemini_api_key:
             missing_keys.append("gemini-api-key")
@@ -114,7 +68,6 @@ else:
         if missing_keys:
             st.error(f"🚨 Folgende API-Schlüssel sind nicht konfiguriert: {', '.join(missing_keys)}")
             st.info("Die App läuft im Demo-Modus. Funktionen sind eingeschränkt.")
-            # Don't stop the app, just continue with limited functionality
 
         # --- Seitenleiste ---
         with st.sidebar:

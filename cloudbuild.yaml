@@ -1,15 +1,37 @@
-# cloudbuild.yaml - Version 3
+# cloudbuild.yaml - Finale Version mit dynamischen Secrets
 
 steps:
-# 1. Baue den Container mit Docker
+# Step #0: Secrets aus dem Secret Manager holen und in secrets.toml schreiben
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  entrypoint: 'bash'
+  args:
+    - '-c'
+    - |
+      # Erstelle das Verzeichnis, falls es nicht existiert
+      mkdir -p .streamlit
+      # Schreibe die Secrets in die Datei
+      echo '[connections.google_oauth]' > .streamlit/secrets.toml
+      echo 'client_id = "'$(gcloud secrets versions access latest --secret=auth-client-id)'"' >> .streamlit/secrets.toml
+      echo 'client_secret = "'$(gcloud secrets versions access latest --secret=auth-client-secret)'"' >> .streamlit/secrets.toml
+      echo 'cookie_secret = "'$(gcloud secrets versions access latest --secret=auth-cookie-secret)'"' >> .streamlit/secrets.toml
+      echo 'redirect_uri = "'$(gcloud secrets versions access latest --secret=auth-redirect-uri)'"' >> .streamlit/secrets.toml
+      echo 'server_metadata_url = "'$(gcloud secrets versions access latest --secret=auth-server-metadata-url)'"' >> .streamlit/secrets.toml
+      
+      # Füge die anderen API-Keys hinzu
+      echo '' >> .streamlit/secrets.toml
+      echo 'admin_email = "'$(gcloud secrets versions access latest --secret=admin-email)'"' >> .streamlit/secrets.toml
+      echo 'elevenlabs_api_key = "'$(gcloud secrets versions access latest --secret=elevenlabs-api-key)'"' >> .streamlit/secrets.toml
+      echo 'gemini_api_key = "'$(gcloud secrets versions access latest --secret=gemini-api-key)'"' >> .streamlit/secrets.toml
+
+# Step #1: Docker-Container bauen (kopiert die gerade erstellte secrets.toml)
 - name: 'gcr.io/cloud-builders/docker'
   args: ['build', '-t', 'europe-west1-docker.pkg.dev/$PROJECT_ID/seo-helper-repo/seo-helper-image:$COMMIT_SHA', '.']
 
-# 2. Pushe den Container in die Artifact Registry
+# Step #2: Container in die Artifact Registry pushen
 - name: 'gcr.io/cloud-builders/docker'
   args: ['push', 'europe-west1-docker.pkg.dev/$PROJECT_ID/seo-helper-repo/seo-helper-image:$COMMIT_SHA']
 
-# 3. Deploye den Container auf Cloud Run
+# Step #3: Container auf Cloud Run deployen
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   entrypoint: gcloud
   args:
@@ -23,6 +45,9 @@ steps:
     - '--platform'
     - 'managed'
     - '--allow-unauthenticated'
+    # Session Affinity wird hier explizit gesetzt, um sicherzustellen,
+    # dass es bei jedem Deployment aktiv ist.
+    - '--session-affinity'
 
 options:
   logging: CLOUD_LOGGING_ONLY
