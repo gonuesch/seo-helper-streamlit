@@ -13,7 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Gib den Port an, auf dem Streamlit läuft
-EXPOSE 8501
+EXPOSE 8080
 
 # Der Befehl, um die App zu starten
-CMD ["streamlit", "run", "seo_app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+CMD ["streamlit", "run", "seo_app.py", "--server.port=$PORT", "--server.address=0.0.0.0"]
