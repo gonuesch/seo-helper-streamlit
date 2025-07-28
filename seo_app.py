@@ -16,6 +16,9 @@ import google.auth
 from utils import convert_tiff_to_png_bytes, read_text_from_docx, read_text_from_pdf, chunk_text
 from api_calls import generate_seo_tags_cached, generate_accessibility_description_cached, generate_audio_from_text, get_available_voices, generate_text_summary, get_voice_recommendations, generate_ssml_chunk
 
+# --- Seitenkonfiguration ---
+st.set_page_config(page_title="Toolbox", page_icon="app_icon.png", layout="wide")
+
 # --- FUNKTION ZUM LADEN DER SECRETS AUS DEM GOOGLE SECRET MANAGER ---
 @st.cache_data(ttl=600) # Cache für 10 Minuten
 def load_secrets():
@@ -59,8 +62,7 @@ if not secrets:
     st.warning("Secrets konnten nicht geladen werden. Die App wird angehalten.")
     st.stop()
 
-# --- Seitenkonfiguration ---
-st.set_page_config(page_title="Toolbox", page_icon="app_icon.png", layout="wide")
+
 
 # --- HAUPTLOGIK: LOGIN ODER APP ANZEIGEN ---
 if not st.user.is_logged_in:
