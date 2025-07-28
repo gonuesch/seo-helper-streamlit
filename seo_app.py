@@ -16,8 +16,11 @@ import google.auth
 from utils import convert_tiff_to_png_bytes, read_text_from_docx, read_text_from_pdf, chunk_text
 from api_calls import generate_seo_tags_cached, generate_accessibility_description_cached, generate_audio_from_text, get_available_voices, generate_text_summary, get_voice_recommendations, generate_ssml_chunk
 
-# --- Seitenkonfiguration ---
+# KORREKT: st.set_page_config() als ALLERERSTER Streamlit-Befehl.
 st.set_page_config(page_title="Toolbox", page_icon="app_icon.png", layout="wide")
+
+# KORREKT: st.secrets kann jetzt sicher aufgerufen werden.
+secrets = st.secrets["connections"]["google_oauth"]
 
 # --- FUNKTION ZUM LADEN DER SECRETS AUS DEM GOOGLE SECRET MANAGER ---
 @st.cache_data(ttl=600) # Cache für 10 Minuten
@@ -55,12 +58,6 @@ def load_secrets():
         st.error(f"Fehler beim Laden der Secrets aus dem Secret Manager: {e}")
         return None
 
-# --- App-Start & Laden der Secrets ---
-secrets = load_secrets()
-
-if not secrets:
-    st.warning("Secrets konnten nicht geladen werden. Die App wird angehalten.")
-    st.stop()
 
 
 
