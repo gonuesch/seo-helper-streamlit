@@ -1,4 +1,4 @@
-# cloudbuild.yaml
+# cloudbuild.yaml - Version 2
 
 steps:
 # 1. Baue den Container mit Docker
