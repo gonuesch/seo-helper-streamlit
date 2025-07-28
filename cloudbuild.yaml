@@ -1,7 +1,7 @@
-# cloudbuild.yaml - Finale Version mit dynamischen Secrets
+# cloudbuild.yaml - Finale Version mit dynamischen Secrets UND Config
 
 steps:
-# Step #0: Secrets aus dem Secret Manager holen und in secrets.toml schreiben
+# Step #0: Erstelle config.toml und secrets.toml
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   entrypoint: 'bash'
   args:
@@ -9,7 +9,17 @@ steps:
     - |
       # Erstelle das Verzeichnis, falls es nicht existiert
       mkdir -p .streamlit
-      # Schreibe die Secrets in die Datei
+
+      # NEU: Erstelle die config.toml
+      echo '[server]' > .streamlit/config.toml
+      echo 'headless = true' >> .streamlit/config.toml
+      echo 'enableCORS = false' >> .streamlit/config.toml
+      echo 'enableWebsocketCompression = false' >> .streamlit/config.toml
+      echo '' >> .streamlit/config.toml
+      echo '[auth]' >> .streamlit/config.toml
+      echo 'require_login = true' >> .streamlit/config.toml
+
+      # Schreibe die Secrets in die secrets.toml
       echo '[connections.google_oauth]' > .streamlit/secrets.toml
       echo 'client_id = "'$(gcloud secrets versions access latest --secret=auth-client-id)'"' >> .streamlit/secrets.toml
       echo 'client_secret = "'$(gcloud secrets versions access latest --secret=auth-client-secret)'"' >> .streamlit/secrets.toml
@@ -17,13 +27,12 @@ steps:
       echo 'redirect_uri = "'$(gcloud secrets versions access latest --secret=auth-redirect-uri)'"' >> .streamlit/secrets.toml
       echo 'server_metadata_url = "'$(gcloud secrets versions access latest --secret=auth-server-metadata-url)'"' >> .streamlit/secrets.toml
       
-      # Füge die anderen API-Keys hinzu
       echo '' >> .streamlit/secrets.toml
       echo 'admin_email = "'$(gcloud secrets versions access latest --secret=admin-email)'"' >> .streamlit/secrets.toml
       echo 'elevenlabs_api_key = "'$(gcloud secrets versions access latest --secret=elevenlabs-api-key)'"' >> .streamlit/secrets.toml
       echo 'gemini_api_key = "'$(gcloud secrets versions access latest --secret=gemini-api-key)'"' >> .streamlit/secrets.toml
 
-# Step #1: Docker-Container bauen (kopiert die gerade erstellte secrets.toml)
+# Step #1: Docker-Container bauen
 - name: 'gcr.io/cloud-builders/docker'
   args: ['build', '-t', 'europe-west1-docker.pkg.dev/$PROJECT_ID/seo-helper-repo/seo-helper-image:$COMMIT_SHA', '.']
 
@@ -45,8 +54,6 @@ steps:
     - '--platform'
     - 'managed'
     - '--allow-unauthenticated'
-    # Session Affinity wird hier explizit gesetzt, um sicherzustellen,
-    # dass es bei jedem Deployment aktiv ist.
     - '--session-affinity'
 
 options:
