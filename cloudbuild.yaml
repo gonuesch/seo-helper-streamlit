@@ -24,7 +24,5 @@ steps:
     - 'managed'
     - '--allow-unauthenticated'
 
-# Der "options"-Teil ist hier gut, aber denk daran, dass die Einstellung
-# im Trigger-UI entscheidend ist, um den ursprünglichen Logging-Fehler zu beheben.
 options:
   logging: CLOUD_LOGGING_ONLY
