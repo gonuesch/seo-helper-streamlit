@@ -4,7 +4,7 @@ steps:
 # 1. Baue den Container mit Docker
 - name: 'gcr.io/cloud-builders/docker'
   args: ['build', '-t', 'europe-west1-docker.pkg.dev/$PROJECT_ID/seo-helper-repo/seo-helper-image:$COMMIT_SHA', '.']
-
+  logging: CLOUD_LOGGING_ONLY
 # 2. Pushe den Container in die Artifact Registry
 - name: 'gcr.io/cloud-builders/docker'
   args: ['push', 'europe-west1-docker.pkg.dev/$PROJECT_ID/seo-helper-repo/seo-helper-image:$COMMIT_SHA']
@@ -25,5 +25,3 @@ steps:
     - '--allow-unauthenticated'
 
 
-options:
-  logging: CLOUD_LOGGING_ONLY
