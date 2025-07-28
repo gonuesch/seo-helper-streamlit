@@ -1,4 +1,4 @@
-# cloudbuild.yaml - Finaler Versuch mit expliziter Provider-Config
+# cloudbuild.yaml - Finaler Versuch mit expliziter Provider-Config 1
 
 steps:
 # Step #0: Erstelle config.toml und secrets.toml
