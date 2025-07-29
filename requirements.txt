@@ -1,5 +1,8 @@
 # requirements.txt
-streamlit>=1.42.0
+streamlit==1.42.0
+authlib>=1.2.0
+google-auth>=2.0.0
+google-auth-oauthlib>=1.0.0
 pandas==2.1.4
 pyarrow==14.0.1
 google-generativeai
