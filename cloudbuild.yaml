@@ -1,32 +1,15 @@
-# cloudbuild.yaml - Bereinigte Version ohne Debug-Ausgabe
+# cloudbuild.yaml - Bereinigte Version für IAP-Authentifizierung
 
 steps:
-# Step #0: Erstelle config.toml und secrets.toml
+# Step #0: Erstelle secrets.toml mit API-Schlüsseln
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   entrypoint: 'bash'
   args:
     - '-c'
     - |
       mkdir -p .streamlit
-      # Erstelle die config.toml
-      echo '[server]' > .streamlit/config.toml
-      echo 'headless = true' >> .streamlit/config.toml
-      echo 'enableCORS = false' >> .streamlit/config.toml
-      echo '' >> .streamlit/config.toml
-      echo '[auth]' >> .streamlit/config.toml
-      echo 'require_login = true' >> .streamlit/config.toml
-      echo 'login_providers = ["google"]' >> .streamlit/config.toml
-      # Erstelle die secrets.toml
-      echo '[auth]' > .streamlit/secrets.toml
-      echo 'cookie_secret = "'$(gcloud secrets versions access latest --secret=auth-cookie-secret)'"' >> .streamlit/secrets.toml
-      echo 'redirect_uri = "'$(gcloud secrets versions access latest --secret=auth-redirect-uri)'"' >> .streamlit/secrets.toml
-      echo '' >> .streamlit/secrets.toml
-      echo '[auth.google]' >> .streamlit/secrets.toml
-      echo 'client_id = "'$(gcloud secrets versions access latest --secret=auth-client-id)'"' >> .streamlit/secrets.toml
-      echo 'client_secret = "'$(gcloud secrets versions access latest --secret=auth-client-secret)'"' >> .streamlit/secrets.toml
-      echo 'server_metadata_url = "'$(gcloud secrets versions access latest --secret=auth-server-metadata-url)'"' >> .streamlit/secrets.toml
-      echo '' >> .streamlit/secrets.toml
-      echo 'gemini_api_key = "'$(gcloud secrets versions access latest --secret=gemini-api-key)'"' >> .streamlit/secrets.toml
+      # Erstelle die secrets.toml nur mit API-Schlüsseln
+      echo 'gemini_api_key = "'$(gcloud secrets versions access latest --secret=gemini-api-key)'"' > .streamlit/secrets.toml
       echo 'elevenlabs_api_key = "'$(gcloud secrets versions access latest --secret=elevenlabs-api-key)'"' >> .streamlit/secrets.toml
 
 # Step #1: Docker-Container bauen
