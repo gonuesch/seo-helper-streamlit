@@ -1,5 +1,4 @@
-# seo_app.py 
-# Toolbox für KI-Tools
+# seo_app.py - Finale, bereinigte Version
 
 import streamlit as st
 from pathlib import Path
@@ -8,13 +7,13 @@ from io import BytesIO
 import json
 import streamlit.components.v1 as components
 from streamlit_option_menu import option_menu
-import os
 
 # Importiere Funktionen aus deinen Modulen
 from utils import convert_tiff_to_png_bytes, read_text_from_docx, read_text_from_pdf, chunk_text
 from api_calls import generate_seo_tags_cached, generate_accessibility_description_cached, generate_audio_from_text, get_available_voices, generate_text_summary, get_voice_recommendations, generate_ssml_chunk
 
-# Platzhalter-Funktionen für fehlende Implementierungen
+# Platzhalter-Funktionen, um Fehler zu vermeiden.
+# Du musst hier noch deine eigentliche Logik implementieren.
 def generate_translation_guide(german_text, gemini_api_key=None):
     st.warning("Platzhalter: Die Funktion 'generate_translation_guide' muss noch implementiert werden.")
     return {"plot_summary": "Dies ist eine Test-Zusammenfassung.", "key_terms": {"Beispiel": "Example"}}
@@ -23,57 +22,36 @@ def translate_chunk(translation_guide, german_chunk, previous_english_chunk, gem
     st.warning("Platzhalter: Die Funktion 'translate_chunk' muss noch implementiert werden.")
     return f"[Übersetzung für: {german_chunk[:50]}...]"
 
+
+# Page config MUSS der erste Streamlit-Befehl sein
 st.set_page_config(page_title="Toolbox", page_icon="app_icon.png", layout="wide")
 
-st.set_page_config(page_title="Toolbox", page_icon="app_icon.png", layout="wide")
+# ==============================================================================
+# HIER BEGINNT DIE ANWENDUNG
+# Da "require_login = true" gesetzt ist, wird dieser Code nur ausgeführt,
+# NACHDEM sich der Nutzer erfolgreich angemeldet hat.
+# ==============================================================================
 
-# --- HAUPTLOGIK: LOGIN ODER APP ANZEIGEN ---
-if not st.user.is_logged_in:
-    st.title("🧰 Toolbox")
-    st.info("Bitte melde dich an, um die KI-Tools zu nutzen.")
-    st.button("Mit Google einloggen", on_click=st.login, args=("google",))
-
-else:
-    # Wenn der Nutzer eingeloggt ist:
-    
-    # --- DEBUGGING START ---
-    st.write("DEBUGGING: Inhalt von st.user:")
-    st.write(st.user)
-    # --- DEBUGGING ENDE ---
-
-# Hauptanwendungslogik - Nutzer ist bereits angemeldet
+# Nutzerinformationen und API-Schlüssel abrufen
 user_email = st.user.email
 user_name = st.user.name
-
-# API-Schlüssel direkt aus st.secrets laden
 gemini_api_key = st.secrets.get("gemini_api_key")
 elevenlabs_api_key = st.secrets.get("elevenlabs_api_key")
 
+# Liste der erlaubten E-Mail-Domains
 allowed_domains = [
-    "rowohlt.de",
-    "droemer-knaur.de",
-    "fischerverlage.de",
-    "chaptr.xyz",
-    "kiwi-verlag.de",
-    "argon.de",
-    "hgv-online.de",
-    "fischer-sauerlaender.de",
-    "holtzbrinck-buchverlage.de",
-    "galiani.de",
+    "rowohlt.de", "droemer-knaur.de", "fischerverlage.de", "chaptr.xyz",
+    "kiwi-verlag.de", "argon.de", "hgv-online.de", "fischer-sauerlaender.de",
+    "holtzbrinck-buchverlage.de", "galiani.de",
 ]
 
-# Prüfe die E-Mail-Domain
+# Prüfe die E-Mail-Domain des angemeldeten Nutzers
 if user_email.split('@')[1] not in allowed_domains:
     st.error(f"Zugriff verweigert. Die E-Mail-Domain '@{user_email.split('@')[1]}' ist nicht für den Zugriff auf dieses Tool berechtigt.")
-    st.button("Logout", on_click=st.logout, key="logout_button_denied")
-
+    st.button("Logout", on_click=st.logout)
 else:
-    # ==============================================================================
-    # HIER BEGINNT DIE VOLLSTÄNDIGE ANWENDUNG
-    # ==============================================================================
-    
-    # Prüfe, ob die API-Schlüssel vorhanden sind.
-    # Der untere, doppelte Lade-Block wurde entfernt.
+    # Hauptlogik der App, wenn der Nutzer autorisiert ist
+
     missing_keys = []
     if not gemini_api_key:
         missing_keys.append("gemini-api-key")

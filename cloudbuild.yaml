@@ -1,4 +1,4 @@
-# cloudbuild.yaml - Mit Debugging-Schritt
+# cloudbuild.yaml - Bereinigte Version ohne Debug-Ausgabe
 
 steps:
 # Step #0: Erstelle config.toml und secrets.toml
@@ -29,27 +29,15 @@ steps:
       echo 'gemini_api_key = "'$(gcloud secrets versions access latest --secret=gemini-api-key)'"' >> .streamlit/secrets.toml
       echo 'elevenlabs_api_key = "'$(gcloud secrets versions access latest --secret=elevenlabs-api-key)'"' >> .streamlit/secrets.toml
 
-# NEU: Step #1: Gib den Inhalt der erstellten Dateien aus
-- name: 'bash'
-  args:
-    - '-c'
-    - |
-      echo "--- Inhalt von .streamlit/config.toml ---"
-      cat .streamlit/config.toml
-      echo "-----------------------------------------"
-      echo "--- Inhalt von .streamlit/secrets.toml ---"
-      cat .streamlit/secrets.toml
-      echo "------------------------------------------"
-
-# Step #2: Docker-Container bauen
+# Step #1: Docker-Container bauen
 - name: 'gcr.io/cloud-builders/docker'
   args: ['build', '-t', 'europe-west1-docker.pkg.dev/$PROJECT_ID/seo-helper-repo/seo-helper-image:$COMMIT_SHA', '.']
 
-# Step #3: Container in die Artifact Registry pushen
+# Step #2: Container in die Artifact Registry pushen
 - name: 'gcr.io/cloud-builders/docker'
   args: ['push', 'europe-west1-docker.pkg.dev/$PROJECT_ID/seo-helper-repo/seo-helper-image:$COMMIT_SHA']
 
-# Step #4: Container auf Cloud Run deployen
+# Step #3: Container auf Cloud Run deployen
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   entrypoint: gcloud
   args:
