@@ -1,5 +1,5 @@
 # requirements.txt
-streamlit==1.42.0
+streamlit==1.47.0
 authlib>=1.2.0
 google-auth>=2.0.0
 google-auth-oauthlib>=1.0.0
