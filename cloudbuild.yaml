@@ -1,4 +1,4 @@
-# cloudbuild.yaml - Korrigiert nach offizieller Doku für benannte Provider
+# cloudbuild.yaml - Mit Debugging-Schritt
 
 steps:
 # Step #0: Erstelle config.toml und secrets.toml
@@ -8,39 +8,48 @@ steps:
     - '-c'
     - |
       mkdir -p .streamlit
-
-      # Erstelle die config.toml (bleibt gleich)
+      # Erstelle die config.toml
       echo '[server]' > .streamlit/config.toml
       echo 'headless = true' >> .streamlit/config.toml
       echo 'enableCORS = false' >> .streamlit/config.toml
       echo '' >> .streamlit/config.toml
       echo '[auth]' >> .streamlit/config.toml
       echo 'require_login = true' >> .streamlit/config.toml
-
-      # KORREKTUR: Erstelle die secrets.toml mit der korrekten Struktur
-      # [auth] Block für geteilte Werte
+      echo 'login_providers = ["google"]' >> .streamlit/config.toml
+      # Erstelle die secrets.toml
       echo '[auth]' > .streamlit/secrets.toml
       echo 'cookie_secret = "'$(gcloud secrets versions access latest --secret=auth-cookie-secret)'"' >> .streamlit/secrets.toml
       echo 'redirect_uri = "'$(gcloud secrets versions access latest --secret=auth-redirect-uri)'"' >> .streamlit/secrets.toml
-      
-      # [auth.google] Block für die spezifischen Google-Werte
       echo '' >> .streamlit/secrets.toml
       echo '[auth.google]' >> .streamlit/secrets.toml
       echo 'client_id = "'$(gcloud secrets versions access latest --secret=auth-client-id)'"' >> .streamlit/secrets.toml
       echo 'client_secret = "'$(gcloud secrets versions access latest --secret=auth-client-secret)'"' >> .streamlit/secrets.toml
       echo 'server_metadata_url = "'$(gcloud secrets versions access latest --secret=auth-server-metadata-url)'"' >> .streamlit/secrets.toml
-
-      # API-Keys außerhalb der Auth-Blöcke
       echo '' >> .streamlit/secrets.toml
       echo 'gemini_api_key = "'$(gcloud secrets versions access latest --secret=gemini-api-key)'"' >> .streamlit/secrets.toml
       echo 'elevenlabs_api_key = "'$(gcloud secrets versions access latest --secret=elevenlabs-api-key)'"' >> .streamlit/secrets.toml
 
-# Die restlichen Schritte bleiben unverändert
+# NEU: Step #1: Gib den Inhalt der erstellten Dateien aus
+- name: 'bash'
+  args:
+    - '-c'
+    - |
+      echo "--- Inhalt von .streamlit/config.toml ---"
+      cat .streamlit/config.toml
+      echo "-----------------------------------------"
+      echo "--- Inhalt von .streamlit/secrets.toml ---"
+      cat .streamlit/secrets.toml
+      echo "------------------------------------------"
+
+# Step #2: Docker-Container bauen
 - name: 'gcr.io/cloud-builders/docker'
   args: ['build', '-t', 'europe-west1-docker.pkg.dev/$PROJECT_ID/seo-helper-repo/seo-helper-image:$COMMIT_SHA', '.']
-# ... (der Rest der Datei bleibt gleich)
+
+# Step #3: Container in die Artifact Registry pushen
 - name: 'gcr.io/cloud-builders/docker'
   args: ['push', 'europe-west1-docker.pkg.dev/$PROJECT_ID/seo-helper-repo/seo-helper-image:$COMMIT_SHA']
+
+# Step #4: Container auf Cloud Run deployen
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   entrypoint: gcloud
   args:

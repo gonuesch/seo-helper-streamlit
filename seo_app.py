@@ -25,10 +25,21 @@ def translate_chunk(translation_guide, german_chunk, previous_english_chunk, gem
 
 st.set_page_config(page_title="Toolbox", page_icon="app_icon.png", layout="wide")
 
-# --- DEBUGGING START ---
-st.write("DEBUGGING: Inhalt von st.user:")
-st.write(st.user)
-# --- DEBUGGING ENDE ---
+st.set_page_config(page_title="Toolbox", page_icon="app_icon.png", layout="wide")
+
+# --- HAUPTLOGIK: LOGIN ODER APP ANZEIGEN ---
+if not st.user.is_logged_in:
+    st.title("🧰 Toolbox")
+    st.info("Bitte melde dich an, um die KI-Tools zu nutzen.")
+    st.button("Mit Google einloggen", on_click=st.login, args=("google",))
+
+else:
+    # Wenn der Nutzer eingeloggt ist:
+    
+    # --- DEBUGGING START ---
+    st.write("DEBUGGING: Inhalt von st.user:")
+    st.write(st.user)
+    # --- DEBUGGING ENDE ---
 
 # Hauptanwendungslogik - Nutzer ist bereits angemeldet
 user_email = st.user.email
