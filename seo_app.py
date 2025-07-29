@@ -25,6 +25,11 @@ def translate_chunk(translation_guide, german_chunk, previous_english_chunk, gem
 
 st.set_page_config(page_title="Toolbox", page_icon="app_icon.png", layout="wide")
 
+# --- DEBUGGING START ---
+st.write("DEBUGGING: Inhalt von st.user:")
+st.write(st.user)
+# --- DEBUGGING ENDE ---
+
 # Hauptanwendungslogik - Nutzer ist bereits angemeldet
 user_email = st.user.email
 user_name = st.user.name
