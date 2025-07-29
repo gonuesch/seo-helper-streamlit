@@ -1,4 +1,4 @@
-# cloudbuild.yaml - Angepasst an die offizielle st.login Doku
+# cloudbuild.yaml - Korrigiert nach offizieller Doku für benannte Provider
 
 steps:
 # Step #0: Erstelle config.toml und secrets.toml
@@ -17,15 +17,20 @@ steps:
       echo '[auth]' >> .streamlit/config.toml
       echo 'require_login = true' >> .streamlit/config.toml
 
-      # KORREKTUR: Erstelle die secrets.toml mit dem [auth] Block
+      # KORREKTUR: Erstelle die secrets.toml mit der korrekten Struktur
+      # [auth] Block für geteilte Werte
       echo '[auth]' > .streamlit/secrets.toml
-      echo 'client_id = "'$(gcloud secrets versions access latest --secret=auth-client-id)'"' >> .streamlit/secrets.toml
-      echo 'client_secret = "'$(gcloud secrets versions access latest --secret=auth-client-secret)'"' >> .streamlit/secrets.toml
       echo 'cookie_secret = "'$(gcloud secrets versions access latest --secret=auth-cookie-secret)'"' >> .streamlit/secrets.toml
       echo 'redirect_uri = "'$(gcloud secrets versions access latest --secret=auth-redirect-uri)'"' >> .streamlit/secrets.toml
-      echo 'server_metadata_url = "'$(gcloud secrets versions access latest --secret=auth-server-metadata-url)'"' >> .streamlit/secrets.toml
       
-      # Füge die anderen API-Keys außerhalb des [auth] Blocks hinzu
+      # [auth.google] Block für die spezifischen Google-Werte
+      echo '' >> .streamlit/secrets.toml
+      echo '[auth.google]' >> .streamlit/secrets.toml
+      echo 'client_id = "'$(gcloud secrets versions access latest --secret=auth-client-id)'"' >> .streamlit/secrets.toml
+      echo 'client_secret = "'$(gcloud secrets versions access latest --secret=auth-client-secret)'"' >> .streamlit/secrets.toml
+      echo 'server_metadata_url = "'$(gcloud secrets versions access latest --secret=auth-server-metadata-url)'"' >> .streamlit/secrets.toml
+
+      # API-Keys außerhalb der Auth-Blöcke
       echo '' >> .streamlit/secrets.toml
       echo 'gemini_api_key = "'$(gcloud secrets versions access latest --secret=gemini-api-key)'"' >> .streamlit/secrets.toml
       echo 'elevenlabs_api_key = "'$(gcloud secrets versions access latest --secret=elevenlabs-api-key)'"' >> .streamlit/secrets.toml
@@ -33,6 +38,7 @@ steps:
 # Die restlichen Schritte bleiben unverändert
 - name: 'gcr.io/cloud-builders/docker'
   args: ['build', '-t', 'europe-west1-docker.pkg.dev/$PROJECT_ID/seo-helper-repo/seo-helper-image:$COMMIT_SHA', '.']
+# ... (der Rest der Datei bleibt gleich)
 - name: 'gcr.io/cloud-builders/docker'
   args: ['push', 'europe-west1-docker.pkg.dev/$PROJECT_ID/seo-helper-repo/seo-helper-image:$COMMIT_SHA']
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
