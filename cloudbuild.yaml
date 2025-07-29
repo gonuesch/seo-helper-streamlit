@@ -1,7 +1,7 @@
-# cloudbuild.yaml - NUR ZUM TESTEN mit hartcodierten Platzhaltern
+# cloudbuild.yaml - Angepasst an die offizielle st.login Doku
 
 steps:
-# Step #0: Erstelle config.toml und secrets.toml mit PLATZHALTERN
+# Step #0: Erstelle config.toml und secrets.toml
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   entrypoint: 'bash'
   args:
@@ -9,26 +9,28 @@ steps:
     - |
       mkdir -p .streamlit
 
-      # Schreibe die config.toml
+      # Erstelle die config.toml (bleibt gleich)
       echo '[server]' > .streamlit/config.toml
       echo 'headless = true' >> .streamlit/config.toml
       echo 'enableCORS = false' >> .streamlit/config.toml
       echo '' >> .streamlit/config.toml
       echo '[auth]' >> .streamlit/config.toml
       echo 'require_login = true' >> .streamlit/config.toml
-      echo 'login_providers = ["google"]' >> .streamlit/config.toml
 
-      # Schreibe die secrets.toml mit Platzhaltern statt echten Secrets
-      echo '[connections.google_oauth]' > .streamlit/secrets.toml
-      echo 'client_id = "test-client-id"' >> .streamlit/secrets.toml
-      echo 'client_secret = "test-client-secret"' >> .streamlit/secrets.toml
-      echo 'redirect_uri = "https://placeholder.com"' >> .streamlit/secrets.toml
-      echo 'server_metadata_url = "https://accounts.google.com/.well-known/openid-configuration"' >> .streamlit/secrets.toml
+      # KORREKTUR: Erstelle die secrets.toml mit dem [auth] Block
+      echo '[auth]' > .streamlit/secrets.toml
+      echo 'client_id = "'$(gcloud secrets versions access latest --secret=auth-client-id)'"' >> .streamlit/secrets.toml
+      echo 'client_secret = "'$(gcloud secrets versions access latest --secret=auth-client-secret)'"' >> .streamlit/secrets.toml
+      echo 'cookie_secret = "'$(gcloud secrets versions access latest --secret=auth-cookie-secret)'"' >> .streamlit/secrets.toml
+      echo 'redirect_uri = "'$(gcloud secrets versions access latest --secret=auth-redirect-uri)'"' >> .streamlit/secrets.toml
+      echo 'server_metadata_url = "'$(gcloud secrets versions access latest --secret=auth-server-metadata-url)'"' >> .streamlit/secrets.toml
       
+      # Füge die anderen API-Keys außerhalb des [auth] Blocks hinzu
       echo '' >> .streamlit/secrets.toml
-      echo 'gemini_api_key = "test-gemini-key"' >> .streamlit/secrets.toml
+      echo 'gemini_api_key = "'$(gcloud secrets versions access latest --secret=gemini-api-key)'"' >> .streamlit/secrets.toml
+      echo 'elevenlabs_api_key = "'$(gcloud secrets versions access latest --secret=elevenlabs-api-key)'"' >> .streamlit/secrets.toml
 
-# Steps #1, #2, #3 bleiben unverändert...
+# Die restlichen Schritte bleiben unverändert
 - name: 'gcr.io/cloud-builders/docker'
   args: ['build', '-t', 'europe-west1-docker.pkg.dev/$PROJECT_ID/seo-helper-repo/seo-helper-image:$COMMIT_SHA', '.']
 - name: 'gcr.io/cloud-builders/docker'
