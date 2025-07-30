@@ -164,6 +164,7 @@ if selected_tool == "SEO Tags":
     # --- Logik für Bild-URL ---
     elif input_method == "Bild-URL":
         image_url = st.text_input("Bild-URL einfügen:", placeholder="https://...", key="seo_url_input")
+        st.caption("Bitte füge einen direkten Link zu einer Bilddatei ein (z.B. endend auf .jpg, .png).")
 
         if image_url:
             if st.button("🚀 SEO Tags für URL verarbeiten", type="primary", key="process_seo_url_button"):
@@ -278,17 +279,16 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
             if results_for_export:
                 st.divider()
                 st.subheader("📊 Ergebnisse exportieren")
-                st.info("Excel-Export temporär deaktiviert aufgrund von Kompatibilitätsproblemen.")
-                # df = pd.DataFrame(results_for_export)
-                # output = BytesIO()
-                # with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                #     df.to_excel(writer, index=False, sheet_name='Bildbeschreibungen')
-                # excel_data = output.getvalue()
-                # st.download_button(
-                #     label="💾 Excel-Datei herunterladen", data=excel_data,
-                #     file_name="barrierefreie_bildbeschreibungen.xlsx",
-                #     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                # )
+                df = pd.DataFrame(results_for_export)
+                output = BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    df.to_excel(writer, index=False, sheet_name='Bildbeschreibungen')
+                excel_data = output.getvalue()
+                st.download_button(
+                    label="💾 Excel-Datei herunterladen", data=excel_data,
+                    file_name="barrierefreie_bildbeschreibungen.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
             
             st.divider()
             st.subheader("🏁 Zusammenfassung")

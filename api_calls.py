@@ -111,8 +111,11 @@ def generate_seo_tags_cached(image_source: Union[bytes, str], file_name_for_log:
         image_bytes = None
         # Prüft, ob die Quelle eine URL (string) ist
         if isinstance(image_source, str): 
-            response = requests.get(image_source)
-            # Löst einen Fehler aus, wenn der Download fehlschlägt (z.B. 404 Not Found)
+            headers = {
+                'User-Agent': 'hbu-toolbox/1.0 (Toolbox für den Holtzbrinck Buchverlag)'
+            }
+            response = requests.get(image_source, headers=headers, timeout=30)
+            # Löst einen Fehler aus, wenn der Download fehlschlägt (z.B. 404 Not Found, 403 Forbidden)
             response.raise_for_status() 
             image_bytes = response.content
         else: # Ansonsten sind es Bytes von einem Upload
