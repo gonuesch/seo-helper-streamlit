@@ -9,6 +9,25 @@ import csv
 from datetime import datetime
 import os
 import threading
+import logging
+import functools
+
+def log_exceptions(func):
+    """
+    Ein Decorator, der automatisch alle Ausnahmen innerhalb einer Funktion
+    abfängt, sie loggt und dann weiter auslöst.
+    """
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            # Loggt die Ausnahme mit vollständigem Traceback
+            logging.exception("In Funktion '%s' ist ein Fehler aufgetreten", func.__name__)
+            # Löst die Ausnahme erneut aus, damit die aufrufende Funktion
+            # sie optional behandeln kann (z.B. mit st.error).
+            raise
+    return wrapper
 
 # --- LOGGING FUNKTION (unverändert) ---
 log_lock = threading.Lock()
@@ -28,6 +47,7 @@ def log_usage(user_email: str, feature: str, action: str, details: dict = None):
 
 
 # --- BILD- & DOKUMENTEN-FUNKTIONEN (unverändert) ---
+@log_exceptions
 def convert_tiff_to_png_bytes(tiff_bytes: bytes) -> bytes:
     pil_image = Image.open(BytesIO(tiff_bytes))
     if getattr(pil_image, "n_frames", 1) > 1:
@@ -38,11 +58,13 @@ def convert_tiff_to_png_bytes(tiff_bytes: bytes) -> bytes:
     pil_image.save(output_buffer, format="PNG")
     return output_buffer.getvalue()
 
+@log_exceptions
 def read_text_from_docx(file_object: BytesIO) -> str:
     doc = docx.Document(file_object)
     full_text = [para.text for para in doc.paragraphs]
     return '\n'.join(full_text)
 
+@log_exceptions
 def read_text_from_pdf(file_object: BytesIO) -> str:
     try:
         pdf_document = fitz.open(stream=file_object.read(), filetype="pdf")
@@ -54,10 +76,10 @@ def read_text_from_pdf(file_object: BytesIO) -> str:
             return "NO_TEXT_IN_PDF"
         return full_text
     except Exception as e:
-        log_usage("error", "pdf_reading", "exception", {"error_message": str(e)})
+        logging.error("Fehler beim Lesen der PDF-Datei: %s", str(e))
         return ""
 
-
+@log_exceptions
 def chunk_text(text: str, chunk_size: int = 8000) -> list[str]:
     """
     Teilt einen langen Text rekursiv in Chunks auf, die die chunk_size

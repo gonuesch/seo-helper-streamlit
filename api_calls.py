@@ -14,6 +14,7 @@ import json
 
 # Importiere die Prompt-Vorlagen aus der prompts.py Datei
 from prompts import ACCESSIBILITY_PROMPT_TEMPLATE, SEO_PROMPT, SUMMARY_PROMPT, GUIDELINE_PROMPT_WITH_MATCHING, SSML_PROMPT, TRANSLATION_GUIDE_PROMPT, TRANSLATE_CHUNK_PROMPT
+from utils import log_exceptions
 
 # Richte ein einfaches Logging ein, um Fehler besser nachverfolgen zu können
 logging.basicConfig(level=logging.INFO)
@@ -25,6 +26,7 @@ model_gemini = genai.GenerativeModel('gemini-2.5-pro')
 # --- Die Funktionen generate_seo_tags_cached und generate_accessibility_description_cached bleiben unverändert ---
 
 
+@log_exceptions
 def generate_text_summary(_text: str, gemini_api_key: str = None) -> str:
     """Erstellt eine Zusammenfassung des übergebenen Textes."""
     try:
@@ -39,6 +41,7 @@ def generate_text_summary(_text: str, gemini_api_key: str = None) -> str:
         return f"Fehler bei der Zusammenfassung: {e}"
 
 
+@log_exceptions
 def get_voice_recommendations(_summary: str, _voices_info: str, gemini_api_key: str = None) -> Tuple[str, list]:
     """Erstellt eine Regieleitlinie und extrahiert die Top 3 Stimmen."""
     try:
@@ -76,6 +79,7 @@ def get_voice_recommendations(_summary: str, _voices_info: str, gemini_api_key: 
         return f"Fehler bei der Regie-Erstellung: {e}", []
 
 
+@log_exceptions
 def generate_ssml_chunk(_guideline: str, _text_chunk: str, gemini_api_key: str = None) -> str:
     """Reichert einen Text-Chunk mit SSML an."""
     try:
@@ -94,6 +98,7 @@ def generate_ssml_chunk(_guideline: str, _text_chunk: str, gemini_api_key: str =
 
 
 @st.cache_data
+@log_exceptions
 def generate_seo_tags_cached(image_source: Union[bytes, str], file_name_for_log: str, gemini_api_key: str = None, model_name: str = "gemini-1.5-pro-latest") -> Tuple[Union[str, None], Union[str, None]]:
     """
     Nimmt Bild-Bytes oder eine URL, ruft die Gemini API mit dem SEO-Prompt auf
@@ -123,7 +128,7 @@ def generate_seo_tags_cached(image_source: Union[bytes, str], file_name_for_log:
         try:
             response = model.generate_content([SEO_PROMPT, img], request_options={"timeout": 120})
         except ResourceExhausted as e:
-            print(f"Rate limit exceeded for SEO tags {file_name_for_log}: {e}")
+            logger.warning(f"Rate limit exceeded for SEO tags {file_name_for_log}: {e}")
             st.warning(f"Rate Limit für SEO-Tags bei '{file_name_for_log}' erreicht. Bitte versuche es später erneut oder mit weniger Bildern.")
             return None, None
         
@@ -138,19 +143,20 @@ def generate_seo_tags_cached(image_source: Union[bytes, str], file_name_for_log:
         if alt_tag and title_tag:
             return title_tag, alt_tag
         else:
-            print(f"Warning: Could not extract SEO tags for {file_name_for_log}. Raw response: {generated_text}")
+            logger.warning(f"Could not extract SEO tags for {file_name_for_log}. Raw response: {generated_text}")
             return None, None
             
     except requests.exceptions.RequestException as e:
-        print(f"Error downloading image from URL for {file_name_for_log}: {e}")
+        logger.error(f"Error downloading image from URL for {file_name_for_log}: {e}")
         st.error(f"Bild konnte von der URL nicht heruntergeladen werden: {e}")
         return None, None
     except Exception as e:
-        print(f"Error during SEO tag generation for {file_name_for_log}: {e}")
+        logger.error(f"Error during SEO tag generation for {file_name_for_log}: {e}")
         st.error(f"Ein unerwarteter Fehler ist bei der Generierung der SEO-Tags für '{file_name_for_log}' aufgetreten.")
         return None, None
 
 @st.cache_data
+@log_exceptions
 def generate_accessibility_description_cached(image_bytes_for_api, file_name_for_log: str, ebook_context: str = "", gemini_api_key: str = None, model_name: str = "gemini-1.5-pro-latest") -> Tuple[Union[str, None], Union[str, None]]:
     """
     Nimmt Bild-Bytes und Kontext, ruft die Gemini API mit dem Barrierefreiheits-Prompt auf
@@ -196,6 +202,7 @@ def generate_accessibility_description_cached(image_bytes_for_api, file_name_for
         return None, None
 
 @st.cache_data(ttl=3600)
+@log_exceptions
 def get_available_voices(api_key: str) -> Dict[str, Dict[str, str]]:
     """
     Ruft die verfügbaren Stimmen von der ElevenLabs API ab.
@@ -219,6 +226,7 @@ def get_available_voices(api_key: str) -> Dict[str, Dict[str, str]]:
 
 
 @st.cache_data
+@log_exceptions
 def generate_audio_from_text(text: str, api_key: str, voice_id: str) -> Union[bytes, None]:
     """
     Generiert Audio aus Text mit der ElevenLabs API und gibt die Audio-Bytes zurück.
@@ -259,6 +267,7 @@ def generate_audio_from_text(text: str, api_key: str, voice_id: str) -> Union[by
         return None
 
 
+@log_exceptions
 def generate_translation_guide(full_text: str, gemini_api_key: str = None) -> dict:
     """Erstellt einen Style & Glossar-Leitfaden für die Übersetzung."""
     try:
@@ -312,6 +321,7 @@ def generate_translation_guide(full_text: str, gemini_api_key: str = None) -> di
         }
 
 
+@log_exceptions
 def translate_chunk(guide: dict, german_chunk: str, previous_english_chunk: str = None, gemini_api_key: str = None) -> str:
     """Übersetzt einen deutschen Textabschnitt ins Englische basierend auf dem Leitfaden."""
     try:
