@@ -26,7 +26,7 @@ steps:
   args:
     - 'run'
     - 'deploy'
-    - 'seo-helper-streamlit'
+    - '$_SERVICE_NAME'
     - '--image'
     - 'europe-west1-docker.pkg.dev/$PROJECT_ID/seo-helper-repo/seo-helper-image:$COMMIT_SHA'
     - '--region'
