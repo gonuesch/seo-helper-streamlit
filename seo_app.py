@@ -8,16 +8,18 @@ import json
 import streamlit.components.v1 as components
 from streamlit_option_menu import option_menu
 import logging
+import google.cloud.logging
 
 # Importiere Funktionen aus deinen Modulen
 from utils import convert_tiff_to_png_bytes, read_text_from_docx, read_text_from_pdf, chunk_text
 from api_calls import generate_seo_tags_cached, generate_accessibility_description_cached, generate_audio_from_text, get_available_voices, generate_text_summary, get_voice_recommendations, generate_ssml_chunk
 
-# Globale Logging-Konfiguration
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - [%(module)s:%(funcName)s] - %(message)s'
-)
+# Richte den Google Cloud Logging Handler ein
+client = google.cloud.logging.Client()
+handler = client.get_default_handler()
+cloud_logger = logging.getLogger("cloudLogger")
+cloud_logger.setLevel(logging.INFO)
+cloud_logger.addHandler(handler)
 
 # Platzhalter-Funktionen, um Fehler zu vermeiden.
 # Du musst hier noch deine eigentliche Logik implementieren.
@@ -93,7 +95,7 @@ with st.sidebar:
 
 st.divider()
 
-logging.info("Streamlit-App gestartet, Tool ausgewählt: %s", selected_tool)
+cloud_logger.info("Streamlit-App gestartet, Tool ausgewählt: %s", selected_tool)
 
 
 # --- Logik für jedes Werkzeug ---
@@ -119,7 +121,7 @@ if selected_tool == "SEO Tags":
 
         if seo_uploaded_files:
             if st.button("🚀 SEO Tags für Dateien verarbeiten", type="primary", key="process_seo_files_button"):
-                logging.info("SEO Tags Verarbeitung gestartet für %d Dateien", len(seo_uploaded_files))
+                cloud_logger.info("SEO Tags Verarbeitung gestartet für %d Dateien", len(seo_uploaded_files))
                 st.subheader("Verarbeitungsergebnisse")
                 for i, uploaded_file in enumerate(seo_uploaded_files):
                     file_name = uploaded_file.name
@@ -129,11 +131,11 @@ if selected_tool == "SEO Tags":
                         original_image_bytes = uploaded_file.getvalue()
                         
                         with st.spinner(f"Generiere SEO Tags für {file_name}..."):
-                            logging.info("Generiere SEO Tags für Datei: %s", file_name)
+                            cloud_logger.info("Generiere SEO Tags für Datei: %s", file_name)
                             title, alt = generate_seo_tags_cached(original_image_bytes, file_name, gemini_api_key)
                         
                         if title and alt:
-                            logging.info("SEO Tags erfolgreich generiert für: %s", file_name)
+                            cloud_logger.info("SEO Tags erfolgreich generiert für: %s", file_name)
                             with st.expander(f"✅ SEO Tags für: {file_name}", expanded=True):
                                 alt_button_id = f"alt_btn_{base_id}"
                                 title_button_id = f"title_btn_{base_id}"
@@ -158,13 +160,13 @@ if selected_tool == "SEO Tags":
                     except Exception as e:
                         logging.error("Unerwarteter Fehler bei SEO Tag-Generierung für %s: %s", file_name, str(e))
                         st.error(f"🚨 Unerwarteter FEHLER bei '{file_name}': {e}")
-                logging.info("SEO-Verarbeitung abgeschlossen")
+                cloud_logger.info("SEO-Verarbeitung abgeschlossen")
                 # Logging für Analytics
                 log_data = {
                     "event_type": "seo_tags_processed",
                     "file_count": len(seo_uploaded_files)
                 }
-                logging.info(json.dumps(log_data))
+                cloud_logger.info(log_data)
                 st.success("SEO-Verarbeitung abgeschlossen.")
     
     # --- Logik für Bild-URL ---
@@ -223,7 +225,7 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
 
     if accessibility_uploaded_files:
         if st.button("🚀 Beschreibungen verarbeiten", type="primary", key="process_accessibility_button"):
-            logging.info("Barrierefreie Bildbeschreibung Verarbeitung gestartet für %d Dateien", len(accessibility_uploaded_files))
+            cloud_logger.info("Barrierefreie Bildbeschreibung Verarbeitung gestartet für %d Dateien", len(accessibility_uploaded_files))
             st.subheader("Verarbeitungsergebnisse")
             processed_count, failed_count = 0, 0
             results_for_export = []
@@ -245,11 +247,11 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
                                 continue
                     
                     with st.spinner(f"Generiere barrierefreie Beschreibung für {file_name}..."):
-                        logging.info("Generiere barrierefreie Beschreibung für Datei: %s", file_name)
+                        cloud_logger.info("Generiere barrierefreie Beschreibung für Datei: %s", file_name)
                         short_desc, long_desc = generate_accessibility_description_cached(image_bytes_for_api, file_name, ebook_context_input, gemini_api_key)
                     
                     if short_desc and long_desc:
-                        logging.info("Barrierefreie Beschreibung erfolgreich generiert für: %s", file_name)
+                        cloud_logger.info("Barrierefreie Beschreibung erfolgreich generiert für: %s", file_name)
                         st.markdown(f"--- \n#### ✅ Ergebnisse für: `{file_name}`")
                         col1, col2 = st.columns([1, 3], gap="medium")
                         with col1:
@@ -306,7 +308,7 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
                 "event_type": "accessibility_description_processed",
                 "file_count": len(accessibility_uploaded_files)
             }
-            logging.info(json.dumps(log_data))
+            cloud_logger.info(log_data)
             st.success("Verarbeitung abgeschlossen.")
 
 elif selected_tool == "Text-to-Speech":
@@ -490,7 +492,7 @@ elif selected_tool == "Text-to-Speech":
                     "event_type": "text_to_speech_processed",
                     "file_count": 1
                 }
-                logging.info(json.dumps(log_data))
+                cloud_logger.info(log_data)
                 st.success("Finale Audiodatei erfolgreich erstellt!")
                 st.audio(final_audio, format="audio/mpeg")
                 st.download_button(
