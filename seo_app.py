@@ -159,6 +159,12 @@ if selected_tool == "SEO Tags":
                         logging.error("Unerwarteter Fehler bei SEO Tag-Generierung für %s: %s", file_name, str(e))
                         st.error(f"🚨 Unerwarteter FEHLER bei '{file_name}': {e}")
                 logging.info("SEO-Verarbeitung abgeschlossen")
+                # Logging für Analytics
+                log_data = {
+                    "event_type": "seo_tags_processed",
+                    "file_count": len(seo_uploaded_files)
+                }
+                logging.info(json.dumps(log_data))
                 st.success("SEO-Verarbeitung abgeschlossen.")
     
     # --- Logik für Bild-URL ---
@@ -295,6 +301,12 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
             col1, col2 = st.columns(2)
             col1.metric("Erfolgreich verarbeitet", processed_count)
             col2.metric("Fehlgeschlagen", failed_count, delta=None if failed_count == 0 else -failed_count, delta_color="inverse")
+            # Logging für Analytics
+            log_data = {
+                "event_type": "accessibility_description_processed",
+                "file_count": len(accessibility_uploaded_files)
+            }
+            logging.info(json.dumps(log_data))
             st.success("Verarbeitung abgeschlossen.")
 
 elif selected_tool == "Text-to-Speech":
@@ -473,6 +485,12 @@ elif selected_tool == "Text-to-Speech":
             if len(all_audio_bytes) == len(final_ssml_chunks):
                 status.update(label="Audio-Generierung abgeschlossen!", state="complete")
                 final_audio = b"".join(all_audio_bytes)
+                # Logging für Analytics
+                log_data = {
+                    "event_type": "text_to_speech_processed",
+                    "file_count": 1
+                }
+                logging.info(json.dumps(log_data))
                 st.success("Finale Audiodatei erfolgreich erstellt!")
                 st.audio(final_audio, format="audio/mpeg")
                 st.download_button(
