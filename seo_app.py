@@ -8,7 +8,7 @@ import json
 import streamlit.components.v1 as components
 from streamlit_option_menu import option_menu
 import logging
-import google.cloud.logging
+import google.cloud.pubsub_v1 as pubsub_v1
 import uuid
 import time
 
@@ -16,57 +16,24 @@ import time
 from utils import convert_tiff_to_png_bytes, read_text_from_docx, read_text_from_pdf, chunk_text
 from api_calls import generate_seo_tags_cached, generate_accessibility_description_cached, generate_audio_from_text, get_available_voices, generate_text_summary, get_voice_recommendations, generate_ssml_chunk
 
-# Richte den Google Cloud Logging Handler ein
-client = google.cloud.logging.Client()
-handler = client.get_default_handler()
-cloud_logger = logging.getLogger("cloudLogger")
-cloud_logger.setLevel(logging.INFO)
-cloud_logger.addHandler(handler)
+# Richte den Google Cloud Pub/Sub Publisher ein
+publisher = pubsub_v1.PublisherClient()
+topic_path = publisher.topic_path("avid-infinity-458913-p3", "event-tracking")
 
-# Dedizierte Logging-Funktionen
-def log_seo_event(uploaded_files):
-    """Loggt SEO Tags Verarbeitungs-Events."""
-    if uploaded_files:
-        log_data = {
-            "event_type": "seo_tags_processed",
-            "file_count": len(uploaded_files)
-        }
-        cloud_logger.info(log_data)
-
-def log_accessibility_event(uploaded_files):
-    """Loggt Barrierefreie Bildbeschreibung Verarbeitungs-Events."""
-    if uploaded_files:
-        log_data = {
-            "event_type": "accessibility_description_processed",
-            "file_count": len(uploaded_files)
-        }
-        cloud_logger.info(log_data)
-
-def log_tts_event():
-    """Loggt Text-to-Speech Verarbeitungs-Events."""
-    log_data = {
-        "event_type": "text_to_speech_processed",
-        "file_count": 1
-    }
-    cloud_logger.info(log_data)
-
-# Logging Guard Function
-def safe_log_event(event_type, file_count, session_id=None):
-    """Sicherer Logging-Mechanismus, der doppelte Logs verhindert."""
-    if session_id is None:
-        session_id = str(uuid.uuid4())
-    
-    # Prüfe, ob dieses Event bereits geloggt wurde
-    log_key = f"logged_{event_type}_{session_id}"
-    if not st.session_state.get(log_key, False):
-        log_data = {
-            "event_type": event_type,
-            "file_count": file_count,
-            "session_id": session_id,
-            "timestamp": time.time()
-        }
-        cloud_logger.info(log_data)
-        st.session_state[log_key] = True
+# Pub/Sub Event Tracking Funktion
+def send_event_to_pubsub(event_data):
+    """Sendet ein Event an Google Cloud Pub/Sub."""
+    try:
+        # Konvertiere das Wörterbuch in einen JSON-String und dann in Bytes
+        message_json = json.dumps(event_data)
+        message_bytes = message_json.encode('utf-8')
+        
+        # Sende die Nachricht an Pub/Sub
+        publish_future = publisher.publish(topic_path, data=message_bytes)
+        publish_future.result()  # Wartet auf das Ergebnis (optional)
+    except Exception as e:
+        st.error(f"Fehler beim Senden des Tracking-Events: {e}")
+        logging.error(f"Pub/Sub Fehler: {e}")
 
 # Platzhalter-Funktionen, um Fehler zu vermeiden.
 # Du musst hier noch deine eigentliche Logik implementieren.
@@ -108,11 +75,11 @@ def run_seo_processing_and_logging(files_to_process):
             try:
                 original_image_bytes = uploaded_file.getvalue()
                 
-                cloud_logger.info("Generiere SEO Tags für Datei: %s", file_name)
+                logging.info("Generiere SEO Tags für Datei: %s", file_name)
                 title, alt = generate_seo_tags_cached(original_image_bytes, file_name, gemini_api_key)
                 
                 if title and alt:
-                    cloud_logger.info("SEO Tags erfolgreich generiert für: %s", file_name)
+                    logging.info("SEO Tags erfolgreich generiert für: %s", file_name)
                     results.append({
                         "file_name": file_name,
                         "title": title,
@@ -206,11 +173,11 @@ def run_accessibility_processing_and_logging(files_to_process, context):
                             })
                             continue
                 
-                cloud_logger.info("Generiere barrierefreie Beschreibung für Datei: %s", file_name)
+                logging.info("Generiere barrierefreie Beschreibung für Datei: %s", file_name)
                 short_desc, long_desc = generate_accessibility_description_cached(image_bytes_for_api, file_name, context, gemini_api_key)
                 
                 if short_desc and long_desc:
-                    cloud_logger.info("Barrierefreie Beschreibung erfolgreich generiert für: %s", file_name)
+                    logging.info("Barrierefreie Beschreibung erfolgreich generiert für: %s", file_name)
                     results.append({
                         "file_name": file_name,
                         "short_desc": short_desc,
@@ -455,7 +422,7 @@ with st.sidebar:
 
 st.divider()
 
-cloud_logger.info("Streamlit-App gestartet, Tool ausgewählt: %s", selected_tool)
+logging.info("Streamlit-App gestartet, Tool ausgewählt: %s", selected_tool)
 
 
 # --- Logik für jedes Werkzeug ---
@@ -559,7 +526,7 @@ if selected_tool == "SEO Tags":
                 }
                 if "error_message" in result:
                     log_data["error_message"] = result["error_message"]
-                cloud_logger.info(log_data)
+                send_event_to_pubsub(log_data)
             st.session_state.seo_logged = True
         
         for result in st.session_state.seo_results:
@@ -608,7 +575,7 @@ if selected_tool == "SEO Tags":
             }
             if "error_message" in result:
                 log_data["error_message"] = result["error_message"]
-            cloud_logger.info(log_data)
+            send_event_to_pubsub(log_data)
             st.session_state.seo_url_logged = True
         
         result = st.session_state.seo_url_result
@@ -676,7 +643,7 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
                 }
                 if "error_message" in result:
                     log_data["error_message"] = result["error_message"]
-                cloud_logger.info(log_data)
+                send_event_to_pubsub(log_data)
             st.session_state.accessibility_logged = True
         
         for result in st.session_state.accessibility_results:
@@ -874,7 +841,7 @@ elif selected_tool == "Text-to-Speech":
                 log_data["chunks_processed"] = result["chunks_processed"]
             if "error_message" in result:
                 log_data["error_message"] = result["error_message"]
-            cloud_logger.info(log_data)
+            send_event_to_pubsub(log_data)
             st.session_state.tts_logged = True
         
         if "error" in st.session_state.tts_result:
@@ -918,7 +885,7 @@ elif selected_tool == "Manuskript-Übersetzung":
                 log_data["chunks_processed"] = result["chunks_processed"]
             if "error_message" in result:
                 log_data["error_message"] = result["error_message"]
-            cloud_logger.info(log_data)
+            send_event_to_pubsub(log_data)
             st.session_state.translation_logged = True
         
         # Erfolgsmeldung anzeigen
