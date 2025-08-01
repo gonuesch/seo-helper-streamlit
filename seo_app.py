@@ -120,6 +120,8 @@ if selected_tool == "SEO Tags":
         )
 
         if seo_uploaded_files:
+            # Reset logging flag when new files are uploaded
+            st.session_state.seo_job_logged = False
             if st.button("🚀 SEO Tags für Dateien verarbeiten", type="primary", key="process_seo_files_button"):
                 cloud_logger.info("SEO Tags Verarbeitung gestartet für %d Dateien", len(seo_uploaded_files))
                 st.subheader("Verarbeitungsergebnisse")
@@ -161,12 +163,18 @@ if selected_tool == "SEO Tags":
                         logging.error("Unerwarteter Fehler bei SEO Tag-Generierung für %s: %s", file_name, str(e))
                         st.error(f"🚨 Unerwarteter FEHLER bei '{file_name}': {e}")
                 cloud_logger.info("SEO-Verarbeitung abgeschlossen")
-                # Logging für Analytics
-                log_data = {
-                    "event_type": "seo_tags_processed",
-                    "file_count": len(seo_uploaded_files)
-                }
-                cloud_logger.info(log_data)
+                # Logging für Analytics - nur einmal pro Job
+                if 'seo_job_logged' not in st.session_state:
+                    st.session_state.seo_job_logged = False
+
+                if not st.session_state.seo_job_logged:
+                    log_data = {
+                        "event_type": "seo_tags_processed",
+                        "file_count": len(seo_uploaded_files)
+                    }
+                    cloud_logger.info(log_data)
+                    st.session_state.seo_job_logged = True  # Flag setzen
+
                 st.success("SEO-Verarbeitung abgeschlossen.")
     
     # --- Logik für Bild-URL ---
@@ -224,6 +232,8 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
     )
 
     if accessibility_uploaded_files:
+        # Reset logging flag when new files are uploaded
+        st.session_state.accessibility_job_logged = False
         if st.button("🚀 Beschreibungen verarbeiten", type="primary", key="process_accessibility_button"):
             cloud_logger.info("Barrierefreie Bildbeschreibung Verarbeitung gestartet für %d Dateien", len(accessibility_uploaded_files))
             st.subheader("Verarbeitungsergebnisse")
@@ -303,12 +313,18 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
             col1, col2 = st.columns(2)
             col1.metric("Erfolgreich verarbeitet", processed_count)
             col2.metric("Fehlgeschlagen", failed_count, delta=None if failed_count == 0 else -failed_count, delta_color="inverse")
-            # Logging für Analytics
-            log_data = {
-                "event_type": "accessibility_description_processed",
-                "file_count": len(accessibility_uploaded_files)
-            }
-            cloud_logger.info(log_data)
+            # Logging für Analytics - nur einmal pro Job
+            if 'accessibility_job_logged' not in st.session_state:
+                st.session_state.accessibility_job_logged = False
+
+            if not st.session_state.accessibility_job_logged:
+                log_data = {
+                    "event_type": "accessibility_description_processed",
+                    "file_count": len(accessibility_uploaded_files)
+                }
+                cloud_logger.info(log_data)
+                st.session_state.accessibility_job_logged = True  # Flag setzen
+
             st.success("Verarbeitung abgeschlossen.")
 
 elif selected_tool == "Text-to-Speech":
@@ -347,6 +363,9 @@ elif selected_tool == "Text-to-Speech":
         uploaded_file = None 
 
     if uploaded_file and st.session_state.tts_step == 1:
+        # Reset logging flag when new file is uploaded
+        st.session_state.tts_job_logged = False
+        
         if st.button("Text analysieren & Stimmen empfehlen", type="primary"):
             st.session_state.uploaded_file_name = uploaded_file.name 
             with st.spinner("Lese Text aus Datei..."):
@@ -487,12 +506,18 @@ elif selected_tool == "Text-to-Speech":
             if len(all_audio_bytes) == len(final_ssml_chunks):
                 status.update(label="Audio-Generierung abgeschlossen!", state="complete")
                 final_audio = b"".join(all_audio_bytes)
-                # Logging für Analytics
-                log_data = {
-                    "event_type": "text_to_speech_processed",
-                    "file_count": 1
-                }
-                cloud_logger.info(log_data)
+                # Logging für Analytics - nur einmal pro Job
+                if 'tts_job_logged' not in st.session_state:
+                    st.session_state.tts_job_logged = False
+
+                if not st.session_state.tts_job_logged:
+                    log_data = {
+                        "event_type": "text_to_speech_processed",
+                        "file_count": 1
+                    }
+                    cloud_logger.info(log_data)
+                    st.session_state.tts_job_logged = True  # Flag setzen
+
                 st.success("Finale Audiodatei erfolgreich erstellt!")
                 st.audio(final_audio, format="audio/mpeg")
                 st.download_button(
