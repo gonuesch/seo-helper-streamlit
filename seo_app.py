@@ -58,12 +58,13 @@ def translate_chunk(translation_guide, german_chunk, previous_english_chunk, gem
     st.warning("Platzhalter: Die Funktion 'translate_chunk' muss noch implementiert werden.")
     return f"[Übersetzung für: {german_chunk[:50]}...]"
 
-def process_seo_tags(files):
-    """Verarbeitet SEO Tags für die übergebenen Dateien."""
-    cloud_logger.info("SEO Tags Verarbeitung gestartet für %d Dateien", len(files))
+
+
+def run_seo_processing(files_to_process):
+    """Verarbeitet SEO Tags und loggt das Event."""
     st.subheader("Verarbeitungsergebnisse")
     
-    for i, uploaded_file in enumerate(files):
+    for i, uploaded_file in enumerate(files_to_process):
         file_name = uploaded_file.name
         safe_file_name_part = "".join(c if c.isalnum() else "_" for c in file_name)
         base_id = f"seo_file_{i}_{safe_file_name_part}"
@@ -102,16 +103,24 @@ def process_seo_tags(files):
             st.error(f"🚨 Unerwarteter FEHLER bei '{file_name}': {e}")
     
     cloud_logger.info("SEO-Verarbeitung abgeschlossen")
+    
+    # Logge das Event am Ende
+    log_data = {
+        "event_type": "seo_tags_processed",
+        "file_count": len(files_to_process)
+    }
+    cloud_logger.info(log_data)
     st.success("SEO-Verarbeitung abgeschlossen.")
 
-def process_accessibility_descriptions(files, context):
-    """Verarbeitet barrierefreie Bildbeschreibungen für die übergebenen Dateien."""
-    cloud_logger.info("Barrierefreie Bildbeschreibung Verarbeitung gestartet für %d Dateien", len(files))
+
+
+def run_accessibility_processing(files_to_process, context):
+    """Verarbeitet barrierefreie Bildbeschreibungen und loggt das Event."""
     st.subheader("Verarbeitungsergebnisse")
     processed_count, failed_count = 0, 0
     results_for_export = []
     
-    for i, uploaded_file in enumerate(files):
+    for i, uploaded_file in enumerate(files_to_process):
         file_name = uploaded_file.name
         safe_file_name_part = "".join(c if c.isalnum() else "_" for c in file_name)
         base_id = f"access_{i}_{safe_file_name_part}"
@@ -185,19 +194,27 @@ def process_accessibility_descriptions(files, context):
     col1.metric("Erfolgreich verarbeitet", processed_count)
     col2.metric("Fehlgeschlagen", failed_count, delta=None if failed_count == 0 else -failed_count, delta_color="inverse")
     
+    # Logge das Event am Ende
+    log_data = {
+        "event_type": "accessibility_description_processed",
+        "file_count": len(files_to_process)
+    }
+    cloud_logger.info(log_data)
     st.success("Verarbeitung abgeschlossen.")
 
-def process_text_to_speech(text_content, guideline, selected_voice_name):
-    """Verarbeitet Text-to-Speech."""
+
+
+def run_tts_processing():
+    """Verarbeitet Text-to-Speech und loggt das Event."""
     with st.status("Generiere Audio-Datei...", expanded=True) as status:
         status.write("Teile Text in initiale Stücke (Chunks)...")
-        initial_chunks = chunk_text(text_content)
+        initial_chunks = chunk_text(st.session_state.text_content)
         
         final_ssml_chunks = []
         
         for i, chunk in enumerate(initial_chunks):
             status.write(f"Verarbeite initialen Chunk {i+1}/{len(initial_chunks)}: Erzeuge SSML...")
-            ssml_chunk = generate_ssml_chunk(guideline, chunk, gemini_api_key)
+            ssml_chunk = generate_ssml_chunk(st.session_state.guideline, chunk, gemini_api_key)
             
             if len(ssml_chunk) < 9800:
                 final_ssml_chunks.append(ssml_chunk)
@@ -206,12 +223,12 @@ def process_text_to_speech(text_content, guideline, selected_voice_name):
                 sub_chunks = chunk_text(chunk, 4000)
                 
                 for sub_chunk in sub_chunks:
-                    final_ssml_chunks.append(generate_ssml_chunk(guideline, sub_chunk, gemini_api_key))
+                    final_ssml_chunks.append(generate_ssml_chunk(st.session_state.guideline, sub_chunk, gemini_api_key))
         
         status.write(f"Finale Audio-Generierung aus {len(final_ssml_chunks)} SSML-Blöcken...")
         all_audio_bytes = []
         available_voices = get_available_voices(elevenlabs_api_key)
-        selected_voice_id = available_voices[selected_voice_name]["voice_id"]
+        selected_voice_id = available_voices[st.session_state.selected_voice_name]["voice_id"]
         
         for i, final_chunk in enumerate(final_ssml_chunks):
             status.write(f"Generiere Audio für finalen Block {i+1}/{len(final_ssml_chunks)}...")
@@ -234,6 +251,14 @@ def process_text_to_speech(text_content, guideline, selected_voice_name):
                 file_name=f"{Path(st.session_state.uploaded_file_name).stem}_mit_regie.mp3",
                 mime="audio/mpeg"
             )
+    
+    # Logge das Event am Ende
+    log_data = {
+        "event_type": "text_to_speech_processed",
+        "file_count": 1
+    }
+    cloud_logger.info(log_data)
+    
     st.session_state.tts_step = 2
 
 
@@ -328,12 +353,9 @@ if selected_tool == "SEO Tags":
             st.button(
                 "🚀 SEO Tags für Dateien verarbeiten",
                 key="process_seo_files_button",
-                on_click=log_seo_event,
+                on_click=run_seo_processing,
                 args=(seo_uploaded_files,)
             )
-            
-            # Verarbeitungslogik
-            process_seo_tags(seo_uploaded_files)
     
     # --- Logik für Bild-URL ---
     elif input_method == "Bild-URL":
@@ -393,12 +415,9 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
         st.button(
             "🚀 Beschreibungen verarbeiten",
             key="process_accessibility_button",
-            on_click=log_accessibility_event,
-            args=(accessibility_uploaded_files,)
+            on_click=run_accessibility_processing,
+            args=(accessibility_uploaded_files, ebook_context_input)
         )
-        
-        # Verarbeitungslogik
-        process_accessibility_descriptions(accessibility_uploaded_files, ebook_context_input)
 
 elif selected_tool == "Text-to-Speech":
     st.header("Text-to-Speech mit KI-Regieanweisung")
@@ -542,11 +561,8 @@ elif selected_tool == "Text-to-Speech":
         st.button(
             "🎙️ Audio mit KI-Regie generieren",
             key="tts_generate_button",
-            on_click=log_tts_event
+            on_click=run_tts_processing
         )
-        
-        # Verarbeitungslogik
-        process_text_to_speech(st.session_state.text_content, st.session_state.guideline, final_selected_voice)
 
 elif selected_tool == "Manuskript-Übersetzung":
     st.header("Manuskript-Übersetzung (Deutsch → Englisch)")
