@@ -21,6 +21,33 @@ cloud_logger = logging.getLogger("cloudLogger")
 cloud_logger.setLevel(logging.INFO)
 cloud_logger.addHandler(handler)
 
+# Dedizierte Logging-Funktionen
+def log_seo_event(uploaded_files):
+    """Loggt SEO Tags Verarbeitungs-Events."""
+    if uploaded_files:
+        log_data = {
+            "event_type": "seo_tags_processed",
+            "file_count": len(uploaded_files)
+        }
+        cloud_logger.info(log_data)
+
+def log_accessibility_event(uploaded_files):
+    """Loggt Barrierefreie Bildbeschreibung Verarbeitungs-Events."""
+    if uploaded_files:
+        log_data = {
+            "event_type": "accessibility_description_processed",
+            "file_count": len(uploaded_files)
+        }
+        cloud_logger.info(log_data)
+
+def log_tts_event():
+    """Loggt Text-to-Speech Verarbeitungs-Events."""
+    log_data = {
+        "event_type": "text_to_speech_processed",
+        "file_count": 1
+    }
+    cloud_logger.info(log_data)
+
 # Platzhalter-Funktionen, um Fehler zu vermeiden.
 # Du musst hier noch deine eigentliche Logik implementieren.
 def generate_translation_guide(german_text, gemini_api_key=None):
@@ -30,6 +57,184 @@ def generate_translation_guide(german_text, gemini_api_key=None):
 def translate_chunk(translation_guide, german_chunk, previous_english_chunk, gemini_api_key=None):
     st.warning("Platzhalter: Die Funktion 'translate_chunk' muss noch implementiert werden.")
     return f"[Übersetzung für: {german_chunk[:50]}...]"
+
+def process_seo_tags(files):
+    """Verarbeitet SEO Tags für die übergebenen Dateien."""
+    cloud_logger.info("SEO Tags Verarbeitung gestartet für %d Dateien", len(files))
+    st.subheader("Verarbeitungsergebnisse")
+    
+    for i, uploaded_file in enumerate(files):
+        file_name = uploaded_file.name
+        safe_file_name_part = "".join(c if c.isalnum() else "_" for c in file_name)
+        base_id = f"seo_file_{i}_{safe_file_name_part}"
+        try:
+            original_image_bytes = uploaded_file.getvalue()
+            
+            with st.spinner(f"Generiere SEO Tags für {file_name}..."):
+                cloud_logger.info("Generiere SEO Tags für Datei: %s", file_name)
+                title, alt = generate_seo_tags_cached(original_image_bytes, file_name, gemini_api_key)
+            
+            if title and alt:
+                cloud_logger.info("SEO Tags erfolgreich generiert für: %s", file_name)
+                with st.expander(f"✅ SEO Tags für: {file_name}", expanded=True):
+                    alt_button_id = f"alt_btn_{base_id}"
+                    title_button_id = f"title_btn_{base_id}"
+                    col1, col2 = st.columns([1, 3], gap="medium")
+                    with col1:
+                        st.image(original_image_bytes, width=150, caption="Vorschau")
+                    with col2:
+                        st.text("ALT Tag:")
+                        st.text_area("ALT", value=alt, height=75, key=f"alt_text_{base_id}", disabled=True, label_visibility="collapsed")
+                        alt_json = json.dumps(alt)
+                        components.html(f"""<button id="{alt_button_id}">ALT kopieren</button><script>document.getElementById("{alt_button_id}").addEventListener('click', function(){{navigator.clipboard.writeText({alt_json}).then(function(){{let b=document.getElementById("{alt_button_id}");let o=b.innerText;b.innerText='Kopiert!';setTimeout(function(){{b.innerText=o}},1500)}})}});</script><style>#{alt_button_id}{{background-color:#007bff;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;margin-top:5px}}#{alt_button_id}:hover{{background-color:#0056b3}}</style>""", height=45)
+                        
+                        st.write("")
+                        
+                        st.text("TITLE Tag:")
+                        st.text_area("TITLE", value=title, height=75, key=f"title_text_{base_id}", disabled=True, label_visibility="collapsed")
+                        title_json = json.dumps(title)
+                        components.html(f"""<button id="{title_button_id}">TITLE kopieren</button><script>document.getElementById("{title_button_id}").addEventListener('click', function(){{navigator.clipboard.writeText({title_json}).then(function(){{let b=document.getElementById("{title_button_id}");let o=b.innerText;b.innerText='Kopiert!';setTimeout(function(){{b.innerText=o}},1500)}})}});</script><style>#{title_button_id}{{background-color:#007bff;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;margin-top:5px}}#{title_button_id}:hover{{background-color:#0056b3}}</style>""", height=45)
+            else:
+                logging.error("SEO Tag-Generierung fehlgeschlagen für: %s", file_name)
+                st.error(f"❌ Fehler bei SEO Tag-Generierung für '{file_name}'.")
+        except Exception as e:
+            logging.error("Unerwarteter Fehler bei SEO Tag-Generierung für %s: %s", file_name, str(e))
+            st.error(f"🚨 Unerwarteter FEHLER bei '{file_name}': {e}")
+    
+    cloud_logger.info("SEO-Verarbeitung abgeschlossen")
+    st.success("SEO-Verarbeitung abgeschlossen.")
+
+def process_accessibility_descriptions(files, context):
+    """Verarbeitet barrierefreie Bildbeschreibungen für die übergebenen Dateien."""
+    cloud_logger.info("Barrierefreie Bildbeschreibung Verarbeitung gestartet für %d Dateien", len(files))
+    st.subheader("Verarbeitungsergebnisse")
+    processed_count, failed_count = 0, 0
+    results_for_export = []
+    
+    for i, uploaded_file in enumerate(files):
+        file_name = uploaded_file.name
+        safe_file_name_part = "".join(c if c.isalnum() else "_" for c in file_name)
+        base_id = f"access_{i}_{safe_file_name_part}"
+        try:
+            original_image_bytes = uploaded_file.getvalue()
+            image_bytes_for_api = original_image_bytes
+            if Path(file_name).suffix.lower() in ['.tif', '.tiff']:
+                with st.spinner(f"Konvertiere {file_name} (TIFF) zu PNG..."):
+                    try:
+                        image_bytes_for_api = convert_tiff_to_png_bytes(original_image_bytes)
+                    except Exception as conv_e:
+                        st.error(f"🚨 Fehler beim Konvertieren von '{file_name}': {conv_e}")
+                        failed_count += 1
+                        continue
+            
+            with st.spinner(f"Generiere barrierefreie Beschreibung für {file_name}..."):
+                cloud_logger.info("Generiere barrierefreie Beschreibung für Datei: %s", file_name)
+                short_desc, long_desc = generate_accessibility_description_cached(image_bytes_for_api, file_name, context, gemini_api_key)
+            
+            if short_desc and long_desc:
+                cloud_logger.info("Barrierefreie Beschreibung erfolgreich generiert für: %s", file_name)
+                st.markdown(f"--- \n#### ✅ Ergebnisse für: `{file_name}`")
+                col1, col2 = st.columns([1, 3], gap="medium")
+                with col1:
+                    st.image(original_image_bytes, width=150, caption="Vorschau")
+                with col2:
+                    st.text("Kurzbeschreibung (max. 140 Zeichen):")
+                    st.text_area("Kurz", value=short_desc, height=100, key=f"short_text_{base_id}", disabled=True, label_visibility="collapsed")
+                    short_desc_button_id = f"short_copy_{base_id}"
+                    short_json = json.dumps(short_desc)
+                    components.html(f"""<button id="{short_desc_button_id}">Kurzbeschreibung kopieren</button><script>document.getElementById("{short_desc_button_id}").addEventListener('click', function(){{navigator.clipboard.writeText({short_json}).then(function(){{let b=document.getElementById("{short_desc_button_id}");let o=b.innerText;b.innerText='Kopiert!';setTimeout(function(){{b.innerText=o}},1500)}})}});</script><style>#{short_desc_button_id}{{background-color:#007bff;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;margin-top:5px}}#{short_desc_button_id}:hover{{background-color:#0056b3}}</style>""", height=45)
+                    
+                    with st.expander("Zeige/verberge Langbeschreibung"):
+                        st.text_area("Lang", value=long_desc, height=200, key=f"long_text_{base_id}", disabled=True, label_visibility="collapsed")
+                        long_desc_button_id = f"long_copy_{base_id}"
+                        long_json = json.dumps(long_desc)
+                        components.html(f"""<button id="{long_desc_button_id}">Langbeschreibung kopieren</button><script>document.getElementById("{long_desc_button_id}").addEventListener('click', function(){{navigator.clipboard.writeText({long_json}).then(function(){{let b=document.getElementById("{long_desc_button_id}");let o=b.innerText;b.innerText='Kopiert!';setTimeout(function(){{b.innerText=o}},1500)}})}});</script><style>#{long_desc_button_id}{{background-color:#007bff;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;margin-top:5px}}#{long_desc_button_id}:hover{{background-color:#0056b3}}</style>""", height=45)
+                
+                processed_count += 1
+                results_for_export.append({
+                    "Bildname": file_name, "Dateiname Produktion": "", "Alternativtext": short_desc,
+                    "Bildlegende": "", "Anmerkung": "", "Langbeschreibung": long_desc,
+                    "(Platzierung/Größe/Übersetzungstexte in der Abbildung/...)": ""
+                })
+            else:
+                logging.error("Barrierefreie Beschreibung fehlgeschlagen für: %s", file_name)
+                st.error(f"❌ Fehler bei Erstellung der barrierefreien Beschreibung für '{file_name}'.")
+                failed_count += 1
+        except Exception as e:
+            logging.error("Unerwarteter Fehler bei barrierefreier Beschreibung für %s: %s", file_name, str(e))
+            st.error(f"🚨 Unerwarteter FEHLER bei der Hauptverarbeitung von '{file_name}': {e}")
+            failed_count += 1
+    
+    if results_for_export:
+        st.divider()
+        st.subheader("📊 Ergebnisse exportieren")
+        df = pd.DataFrame(results_for_export)
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Bildbeschreibungen')
+        excel_data = output.getvalue()
+        st.download_button(
+            label="💾 Excel-Datei herunterladen", data=excel_data,
+            file_name="barrierefreie_bildbeschreibungen.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    
+    st.divider()
+    st.subheader("🏁 Zusammenfassung")
+    col1, col2 = st.columns(2)
+    col1.metric("Erfolgreich verarbeitet", processed_count)
+    col2.metric("Fehlgeschlagen", failed_count, delta=None if failed_count == 0 else -failed_count, delta_color="inverse")
+    
+    st.success("Verarbeitung abgeschlossen.")
+
+def process_text_to_speech(text_content, guideline, selected_voice_name):
+    """Verarbeitet Text-to-Speech."""
+    with st.status("Generiere Audio-Datei...", expanded=True) as status:
+        status.write("Teile Text in initiale Stücke (Chunks)...")
+        initial_chunks = chunk_text(text_content)
+        
+        final_ssml_chunks = []
+        
+        for i, chunk in enumerate(initial_chunks):
+            status.write(f"Verarbeite initialen Chunk {i+1}/{len(initial_chunks)}: Erzeuge SSML...")
+            ssml_chunk = generate_ssml_chunk(guideline, chunk, gemini_api_key)
+            
+            if len(ssml_chunk) < 9800:
+                final_ssml_chunks.append(ssml_chunk)
+            else:
+                status.warning(f"Chunk {i+1} ist nach SSML zu lang ({len(ssml_chunk)} Zeichen). Teile ihn auf...")
+                sub_chunks = chunk_text(chunk, 4000)
+                
+                for sub_chunk in sub_chunks:
+                    final_ssml_chunks.append(generate_ssml_chunk(guideline, sub_chunk, gemini_api_key))
+        
+        status.write(f"Finale Audio-Generierung aus {len(final_ssml_chunks)} SSML-Blöcken...")
+        all_audio_bytes = []
+        available_voices = get_available_voices(elevenlabs_api_key)
+        selected_voice_id = available_voices[selected_voice_name]["voice_id"]
+        
+        for i, final_chunk in enumerate(final_ssml_chunks):
+            status.write(f"Generiere Audio für finalen Block {i+1}/{len(final_ssml_chunks)}...")
+            audio_segment = generate_audio_from_text(final_chunk, elevenlabs_api_key, selected_voice_id)
+            
+            if audio_segment:
+                all_audio_bytes.append(audio_segment)
+            else:
+                status.update(label=f"Fehler bei Block {i+1}", state="error")
+                break
+        
+        if len(all_audio_bytes) == len(final_ssml_chunks):
+            status.update(label="Audio-Generierung abgeschlossen!", state="complete")
+            final_audio = b"".join(all_audio_bytes)
+
+            st.success("Finale Audiodatei erfolgreich erstellt!")
+            st.audio(final_audio, format="audio/mpeg")
+            st.download_button(
+                "MP3-Datei herunterladen", final_audio, 
+                file_name=f"{Path(st.session_state.uploaded_file_name).stem}_mit_regie.mp3",
+                mime="audio/mpeg"
+            )
+    st.session_state.tts_step = 2
 
 
 # Page config MUSS der erste Streamlit-Befehl sein
@@ -120,58 +325,15 @@ if selected_tool == "SEO Tags":
         )
 
         if seo_uploaded_files:
-            st.session_state.seo_job_logged = False
-            if st.button("🚀 SEO Tags für Dateien verarbeiten", type="primary", key="process_seo_files_button"):
-                cloud_logger.info("SEO Tags Verarbeitung gestartet für %d Dateien", len(seo_uploaded_files))
-                st.subheader("Verarbeitungsergebnisse")
-                for i, uploaded_file in enumerate(seo_uploaded_files):
-                    file_name = uploaded_file.name
-                    safe_file_name_part = "".join(c if c.isalnum() else "_" for c in file_name)
-                    base_id = f"seo_file_{i}_{safe_file_name_part}"
-                    try:
-                        original_image_bytes = uploaded_file.getvalue()
-                        
-                        with st.spinner(f"Generiere SEO Tags für {file_name}..."):
-                            cloud_logger.info("Generiere SEO Tags für Datei: %s", file_name)
-                            title, alt = generate_seo_tags_cached(original_image_bytes, file_name, gemini_api_key)
-                        
-                        if title and alt:
-                            cloud_logger.info("SEO Tags erfolgreich generiert für: %s", file_name)
-                            with st.expander(f"✅ SEO Tags für: {file_name}", expanded=True):
-                                alt_button_id = f"alt_btn_{base_id}"
-                                title_button_id = f"title_btn_{base_id}"
-                                col1, col2 = st.columns([1, 3], gap="medium")
-                                with col1:
-                                    st.image(original_image_bytes, width=150, caption="Vorschau")
-                                with col2:
-                                    st.text("ALT Tag:")
-                                    st.text_area("ALT", value=alt, height=75, key=f"alt_text_{base_id}", disabled=True, label_visibility="collapsed")
-                                    alt_json = json.dumps(alt)
-                                    components.html(f"""<button id="{alt_button_id}">ALT kopieren</button><script>document.getElementById("{alt_button_id}").addEventListener('click', function(){{navigator.clipboard.writeText({alt_json}).then(function(){{let b=document.getElementById("{alt_button_id}");let o=b.innerText;b.innerText='Kopiert!';setTimeout(function(){{b.innerText=o}},1500)}})}});</script><style>#{alt_button_id}{{background-color:#007bff;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;margin-top:5px}}#{alt_button_id}:hover{{background-color:#0056b3}}</style>""", height=45)
-                                    
-                                    st.write("")
-                                    
-                                    st.text("TITLE Tag:")
-                                    st.text_area("TITLE", value=title, height=75, key=f"title_text_{base_id}", disabled=True, label_visibility="collapsed")
-                                    title_json = json.dumps(title)
-                                    components.html(f"""<button id="{title_button_id}">TITLE kopieren</button><script>document.getElementById("{title_button_id}").addEventListener('click', function(){{navigator.clipboard.writeText({title_json}).then(function(){{let b=document.getElementById("{title_button_id}");let o=b.innerText;b.innerText='Kopiert!';setTimeout(function(){{b.innerText=o}},1500)}})}});</script><style>#{title_button_id}{{background-color:#007bff;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;margin-top:5px}}#{title_button_id}:hover{{background-color:#0056b3}}</style>""", height=45)
-                        else:
-                            logging.error("SEO Tag-Generierung fehlgeschlagen für: %s", file_name)
-                            st.error(f"❌ Fehler bei SEO Tag-Generierung für '{file_name}'.")
-                    except Exception as e:
-                        logging.error("Unerwarteter Fehler bei SEO Tag-Generierung für %s: %s", file_name, str(e))
-                        st.error(f"🚨 Unerwarteter FEHLER bei '{file_name}': {e}")
-                cloud_logger.info("SEO-Verarbeitung abgeschlossen")
-                # Logge das Event nur, wenn es für diesen Job noch nicht passiert ist
-                if not st.session_state.get('seo_job_logged', False):
-                    log_data = {
-                        "event_type": "seo_tags_processed",
-                        "file_count": len(seo_uploaded_files)
-                    }
-                    cloud_logger.info(log_data)
-                    st.session_state.seo_job_logged = True  # Flag setzen, um erneutes Loggen zu verhindern
-
-                st.success("SEO-Verarbeitung abgeschlossen.")
+            st.button(
+                "🚀 SEO Tags für Dateien verarbeiten",
+                key="process_seo_files_button",
+                on_click=log_seo_event,
+                args=(seo_uploaded_files,)
+            )
+            
+            # Verarbeitungslogik
+            process_seo_tags(seo_uploaded_files)
     
     # --- Logik für Bild-URL ---
     elif input_method == "Bild-URL":
@@ -228,96 +390,15 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
     )
 
     if accessibility_uploaded_files:
-        st.session_state.accessibility_job_logged = False
-        if st.button("🚀 Beschreibungen verarbeiten", type="primary", key="process_accessibility_button"):
-            cloud_logger.info("Barrierefreie Bildbeschreibung Verarbeitung gestartet für %d Dateien", len(accessibility_uploaded_files))
-            st.subheader("Verarbeitungsergebnisse")
-            processed_count, failed_count = 0, 0
-            results_for_export = []
-            
-            for i, uploaded_file in enumerate(accessibility_uploaded_files):
-                file_name = uploaded_file.name
-                safe_file_name_part = "".join(c if c.isalnum() else "_" for c in file_name)
-                base_id = f"access_{i}_{safe_file_name_part}"
-                try:
-                    original_image_bytes = uploaded_file.getvalue()
-                    image_bytes_for_api = original_image_bytes
-                    if Path(file_name).suffix.lower() in ['.tif', '.tiff']:
-                        with st.spinner(f"Konvertiere {file_name} (TIFF) zu PNG..."):
-                            try:
-                                image_bytes_for_api = convert_tiff_to_png_bytes(original_image_bytes)
-                            except Exception as conv_e:
-                                st.error(f"🚨 Fehler beim Konvertieren von '{file_name}': {conv_e}")
-                                failed_count += 1
-                                continue
-                    
-                    with st.spinner(f"Generiere barrierefreie Beschreibung für {file_name}..."):
-                        cloud_logger.info("Generiere barrierefreie Beschreibung für Datei: %s", file_name)
-                        short_desc, long_desc = generate_accessibility_description_cached(image_bytes_for_api, file_name, ebook_context_input, gemini_api_key)
-                    
-                    if short_desc and long_desc:
-                        cloud_logger.info("Barrierefreie Beschreibung erfolgreich generiert für: %s", file_name)
-                        st.markdown(f"--- \n#### ✅ Ergebnisse für: `{file_name}`")
-                        col1, col2 = st.columns([1, 3], gap="medium")
-                        with col1:
-                            st.image(original_image_bytes, width=150, caption="Vorschau")
-                        with col2:
-                            st.text("Kurzbeschreibung (max. 140 Zeichen):")
-                            st.text_area("Kurz", value=short_desc, height=100, key=f"short_text_{base_id}", disabled=True, label_visibility="collapsed")
-                            short_desc_button_id = f"short_copy_{base_id}"
-                            short_json = json.dumps(short_desc)
-                            components.html(f"""<button id="{short_desc_button_id}">Kurzbeschreibung kopieren</button><script>document.getElementById("{short_desc_button_id}").addEventListener('click', function(){{navigator.clipboard.writeText({short_json}).then(function(){{let b=document.getElementById("{short_desc_button_id}");let o=b.innerText;b.innerText='Kopiert!';setTimeout(function(){{b.innerText=o}},1500)}})}});</script><style>#{short_desc_button_id}{{background-color:#007bff;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;margin-top:5px}}#{short_desc_button_id}:hover{{background-color:#0056b3}}</style>""", height=45)
-                            
-                            with st.expander("Zeige/verberge Langbeschreibung"):
-                                st.text_area("Lang", value=long_desc, height=200, key=f"long_text_{base_id}", disabled=True, label_visibility="collapsed")
-                                long_desc_button_id = f"long_copy_{base_id}"
-                                long_json = json.dumps(long_desc)
-                                components.html(f"""<button id="{long_desc_button_id}">Langbeschreibung kopieren</button><script>document.getElementById("{long_desc_button_id}").addEventListener('click', function(){{navigator.clipboard.writeText({long_json}).then(function(){{let b=document.getElementById("{long_desc_button_id}");let o=b.innerText;b.innerText='Kopiert!';setTimeout(function(){{b.innerText=o}},1500)}})}});</script><style>#{long_desc_button_id}{{background-color:#007bff;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;margin-top:5px}}#{long_desc_button_id}:hover{{background-color:#0056b3}}</style>""", height=45)
-                        
-                        processed_count += 1
-                        results_for_export.append({
-                            "Bildname": file_name, "Dateiname Produktion": "", "Alternativtext": short_desc,
-                            "Bildlegende": "", "Anmerkung": "", "Langbeschreibung": long_desc,
-                            "(Platzierung/Größe/Übersetzungstexte in der Abbildung/...)": ""
-                        })
-                    else:
-                        logging.error("Barrierefreie Beschreibung fehlgeschlagen für: %s", file_name)
-                        st.error(f"❌ Fehler bei Erstellung der barrierefreien Beschreibung für '{file_name}'.")
-                        failed_count += 1
-                except Exception as e:
-                    logging.error("Unerwarteter Fehler bei barrierefreier Beschreibung für %s: %s", file_name, str(e))
-                    st.error(f"🚨 Unerwarteter FEHLER bei der Hauptverarbeitung von '{file_name}': {e}")
-                    failed_count += 1
-            
-            if results_for_export:
-                st.divider()
-                st.subheader("📊 Ergebnisse exportieren")
-                df = pd.DataFrame(results_for_export)
-                output = BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    df.to_excel(writer, index=False, sheet_name='Bildbeschreibungen')
-                excel_data = output.getvalue()
-                st.download_button(
-                    label="💾 Excel-Datei herunterladen", data=excel_data,
-                    file_name="barrierefreie_bildbeschreibungen.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-            
-            st.divider()
-            st.subheader("🏁 Zusammenfassung")
-            col1, col2 = st.columns(2)
-            col1.metric("Erfolgreich verarbeitet", processed_count)
-            col2.metric("Fehlgeschlagen", failed_count, delta=None if failed_count == 0 else -failed_count, delta_color="inverse")
-            # Logge das Event nur, wenn es für diesen Job noch nicht passiert ist
-            if not st.session_state.get('accessibility_job_logged', False):
-                log_data = {
-                    "event_type": "accessibility_description_processed",
-                    "file_count": len(accessibility_uploaded_files)
-                }
-                cloud_logger.info(log_data)
-                st.session_state.accessibility_job_logged = True  # Flag setzen, um erneutes Loggen zu verhindern
-
-            st.success("Verarbeitung abgeschlossen.")
+        st.button(
+            "🚀 Beschreibungen verarbeiten",
+            key="process_accessibility_button",
+            on_click=log_accessibility_event,
+            args=(accessibility_uploaded_files,)
+        )
+        
+        # Verarbeitungslogik
+        process_accessibility_descriptions(accessibility_uploaded_files, ebook_context_input)
 
 elif selected_tool == "Text-to-Speech":
     st.header("Text-to-Speech mit KI-Regieanweisung")
@@ -355,8 +436,6 @@ elif selected_tool == "Text-to-Speech":
         uploaded_file = None 
 
     if uploaded_file and st.session_state.tts_step == 1:
-        st.session_state.tts_job_logged = False
-        
         if st.button("Text analysieren & Stimmen empfehlen", type="primary"):
             st.session_state.uploaded_file_name = uploaded_file.name 
             with st.spinner("Lese Text aus Datei..."):
@@ -459,61 +538,15 @@ elif selected_tool == "Text-to-Speech":
         final_selected_voice = st.session_state.selected_voice_name
         
         st.info(f"Audio-Generierung mit der Stimme '{final_selected_voice}' wird vorbereitet...")
-
-        with st.status("Generiere Audio-Datei...", expanded=True) as status:
-            status.write("Teile Text in initiale Stücke (Chunks)...")
-            initial_chunks = chunk_text(st.session_state.text_content)
-            
-            final_ssml_chunks = []
-            
-            for i, chunk in enumerate(initial_chunks):
-                status.write(f"Verarbeite initialen Chunk {i+1}/{len(initial_chunks)}: Erzeuge SSML...")
-                ssml_chunk = generate_ssml_chunk(st.session_state.guideline, chunk, gemini_api_key)
-                
-                if len(ssml_chunk) < 9800:
-                    final_ssml_chunks.append(ssml_chunk)
-                else:
-                    status.warning(f"Chunk {i+1} ist nach SSML zu lang ({len(ssml_chunk)} Zeichen). Teile ihn auf...")
-                    sub_chunks = chunk_text(chunk, 4000)
-                    
-                    for sub_chunk in sub_chunks:
-                        final_ssml_chunks.append(generate_ssml_chunk(st.session_state.guideline, sub_chunk, gemini_api_key))
-            
-            status.write(f"Finale Audio-Generierung aus {len(final_ssml_chunks)} SSML-Blöcken...")
-            all_audio_bytes = []
-            available_voices = get_available_voices(elevenlabs_api_key)
-            selected_voice_id = available_voices[final_selected_voice]["voice_id"]
-            
-            for i, final_chunk in enumerate(final_ssml_chunks):
-                status.write(f"Generiere Audio für finalen Block {i+1}/{len(final_ssml_chunks)}...")
-                audio_segment = generate_audio_from_text(final_chunk, elevenlabs_api_key, selected_voice_id)
-                
-                if audio_segment:
-                    all_audio_bytes.append(audio_segment)
-                else:
-                    status.update(label=f"Fehler bei Block {i+1}", state="error")
-                    break
-            
-            if len(all_audio_bytes) == len(final_ssml_chunks):
-                status.update(label="Audio-Generierung abgeschlossen!", state="complete")
-                final_audio = b"".join(all_audio_bytes)
-                # Logge das Event nur, wenn es für diesen Job noch nicht passiert ist
-                if not st.session_state.get('tts_job_logged', False):
-                    log_data = {
-                        "event_type": "text_to_speech_processed",
-                        "file_count": 1
-                    }
-                    cloud_logger.info(log_data)
-                    st.session_state.tts_job_logged = True  # Flag setzen, um erneutes Loggen zu verhindern
-
-                st.success("Finale Audiodatei erfolgreich erstellt!")
-                st.audio(final_audio, format="audio/mpeg")
-                st.download_button(
-                    "MP3-Datei herunterladen", final_audio, 
-                    file_name=f"{Path(st.session_state.uploaded_file_name).stem}_mit_regie.mp3",
-                    mime="audio/mpeg"
-                )
-        st.session_state.tts_step = 2
+        
+        st.button(
+            "🎙️ Audio mit KI-Regie generieren",
+            key="tts_generate_button",
+            on_click=log_tts_event
+        )
+        
+        # Verarbeitungslogik
+        process_text_to_speech(st.session_state.text_content, st.session_state.guideline, final_selected_voice)
 
 elif selected_tool == "Manuskript-Übersetzung":
     st.header("Manuskript-Übersetzung (Deutsch → Englisch)")
