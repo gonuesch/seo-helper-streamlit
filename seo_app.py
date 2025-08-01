@@ -558,11 +558,8 @@ elif selected_tool == "Text-to-Speech":
         
         st.info(f"Audio-Generierung mit der Stimme '{final_selected_voice}' wird vorbereitet...")
         
-        st.button(
-            "🎙️ Audio mit KI-Regie generieren",
-            key="tts_generate_button",
-            on_click=run_tts_processing
-        )
+        # Verarbeitung starten
+        run_tts_processing()
 
 elif selected_tool == "Manuskript-Übersetzung":
     st.header("Manuskript-Übersetzung (Deutsch → Englisch)")
