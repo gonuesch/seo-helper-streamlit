@@ -83,20 +83,9 @@ def set_run_state_true(state_key):
     """Reusable callback function that sets a state key to True."""
     st.session_state[state_key] = True
 
-# Button click tracking
-def get_button_click_id():
-    """Generates a unique click ID for tracking button clicks."""
-    if 'click_counter' not in st.session_state:
-        st.session_state.click_counter = 0
-    st.session_state.click_counter += 1
-    return f"click_{st.session_state.click_counter}_{int(time.time())}"
-
 # Comprehensive Processing Functions
 def run_seo_processing_and_logging(files_to_process):
     """Comprehensive SEO processing function that handles everything in one place."""
-    # Generate unique click ID for this button click
-    click_id = get_button_click_id()
-    
     # Store results in session state instead of displaying immediately
     results = []
     
@@ -113,6 +102,15 @@ def run_seo_processing_and_logging(files_to_process):
                 
                 if title and alt:
                     cloud_logger.info("SEO Tags erfolgreich generiert für: %s", file_name)
+                    # Log each successful file individually
+                    log_data = {
+                        "event_type": "seo_tags_processed",
+                        "file_name": file_name,
+                        "file_count": 1,
+                        "status": "success"
+                    }
+                    cloud_logger.info(log_data)
+                    
                     results.append({
                         "file_name": file_name,
                         "title": title,
@@ -122,12 +120,31 @@ def run_seo_processing_and_logging(files_to_process):
                     })
                 else:
                     logging.error("SEO Tag-Generierung fehlgeschlagen für: %s", file_name)
+                    # Log failed files individually
+                    log_data = {
+                        "event_type": "seo_tags_processed",
+                        "file_name": file_name,
+                        "file_count": 1,
+                        "status": "failed"
+                    }
+                    cloud_logger.info(log_data)
+                    
                     results.append({
                         "file_name": file_name,
                         "error": f"❌ Fehler bei SEO Tag-Generierung für '{file_name}'."
                     })
             except Exception as e:
                 logging.error("Unerwarteter Fehler bei SEO Tag-Generierung für %s: %s", file_name, str(e))
+                # Log error files individually
+                log_data = {
+                    "event_type": "seo_tags_processed",
+                    "file_name": file_name,
+                    "file_count": 1,
+                    "status": "error",
+                    "error_message": str(e)
+                }
+                cloud_logger.info(log_data)
+                
                 results.append({
                     "file_name": file_name,
                     "error": f"🚨 Unerwarteter FEHLER bei '{file_name}': {e}"
@@ -136,39 +153,52 @@ def run_seo_processing_and_logging(files_to_process):
     # Store results in session state
     st.session_state.seo_results = results
     
-    # Store click ID for logging
-    st.session_state.seo_click_id = click_id
-    
     st.success("SEO-Verarbeitung abgeschlossen.")
 
 def run_seo_url_processing_and_logging(image_url):
     """Comprehensive SEO URL processing function that handles everything in one place."""
-    # Generate unique click ID for this button click
-    click_id = get_button_click_id()
-    
     with st.spinner(f"Verarbeite Bild von URL..."):
         try:
             title, alt = generate_seo_tags_cached(image_url, image_url, gemini_api_key)
             
             if title and alt:
+                # Log successful URL processing
+                log_data = {
+                    "event_type": "seo_url_processed",
+                    "file_count": 1,
+                    "status": "success"
+                }
+                cloud_logger.info(log_data)
+                
                 st.session_state.seo_url_result = {
                     "title": title,
                     "alt": alt,
                     "image_url": image_url
                 }
             else:
+                # Log failed URL processing
+                log_data = {
+                    "event_type": "seo_url_processed",
+                    "file_count": 1,
+                    "status": "failed"
+                }
+                cloud_logger.info(log_data)
+                
                 st.session_state.seo_url_result = {"error": "❌ Fehler bei SEO Tag-Generierung für die URL."}
         except Exception as e:
+            # Log error URL processing
+            log_data = {
+                "event_type": "seo_url_processed",
+                "file_count": 1,
+                "status": "error",
+                "error_message": str(e)
+            }
+            cloud_logger.info(log_data)
+            
             st.session_state.seo_url_result = {"error": f"🚨 Unerwarteter FEHLER bei der Verarbeitung der URL: {e}"}
-    
-    # Store click ID for logging
-    st.session_state.seo_url_click_id = click_id
 
 def run_accessibility_processing_and_logging(files_to_process, context):
     """Comprehensive accessibility processing function that handles everything in one place."""
-    # Generate unique click ID for this button click
-    click_id = get_button_click_id()
-    
     processed_count, failed_count = 0, 0
     results = []
     results_for_export = []
@@ -188,6 +218,15 @@ def run_accessibility_processing_and_logging(files_to_process, context):
                         except Exception as conv_e:
                             st.error(f"🚨 Fehler beim Konvertieren von '{file_name}': {conv_e}")
                             failed_count += 1
+                            # Log conversion error
+                            log_data = {
+                                "event_type": "accessibility_description_processed",
+                                "file_name": file_name,
+                                "file_count": 1,
+                                "status": "conversion_error",
+                                "error_message": str(conv_e)
+                            }
+                            cloud_logger.info(log_data)
                             continue
                 
                 cloud_logger.info("Generiere barrierefreie Beschreibung für Datei: %s", file_name)
@@ -195,6 +234,15 @@ def run_accessibility_processing_and_logging(files_to_process, context):
                 
                 if short_desc and long_desc:
                     cloud_logger.info("Barrierefreie Beschreibung erfolgreich generiert für: %s", file_name)
+                    # Log each successful file individually
+                    log_data = {
+                        "event_type": "accessibility_description_processed",
+                        "file_name": file_name,
+                        "file_count": 1,
+                        "status": "success"
+                    }
+                    cloud_logger.info(log_data)
+                    
                     results.append({
                         "file_name": file_name,
                         "short_desc": short_desc,
@@ -210,6 +258,15 @@ def run_accessibility_processing_and_logging(files_to_process, context):
                     })
                 else:
                     logging.error("Barrierefreie Beschreibung fehlgeschlagen für: %s", file_name)
+                    # Log failed files individually
+                    log_data = {
+                        "event_type": "accessibility_description_processed",
+                        "file_name": file_name,
+                        "file_count": 1,
+                        "status": "failed"
+                    }
+                    cloud_logger.info(log_data)
+                    
                     results.append({
                         "file_name": file_name,
                         "error": f"❌ Fehler bei Erstellung der barrierefreien Beschreibung für '{file_name}'."
@@ -217,6 +274,16 @@ def run_accessibility_processing_and_logging(files_to_process, context):
                     failed_count += 1
             except Exception as e:
                 logging.error("Unerwarteter Fehler bei barrierefreier Beschreibung für %s: %s", file_name, str(e))
+                # Log error files individually
+                log_data = {
+                    "event_type": "accessibility_description_processed",
+                    "file_name": file_name,
+                    "file_count": 1,
+                    "status": "error",
+                    "error_message": str(e)
+                }
+                cloud_logger.info(log_data)
+                
                 results.append({
                     "file_name": file_name,
                     "error": f"🚨 Unerwarteter FEHLER bei der Hauptverarbeitung von '{file_name}': {e}"
@@ -228,16 +295,10 @@ def run_accessibility_processing_and_logging(files_to_process, context):
     st.session_state.accessibility_export_data = results_for_export
     st.session_state.accessibility_summary = {"processed_count": processed_count, "failed_count": failed_count}
     
-    # Store click ID for logging
-    st.session_state.accessibility_click_id = click_id
-    
     st.success("Verarbeitung abgeschlossen.")
 
 def run_tts_processing_and_logging():
     """Comprehensive TTS processing function that handles everything in one place."""
-    # Generate unique click ID for this button click
-    click_id = get_button_click_id()
-    
     with st.status("Generiere Audio-Datei...", expanded=True) as status:
         status.write("Teile Text in initiale Stücke (Chunks)...")
         initial_chunks = chunk_text(st.session_state.text_content)
@@ -276,22 +337,33 @@ def run_tts_processing_and_logging():
             status.update(label="Audio-Generierung abgeschlossen!", state="complete")
             final_audio = b"".join(all_audio_bytes)
             
+            # Log successful TTS processing
+            log_data = {
+                "event_type": "text_to_speech_processed",
+                "file_count": 1,
+                "status": "success",
+                "chunks_processed": len(final_ssml_chunks)
+            }
+            cloud_logger.info(log_data)
+            
             # Store result in session state
             st.session_state.tts_result = {
                 "audio_bytes": final_audio,
                 "file_name": f"{Path(st.session_state.uploaded_file_name).stem}_mit_regie.mp3"
             }
         else:
+            # Log failed TTS processing
+            log_data = {
+                "event_type": "text_to_speech_processed",
+                "file_count": 1,
+                "status": "failed"
+            }
+            cloud_logger.info(log_data)
+            
             st.session_state.tts_result = {"error": "Fehler bei der Audio-Generierung"}
-    
-    # Store click ID for logging
-    st.session_state.tts_click_id = click_id
 
 def run_translation_processing_and_logging(uploaded_file):
     """Comprehensive translation processing function that handles everything in one place."""
-    # Generate unique click ID for this button click
-    click_id = get_button_click_id()
-    
     with st.status("Übersetzung läuft...", expanded=True) as status:
         # Status 1: Text extrahieren
         status.write("1. Extrahiere Text aus Dokument...")
@@ -303,6 +375,16 @@ def run_translation_processing_and_logging(uploaded_file):
         if not german_text or not german_text.strip() or german_text == "NO_TEXT_IN_PDF":
             status.update(label="Fehler: Kein lesbarer Text gefunden", state="error")
             st.error("Das Dokument scheint keinen lesbaren Text zu enthalten.")
+            
+            # Log failed translation
+            log_data = {
+                "event_type": "translation_processed",
+                "file_name": uploaded_file.name,
+                "file_count": 1,
+                "status": "failed",
+                "error_message": "No readable text found"
+            }
+            cloud_logger.info(log_data)
             return
         
         # Status 2: Übersetzungs-Leitfaden erstellen
@@ -312,6 +394,16 @@ def run_translation_processing_and_logging(uploaded_file):
         if not translation_guide or "Fehler" in str(translation_guide.get("plot_summary", "")):
             status.update(label="Fehler beim Erstellen des Leitfadens", state="error")
             st.error("Fehler beim Erstellen des Übersetzungs-Leitfadens.")
+            
+            # Log failed translation
+            log_data = {
+                "event_type": "translation_processed",
+                "file_name": uploaded_file.name,
+                "file_count": 1,
+                "status": "failed",
+                "error_message": "Failed to create translation guide"
+            }
+            cloud_logger.info(log_data)
             return
         
         # Status 3: Text in Chunks aufteilen
@@ -337,6 +429,16 @@ def run_translation_processing_and_logging(uploaded_file):
         
         status.update(label="Übersetzung abgeschlossen!", state="complete", expanded=False)
     
+    # Log successful translation
+    log_data = {
+        "event_type": "translation_processed",
+        "file_name": uploaded_file.name,
+        "file_count": 1,
+        "status": "success",
+        "chunks_processed": len(german_chunks)
+    }
+    cloud_logger.info(log_data)
+    
     # Store results in session state
     st.session_state.translation_result = {
         "translation_guide": translation_guide,
@@ -345,9 +447,6 @@ def run_translation_processing_and_logging(uploaded_file):
         "german_chunks": german_chunks,
         "file_name": uploaded_file.name
     }
-    
-    # Store click ID for logging
-    st.session_state.translation_click_id = click_id
 
 # Page config MUSS der erste Streamlit-Befehl sein
 st.set_page_config(page_title="Toolbox", page_icon="app_icon.png", layout="wide")
@@ -465,9 +564,9 @@ if selected_tool != st.session_state.get("last_selected_tool", ""):
     st.session_state.tts_result = None
     st.session_state.translation_result = None
     
-    # Clear all logging guards and click IDs when switching tools
+    # Clear all logging guards when switching tools
     for key in list(st.session_state.keys()):
-        if key.startswith("logged_") or key.endswith("_click_id") or key.endswith("_logged"):
+        if key.startswith("logged_"):
             del st.session_state[key]
     
     st.session_state.last_selected_tool = selected_tool
@@ -505,11 +604,6 @@ if selected_tool == "SEO Tags":
         st.divider()
         st.subheader("Verarbeitungsergebnisse")
         
-        # Log the event only once when displaying results
-        if st.session_state.get("seo_click_id") and not st.session_state.get("seo_logged"):
-            safe_log_event("seo_tags_processed", len(st.session_state.seo_results), st.session_state.seo_click_id)
-            st.session_state.seo_logged = True
-        
         for result in st.session_state.seo_results:
             if "error" in result:
                 st.error(result["error"])
@@ -545,11 +639,6 @@ if selected_tool == "SEO Tags":
     if st.session_state.get("seo_url_result"):
         st.divider()
         st.subheader("Verarbeitungsergebnis")
-        
-        # Log the event only once when displaying results
-        if st.session_state.get("seo_url_click_id") and not st.session_state.get("seo_url_logged"):
-            safe_log_event("seo_url_processed", 1, st.session_state.seo_url_click_id)
-            st.session_state.seo_url_logged = True
         
         result = st.session_state.seo_url_result
         if "error" in result:
@@ -604,11 +693,6 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
     if st.session_state.get("accessibility_results"):
         st.divider()
         st.subheader("Verarbeitungsergebnisse")
-        
-        # Log the event only once when displaying results
-        if st.session_state.get("accessibility_click_id") and not st.session_state.get("accessibility_logged"):
-            safe_log_event("accessibility_description_processed", len(st.session_state.accessibility_results), st.session_state.accessibility_click_id)
-            st.session_state.accessibility_logged = True
         
         for result in st.session_state.accessibility_results:
             if "error" in result:
@@ -793,11 +877,6 @@ elif selected_tool == "Text-to-Speech":
         st.divider()
         st.subheader("🎙️ Audio-Ergebnis")
         
-        # Log the event only once when displaying results
-        if st.session_state.get("tts_click_id") and not st.session_state.get("tts_logged"):
-            safe_log_event("text_to_speech_processed", 1, st.session_state.tts_click_id)
-            st.session_state.tts_logged = True
-        
         if "error" in st.session_state.tts_result:
             st.error(st.session_state.tts_result["error"])
         else:
@@ -826,11 +905,6 @@ elif selected_tool == "Manuskript-Übersetzung":
     # --- Translation Results Display ---
     if st.session_state.get("translation_result"):
         result = st.session_state.translation_result
-        
-        # Log the event only once when displaying results
-        if st.session_state.get("translation_click_id") and not st.session_state.get("translation_logged"):
-            safe_log_event("translation_processed", 1, st.session_state.translation_click_id)
-            st.session_state.translation_logged = True
         
         # Erfolgsmeldung anzeigen
         st.success("✅ Übersetzung erfolgreich abgeschlossen!")
