@@ -58,15 +58,31 @@ def translate_chunk(translation_guide, german_chunk, previous_english_chunk, gem
     st.warning("Platzhalter: Die Funktion 'translate_chunk' muss noch implementiert werden.")
     return f"[Übersetzung für: {german_chunk[:50]}...]"
 
+# State Management Callback Functions
+def start_seo_processing():
+    """Callback function to start SEO processing."""
+    st.session_state.run_seo_processing = True
 
+def start_seo_url_processing():
+    """Callback function to start SEO URL processing."""
+    st.session_state.run_seo_url_processing = True
 
-def run_seo_processing(files_to_process):
-    """Verarbeitet SEO Tags und loggt das Event."""
-    # Store results in session state instead of displaying immediately
-    if "seo_results" not in st.session_state:
-        st.session_state.seo_results = []
-    
-    st.session_state.seo_results = []  # Clear previous results
+def start_accessibility_processing():
+    """Callback function to start accessibility processing."""
+    st.session_state.run_accessibility_processing = True
+
+def start_tts_processing():
+    """Callback function to start TTS processing."""
+    st.session_state.run_tts_processing = True
+
+def start_translation_processing():
+    """Callback function to start translation processing."""
+    st.session_state.run_translation_processing = True
+
+# Processing Functions with State Management
+def process_seo_files(files_to_process):
+    """Process SEO files and store results in session state."""
+    results = []
     
     for i, uploaded_file in enumerate(files_to_process):
         file_name = uploaded_file.name
@@ -81,8 +97,7 @@ def run_seo_processing(files_to_process):
             
             if title and alt:
                 cloud_logger.info("SEO Tags erfolgreich generiert für: %s", file_name)
-                # Store result in session state
-                st.session_state.seo_results.append({
+                results.append({
                     "file_name": file_name,
                     "title": title,
                     "alt": alt,
@@ -91,35 +106,22 @@ def run_seo_processing(files_to_process):
                 })
             else:
                 logging.error("SEO Tag-Generierung fehlgeschlagen für: %s", file_name)
-                st.session_state.seo_results.append({
+                results.append({
                     "file_name": file_name,
                     "error": f"❌ Fehler bei SEO Tag-Generierung für '{file_name}'."
                 })
         except Exception as e:
             logging.error("Unerwarteter Fehler bei SEO Tag-Generierung für %s: %s", file_name, str(e))
-            st.session_state.seo_results.append({
+            results.append({
                 "file_name": file_name,
                 "error": f"🚨 Unerwarteter FEHLER bei '{file_name}': {e}"
             })
     
-    cloud_logger.info("SEO-Verarbeitung abgeschlossen")
-    
-    # Logge das Event am Ende
-    log_data = {
-        "event_type": "seo_tags_processing",
-        "file_count": len(files_to_process)
-    }
-    cloud_logger.info(log_data)
+    return results
 
-
-
-def run_accessibility_processing(files_to_process, context):
-    """Verarbeitet barrierefreie Bildbeschreibungen und loggt das Event."""
-    # Store results in session state instead of displaying immediately
-    if "accessibility_results" not in st.session_state:
-        st.session_state.accessibility_results = []
-    
-    st.session_state.accessibility_results = []  # Clear previous results
+def process_accessibility_files(files_to_process, context):
+    """Process accessibility files and store results in session state."""
+    results = []
     processed_count, failed_count = 0, 0
     results_for_export = []
     
@@ -145,8 +147,7 @@ def run_accessibility_processing(files_to_process, context):
             
             if short_desc and long_desc:
                 cloud_logger.info("Barrierefreie Beschreibung erfolgreich generiert für: %s", file_name)
-                # Store result in session state
-                st.session_state.accessibility_results.append({
+                results.append({
                     "file_name": file_name,
                     "short_desc": short_desc,
                     "long_desc": long_desc,
@@ -161,41 +162,23 @@ def run_accessibility_processing(files_to_process, context):
                 })
             else:
                 logging.error("Barrierefreie Beschreibung fehlgeschlagen für: %s", file_name)
-                st.session_state.accessibility_results.append({
+                results.append({
                     "file_name": file_name,
                     "error": f"❌ Fehler bei Erstellung der barrierefreien Beschreibung für '{file_name}'."
                 })
                 failed_count += 1
         except Exception as e:
             logging.error("Unerwarteter Fehler bei barrierefreier Beschreibung für %s: %s", file_name, str(e))
-            st.session_state.accessibility_results.append({
+            results.append({
                 "file_name": file_name,
                 "error": f"🚨 Unerwarteter FEHLER bei der Hauptverarbeitung von '{file_name}': {e}"
             })
             failed_count += 1
     
-    # Store export data and summary in session state
-    st.session_state.accessibility_export_data = results_for_export
-    st.session_state.accessibility_summary = {
-        "processed_count": processed_count,
-        "failed_count": failed_count
-    }
-    
-    # Logge das Event am Ende
-    log_data = {
-        "event_type": "accessibility_description_processed",
-        "file_count": len(files_to_process)
-    }
-    cloud_logger.info(log_data)
+    return results, results_for_export, {"processed_count": processed_count, "failed_count": failed_count}
 
-
-
-def run_tts_processing():
-    """Verarbeitet Text-to-Speech und loggt das Event."""
-    # Store results in session state instead of displaying immediately
-    if "tts_result" not in st.session_state:
-        st.session_state.tts_result = None
-    
+def process_tts():
+    """Process TTS and store results in session state."""
     with st.status("Generiere Audio-Datei...", expanded=True) as status:
         status.write("Teile Text in initiale Stücke (Chunks)...")
         initial_chunks = chunk_text(st.session_state.text_content)
@@ -234,23 +217,12 @@ def run_tts_processing():
             status.update(label="Audio-Generierung abgeschlossen!", state="complete")
             final_audio = b"".join(all_audio_bytes)
             
-            # Store result in session state
-            st.session_state.tts_result = {
+            return {
                 "audio_bytes": final_audio,
                 "file_name": f"{Path(st.session_state.uploaded_file_name).stem}_mit_regie.mp3"
             }
         else:
-            st.session_state.tts_result = {"error": "Fehler bei der Audio-Generierung"}
-    
-    # Logge das Event am Ende
-    log_data = {
-        "event_type": "text_to_speech_processed",
-        "file_count": 1
-    }
-    cloud_logger.info(log_data)
-    
-    st.session_state.tts_step = 2
-
+            return {"error": "Fehler bei der Audio-Generierung"}
 
 # Page config MUSS der erste Streamlit-Befehl sein
 st.set_page_config(page_title="Toolbox", page_icon="app_icon.png", layout="wide")
@@ -319,11 +291,37 @@ cloud_logger.info("Streamlit-App gestartet, Tool ausgewählt: %s", selected_tool
 
 
 # --- Logik für jedes Werkzeug ---
+# Initialize state variables for each tool
+if 'seo_results' not in st.session_state:
+    st.session_state.seo_results = None
+if 'run_seo_processing' not in st.session_state:
+    st.session_state.run_seo_processing = False
+if 'run_seo_url_processing' not in st.session_state:
+    st.session_state.run_seo_url_processing = False
+if 'accessibility_results' not in st.session_state:
+    st.session_state.accessibility_results = None
+if 'run_accessibility_processing' not in st.session_state:
+    st.session_state.run_accessibility_processing = False
+if 'tts_result' not in st.session_state:
+    st.session_state.tts_result = None
+if 'run_tts_processing' not in st.session_state:
+    st.session_state.run_tts_processing = False
+if 'run_translation_processing' not in st.session_state:
+    st.session_state.run_translation_processing = False
+if 'translation_result' not in st.session_state:
+    st.session_state.translation_result = None
+
 # Clear results when switching tools to ensure clean state
 if selected_tool != st.session_state.get("last_selected_tool", ""):
-    st.session_state.seo_results = []
-    st.session_state.accessibility_results = []
+    st.session_state.seo_results = None
+    st.session_state.accessibility_results = None
     st.session_state.tts_result = None
+    st.session_state.translation_result = None
+    st.session_state.run_seo_processing = False
+    st.session_state.run_seo_url_processing = False
+    st.session_state.run_accessibility_processing = False
+    st.session_state.run_tts_processing = False
+    st.session_state.run_translation_processing = False
     st.session_state.last_selected_tool = selected_tool
 
 if selected_tool == "SEO Tags":
@@ -350,12 +348,25 @@ if selected_tool == "SEO Tags":
             st.button(
                 "🚀 SEO Tags für Dateien verarbeiten",
                 key="process_seo_files_button",
-                on_click=run_seo_processing,
-                args=(seo_uploaded_files,)
+                on_click=start_seo_processing
             )
     
-    # --- Ergebnisse anzeigen ---
-    if "seo_results" in st.session_state and st.session_state.seo_results:
+    # --- SEO Processing Block ---
+    if st.session_state.run_seo_processing and seo_uploaded_files:
+        with st.spinner("Verarbeite SEO Tags..."):
+            results = process_seo_files(seo_uploaded_files)
+            
+            # Store results in session state
+            st.session_state.seo_results = results
+            # Reset the run status
+            st.session_state.run_seo_processing = False
+            
+            # Perform analytics logging
+            log_data = {"event_type": "seo_tags_processed", "file_count": len(seo_uploaded_files)}
+            cloud_logger.info(log_data)
+    
+    # --- SEO Results Display ---
+    if st.session_state.seo_results:
         st.divider()
         st.subheader("Verarbeitungsergebnisse")
         
@@ -390,36 +401,56 @@ if selected_tool == "SEO Tags":
         st.caption("Bitte füge einen direkten Link zu einer Bilddatei ein (z.B. endend auf .jpg, .png).")
 
         if image_url:
-            if st.button("🚀 SEO Tags für URL verarbeiten", type="primary", key="process_seo_url_button"):
-                with st.spinner(f"Verarbeite Bild von URL..."):
-                    try:
-                        title, alt = generate_seo_tags_cached(image_url, image_url, gemini_api_key)
-                        
-                        if title and alt:
-                            st.subheader("Verarbeitungsergebnis")
-                            base_id = "seo_url_result"
-                            alt_button_id = f"alt_btn_{base_id}"
-                            title_button_id = f"title_btn_{base_id}"
-                            with st.expander(f"✅ SEO Tags für die URL", expanded=True):
-                                col1, col2 = st.columns([1, 3], gap="medium")
-                                with col1:
-                                    st.image(image_url, width=150, caption="Vorschau")
-                                with col2:
-                                    st.text("ALT Tag:")
-                                    st.text_area("ALT", value=alt, height=75, key=f"alt_text_{base_id}", disabled=True, label_visibility="collapsed")
-                                    alt_json = json.dumps(alt)
-                                    components.html(f"""<button id="{alt_button_id}">ALT kopieren</button><script>document.getElementById("{alt_button_id}").addEventListener('click', function(){{navigator.clipboard.writeText({alt_json}).then(function(){{let b=document.getElementById("{alt_button_id}");let o=b.innerText;b.innerText='Kopiert!';setTimeout(function(){{b.innerText=o}},1500)}})}});</script><style>#{alt_button_id}{{background-color:#007bff;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;margin-top:5px}}#{alt_button_id}:hover{{background-color:#0056b3}}</style>""", height=45)
+            st.button("🚀 SEO Tags für URL verarbeiten", type="primary", key="process_seo_url_button", on_click=start_seo_url_processing)
+    
+    # --- SEO URL Processing Block ---
+    if st.session_state.run_seo_url_processing and image_url:
+        with st.spinner(f"Verarbeite Bild von URL..."):
+            try:
+                title, alt = generate_seo_tags_cached(image_url, image_url, gemini_api_key)
+                
+                if title and alt:
+                    st.session_state.seo_url_result = {
+                        "title": title,
+                        "alt": alt,
+                        "image_url": image_url
+                    }
+                else:
+                    st.session_state.seo_url_result = {"error": "❌ Fehler bei SEO Tag-Generierung für die URL."}
+            except Exception as e:
+                st.session_state.seo_url_result = {"error": f"🚨 Unerwarteter FEHLER bei der Verarbeitung der URL: {e}"}
+            
+            # Reset the run status
+            st.session_state.run_seo_url_processing = False
+    
+    # --- SEO URL Results Display ---
+    if st.session_state.get("seo_url_result"):
+        st.divider()
+        st.subheader("Verarbeitungsergebnis")
+        
+        result = st.session_state.seo_url_result
+        if "error" in result:
+            st.error(result["error"])
+        else:
+            base_id = "seo_url_result"
+            alt_button_id = f"alt_btn_{base_id}"
+            title_button_id = f"title_btn_{base_id}"
+            with st.expander(f"✅ SEO Tags für die URL", expanded=True):
+                col1, col2 = st.columns([1, 3], gap="medium")
+                with col1:
+                    st.image(result["image_url"], width=150, caption="Vorschau")
+                with col2:
+                    st.text("ALT Tag:")
+                    st.text_area("ALT", value=result["alt"], height=75, key=f"alt_text_{base_id}", disabled=True, label_visibility="collapsed")
+                    alt_json = json.dumps(result["alt"])
+                    components.html(f"""<button id="{alt_button_id}">ALT kopieren</button><script>document.getElementById("{alt_button_id}").addEventListener('click', function(){{navigator.clipboard.writeText({alt_json}).then(function(){{let b=document.getElementById("{alt_button_id}");let o=b.innerText;b.innerText='Kopiert!';setTimeout(function(){{b.innerText=o}},1500)}})}});</script><style>#{alt_button_id}{{background-color:#007bff;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;margin-top:5px}}#{alt_button_id}:hover{{background-color:#0056b3}}</style>""", height=45)
 
-                                    st.write("")
+                    st.write("")
 
-                                    st.text("TITLE Tag:")
-                                    st.text_area("TITLE", value=title, height=75, key=f"title_text_{base_id}", disabled=True, label_visibility="collapsed")
-                                    title_json = json.dumps(title)
-                                    components.html(f"""<button id="{title_button_id}">TITLE kopieren</button><script>document.getElementById("{title_button_id}").addEventListener('click', function(){{navigator.clipboard.writeText({title_json}).then(function(){{let b=document.getElementById("{title_button_id}");let o=b.innerText;b.innerText='Kopiert!';setTimeout(function(){{b.innerText=o}},1500)}})}});</script><style>#{title_button_id}{{background-color:#007bff;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;margin-top:5px}}#{title_button_id}:hover{{background-color:#0056b3}}</style>""", height=45)
-                        else:
-                            st.error(f"❌ Fehler bei SEO Tag-Generierung für die URL.")
-                    except Exception as e:
-                        st.error(f"🚨 Unerwarteter FEHLER bei der Verarbeitung der URL: {e}")
+                    st.text("TITLE Tag:")
+                    st.text_area("TITLE", value=result["title"], height=75, key=f"title_text_{base_id}", disabled=True, label_visibility="collapsed")
+                    title_json = json.dumps(result["title"])
+                    components.html(f"""<button id="{title_button_id}">TITLE kopieren</button><script>document.getElementById("{title_button_id}").addEventListener('click', function(){{navigator.clipboard.writeText({title_json}).then(function(){{let b=document.getElementById("{title_button_id}");let o=b.innerText;b.innerText='Kopiert!';setTimeout(function(){{b.innerText=o}},1500)}})}});</script><style>#{title_button_id}{{background-color:#007bff;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;margin-top:5px}}#{title_button_id}:hover{{background-color:#0056b3}}</style>""", height=45)
 
 elif selected_tool == "Barrierefreie Bildbeschreibung":
     st.header("Barrierefreie Bildbeschreibung (Kurz & Lang)")
@@ -442,12 +473,27 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
         st.button(
             "🚀 Beschreibungen verarbeiten",
             key="process_accessibility_button",
-            on_click=run_accessibility_processing,
-            args=(accessibility_uploaded_files, ebook_context_input)
+            on_click=start_accessibility_processing
         )
     
-    # --- Ergebnisse anzeigen ---
-    if "accessibility_results" in st.session_state and st.session_state.accessibility_results:
+    # --- Accessibility Processing Block ---
+    if st.session_state.run_accessibility_processing and accessibility_uploaded_files:
+        with st.spinner("Verarbeite barrierefreie Beschreibungen..."):
+            results, export_data, summary = process_accessibility_files(accessibility_uploaded_files, ebook_context_input)
+            
+            # Store results in session state
+            st.session_state.accessibility_results = results
+            st.session_state.accessibility_export_data = export_data
+            st.session_state.accessibility_summary = summary
+            # Reset the run status
+            st.session_state.run_accessibility_processing = False
+            
+            # Perform analytics logging
+            log_data = {"event_type": "accessibility_description_processed", "file_count": len(accessibility_uploaded_files)}
+            cloud_logger.info(log_data)
+    
+    # --- Accessibility Results Display ---
+    if st.session_state.accessibility_results:
         st.divider()
         st.subheader("Verarbeitungsergebnisse")
         
@@ -473,7 +519,7 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
                         components.html(f"""<button id="{long_desc_button_id}">Langbeschreibung kopieren</button><script>document.getElementById("{long_desc_button_id}").addEventListener('click', function(){{navigator.clipboard.writeText({long_json}).then(function(){{let b=document.getElementById("{long_desc_button_id}");let o=b.innerText;b.innerText='Kopiert!';setTimeout(function(){{b.innerText=o}},1500)}})}});</script><style>#{long_desc_button_id}{{background-color:#007bff;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;margin-top:5px}}#{long_desc_button_id}:hover{{background-color:#0056b3}}</style>""", height=45)
         
         # Export section
-        if "accessibility_export_data" in st.session_state and st.session_state.accessibility_export_data:
+        if st.session_state.accessibility_export_data:
             st.divider()
             st.subheader("📊 Ergebnisse exportieren")
             df = pd.DataFrame(st.session_state.accessibility_export_data)
@@ -488,7 +534,7 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
             )
         
         # Summary section
-        if "accessibility_summary" in st.session_state:
+        if st.session_state.accessibility_summary:
             st.divider()
             st.subheader("🏁 Zusammenfassung")
             summary = st.session_state.accessibility_summary
@@ -628,20 +674,30 @@ elif selected_tool == "Text-to-Speech":
         
         st.divider()
         st.subheader("4. Finale Audio-Datei generieren")
-        if st.button("🎙️ Audio mit KI-Regie generieren", type="primary", key="generate_audio_button"):
+        if st.button("🎙️ Audio mit KI-Regie generieren", type="primary", key="generate_audio_button", on_click=start_tts_processing):
             st.session_state.tts_step = 3
-            st.rerun()
 
-    if st.session_state.tts_step == 3:
+    # --- TTS Processing Block ---
+    if st.session_state.tts_step == 3 and st.session_state.run_tts_processing:
         final_selected_voice = st.session_state.selected_voice_name
         
         st.info(f"Audio-Generierung mit der Stimme '{final_selected_voice}' wird vorbereitet...")
         
-        # Verarbeitung starten
-        run_tts_processing()
+        # Process TTS
+        result = process_tts()
+        
+        # Store result in session state
+        st.session_state.tts_result = result
+        # Reset the run status
+        st.session_state.run_tts_processing = False
+        st.session_state.tts_step = 2
+        
+        # Perform analytics logging
+        log_data = {"event_type": "text_to_speech_processed", "file_count": 1}
+        cloud_logger.info(log_data)
     
-    # --- TTS Ergebnisse anzeigen ---
-    if "tts_result" in st.session_state and st.session_state.tts_result:
+    # --- TTS Results Display ---
+    if st.session_state.tts_result:
         st.divider()
         st.subheader("🎙️ Audio-Ergebnis")
         
@@ -668,71 +724,89 @@ elif selected_tool == "Manuskript-Übersetzung":
     )
 
     if uploaded_file:
-        if st.button("🚀 Übersetzung starten", type="primary", key="start_translation_button"):
-            with st.status("Übersetzung läuft...", expanded=True) as status:
-                # Status 1: Text extrahieren
-                status.write("1. Extrahiere Text aus Dokument...")
-                if uploaded_file.name.lower().endswith('.pdf'):
-                    german_text = read_text_from_pdf(uploaded_file)
-                else:
-                    german_text = read_text_from_docx(uploaded_file)
-                
-                if not german_text or not german_text.strip() or german_text == "NO_TEXT_IN_PDF":
-                    status.update(label="Fehler: Kein lesbarer Text gefunden", state="error")
-                    st.error("Das Dokument scheint keinen lesbaren Text zu enthalten.")
-                    st.stop()
-                
-                # Status 2: Übersetzungs-Leitfaden erstellen
-                status.write("2. Erstelle Übersetzungs-Leitfaden...")
-                translation_guide = generate_translation_guide(german_text, gemini_api_key)
-                
-                if not translation_guide or "Fehler" in str(translation_guide.get("plot_summary", "")):
-                    status.update(label="Fehler beim Erstellen des Leitfadens", state="error")
-                    st.error("Fehler beim Erstellen des Übersetzungs-Leitfadens.")
-                    st.stop()
-                
-                # Status 3: Text in Chunks aufteilen
-                status.write("3. Teile Text in Abschnitte...")
-                german_chunks = chunk_text(german_text, chunk_size=3000)
-                
-                # Status 4: Chunks übersetzen
-                status.write(f"4. Übersetze {len(german_chunks)} Abschnitte...")
-                english_chunks = []
-                
-                for i, german_chunk in enumerate(german_chunks):
-                    status.write(f"   Übersetze Abschnitt {i+1} von {len(german_chunks)}...")
-                    
-                    # Übergebe den vorherigen englischen Chunk für flüssige Übergänge
-                    previous_english_chunk = english_chunks[-1] if english_chunks else None
-                    
-                    english_chunk = translate_chunk(translation_guide, german_chunk, previous_english_chunk, gemini_api_key)
-                    english_chunks.append(english_chunk)
-                
-                # Status 5: Übersetztes Manuskript zusammenfügen
-                status.write("5. Setze übersetztes Manuskript zusammen...")
-                final_english_text = "\n\n".join(english_chunks)
-                
-                status.update(label="Übersetzung abgeschlossen!", state="complete", expanded=False)
+        st.button("🚀 Übersetzung starten", type="primary", key="start_translation_button", on_click=start_translation_processing)
+    
+    # --- Translation Processing Block ---
+    if st.session_state.run_translation_processing and uploaded_file:
+        with st.status("Übersetzung läuft...", expanded=True) as status:
+            # Status 1: Text extrahieren
+            status.write("1. Extrahiere Text aus Dokument...")
+            if uploaded_file.name.lower().endswith('.pdf'):
+                german_text = read_text_from_pdf(uploaded_file)
+            else:
+                german_text = read_text_from_docx(uploaded_file)
             
-            # Erfolgsmeldung anzeigen
-            st.success("✅ Übersetzung erfolgreich abgeschlossen!")
+            if not german_text or not german_text.strip() or german_text == "NO_TEXT_IN_PDF":
+                status.update(label="Fehler: Kein lesbarer Text gefunden", state="error")
+                st.error("Das Dokument scheint keinen lesbaren Text zu enthalten.")
+                st.stop()
             
-            # Style & Glossar-Leitfaden anzeigen
-            with st.expander("📋 Style & Glossar-Leitfaden anzeigen", expanded=False):
-                st.json(translation_guide)
+            # Status 2: Übersetzungs-Leitfaden erstellen
+            status.write("2. Erstelle Übersetzungs-Leitfaden...")
+            translation_guide = generate_translation_guide(german_text, gemini_api_key)
             
-            # Download-Button für das übersetzte Manuskript
-            st.download_button(
-                label="💾 Übersetztes Manuskript herunterladen (.txt)",
-                data=final_english_text.encode('utf-8'),
-                file_name=f"übersetzung_{Path(uploaded_file.name).stem}.txt",
-                mime="text/plain"
-            )
+            if not translation_guide or "Fehler" in str(translation_guide.get("plot_summary", "")):
+                status.update(label="Fehler beim Erstellen des Leitfadens", state="error")
+                st.error("Fehler beim Erstellen des Übersetzungs-Leitfadens.")
+                st.stop()
             
-            # Statistiken anzeigen
-            st.divider()
-            st.subheader("📊 Übersetzungs-Statistiken")
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Deutsche Wörter", len(german_text.split()))
-            col2.metric("Englische Wörter", len(final_english_text.split()))
-            col3.metric("Verarbeitete Abschnitte", len(german_chunks))
+            # Status 3: Text in Chunks aufteilen
+            status.write("3. Teile Text in Abschnitte...")
+            german_chunks = chunk_text(german_text, chunk_size=3000)
+            
+            # Status 4: Chunks übersetzen
+            status.write(f"4. Übersetze {len(german_chunks)} Abschnitte...")
+            english_chunks = []
+            
+            for i, german_chunk in enumerate(german_chunks):
+                status.write(f"   Übersetze Abschnitt {i+1} von {len(german_chunks)}...")
+                
+                # Übergebe den vorherigen englischen Chunk für flüssige Übergänge
+                previous_english_chunk = english_chunks[-1] if english_chunks else None
+                
+                english_chunk = translate_chunk(translation_guide, german_chunk, previous_english_chunk, gemini_api_key)
+                english_chunks.append(english_chunk)
+            
+            # Status 5: Übersetztes Manuskript zusammenfügen
+            status.write("5. Setze übersetztes Manuskript zusammen...")
+            final_english_text = "\n\n".join(english_chunks)
+            
+            status.update(label="Übersetzung abgeschlossen!", state="complete", expanded=False)
+        
+        # Store results in session state
+        st.session_state.translation_result = {
+            "translation_guide": translation_guide,
+            "final_english_text": final_english_text,
+            "german_text": german_text,
+            "german_chunks": german_chunks,
+            "file_name": uploaded_file.name
+        }
+        # Reset the run status
+        st.session_state.run_translation_processing = False
+    
+    # --- Translation Results Display ---
+    if st.session_state.get("translation_result"):
+        result = st.session_state.translation_result
+        
+        # Erfolgsmeldung anzeigen
+        st.success("✅ Übersetzung erfolgreich abgeschlossen!")
+        
+        # Style & Glossar-Leitfaden anzeigen
+        with st.expander("📋 Style & Glossar-Leitfaden anzeigen", expanded=False):
+            st.json(result["translation_guide"])
+        
+        # Download-Button für das übersetzte Manuskript
+        st.download_button(
+            label="💾 Übersetztes Manuskript herunterladen (.txt)",
+            data=result["final_english_text"].encode('utf-8'),
+            file_name=f"übersetzung_{Path(result['file_name']).stem}.txt",
+            mime="text/plain"
+        )
+        
+        # Statistiken anzeigen
+        st.divider()
+        st.subheader("📊 Übersetzungs-Statistiken")
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Deutsche Wörter", len(result["german_text"].split()))
+        col2.metric("Englische Wörter", len(result["final_english_text"].split()))
+        col3.metric("Verarbeitete Abschnitte", len(result["german_chunks"]))
