@@ -59,25 +59,9 @@ def translate_chunk(translation_guide, german_chunk, previous_english_chunk, gem
     return f"[Übersetzung für: {german_chunk[:50]}...]"
 
 # State Management Callback Functions
-def start_seo_processing():
-    """Callback function to start SEO processing."""
-    st.session_state.run_seo_processing = True
-
-def start_seo_url_processing():
-    """Callback function to start SEO URL processing."""
-    st.session_state.run_seo_url_processing = True
-
-def start_accessibility_processing():
-    """Callback function to start accessibility processing."""
-    st.session_state.run_accessibility_processing = True
-
-def start_tts_processing():
-    """Callback function to start TTS processing."""
-    st.session_state.run_tts_processing = True
-
-def start_translation_processing():
-    """Callback function to start translation processing."""
-    st.session_state.run_translation_processing = True
+def set_run_state_true(state_key):
+    """Reusable callback function that sets a state key to True."""
+    st.session_state[state_key] = True
 
 # Processing Functions with State Management
 def process_seo_files(files_to_process):
@@ -294,22 +278,22 @@ cloud_logger.info("Streamlit-App gestartet, Tool ausgewählt: %s", selected_tool
 # Initialize state variables for each tool
 if 'seo_results' not in st.session_state:
     st.session_state.seo_results = None
-if 'run_seo_processing' not in st.session_state:
-    st.session_state.run_seo_processing = False
-if 'run_seo_url_processing' not in st.session_state:
-    st.session_state.run_seo_url_processing = False
+if 'seo_button_clicked' not in st.session_state:
+    st.session_state.seo_button_clicked = False
+if 'seo_url_button_clicked' not in st.session_state:
+    st.session_state.seo_url_button_clicked = False
 if 'accessibility_results' not in st.session_state:
     st.session_state.accessibility_results = None
-if 'run_accessibility_processing' not in st.session_state:
-    st.session_state.run_accessibility_processing = False
+if 'accessibility_button_clicked' not in st.session_state:
+    st.session_state.accessibility_button_clicked = False
 if 'tts_result' not in st.session_state:
     st.session_state.tts_result = None
-if 'run_tts_processing' not in st.session_state:
-    st.session_state.run_tts_processing = False
-if 'run_translation_processing' not in st.session_state:
-    st.session_state.run_translation_processing = False
+if 'tts_button_clicked' not in st.session_state:
+    st.session_state.tts_button_clicked = False
 if 'translation_result' not in st.session_state:
     st.session_state.translation_result = None
+if 'translation_button_clicked' not in st.session_state:
+    st.session_state.translation_button_clicked = False
 
 # Clear results when switching tools to ensure clean state
 if selected_tool != st.session_state.get("last_selected_tool", ""):
@@ -317,11 +301,11 @@ if selected_tool != st.session_state.get("last_selected_tool", ""):
     st.session_state.accessibility_results = None
     st.session_state.tts_result = None
     st.session_state.translation_result = None
-    st.session_state.run_seo_processing = False
-    st.session_state.run_seo_url_processing = False
-    st.session_state.run_accessibility_processing = False
-    st.session_state.run_tts_processing = False
-    st.session_state.run_translation_processing = False
+    st.session_state.seo_button_clicked = False
+    st.session_state.seo_url_button_clicked = False
+    st.session_state.accessibility_button_clicked = False
+    st.session_state.tts_button_clicked = False
+    st.session_state.translation_button_clicked = False
     st.session_state.last_selected_tool = selected_tool
 
 if selected_tool == "SEO Tags":
@@ -348,22 +332,24 @@ if selected_tool == "SEO Tags":
             st.button(
                 "🚀 SEO Tags für Dateien verarbeiten",
                 key="process_seo_files_button",
-                on_click=start_seo_processing
+                on_click=set_run_state_true,
+                args=("seo_button_clicked",)
             )
     
     # --- SEO Processing Block ---
-    if st.session_state.run_seo_processing and seo_uploaded_files:
+    if st.session_state.seo_button_clicked and seo_uploaded_files:
         with st.spinner("Verarbeite SEO Tags..."):
             results = process_seo_files(seo_uploaded_files)
             
             # Store results in session state
             st.session_state.seo_results = results
-            # Reset the run status
-            st.session_state.run_seo_processing = False
             
-            # Perform analytics logging
+            # Perform analytics logging exactly once
             log_data = {"event_type": "seo_tags_processed", "file_count": len(seo_uploaded_files)}
             cloud_logger.info(log_data)
+            
+            # Reset the button state to prevent re-execution
+            st.session_state.seo_button_clicked = False
     
     # --- SEO Results Display ---
     if st.session_state.seo_results:
@@ -401,10 +387,10 @@ if selected_tool == "SEO Tags":
         st.caption("Bitte füge einen direkten Link zu einer Bilddatei ein (z.B. endend auf .jpg, .png).")
 
         if image_url:
-            st.button("🚀 SEO Tags für URL verarbeiten", type="primary", key="process_seo_url_button", on_click=start_seo_url_processing)
+            st.button("🚀 SEO Tags für URL verarbeiten", type="primary", key="process_seo_url_button", on_click=set_run_state_true, args=("seo_url_button_clicked",))
     
     # --- SEO URL Processing Block ---
-    if st.session_state.run_seo_url_processing and image_url:
+    if st.session_state.seo_url_button_clicked and image_url:
         with st.spinner(f"Verarbeite Bild von URL..."):
             try:
                 title, alt = generate_seo_tags_cached(image_url, image_url, gemini_api_key)
@@ -420,8 +406,12 @@ if selected_tool == "SEO Tags":
             except Exception as e:
                 st.session_state.seo_url_result = {"error": f"🚨 Unerwarteter FEHLER bei der Verarbeitung der URL: {e}"}
             
-            # Reset the run status
-            st.session_state.run_seo_url_processing = False
+            # Perform analytics logging exactly once
+            log_data = {"event_type": "seo_url_processed", "file_count": 1}
+            cloud_logger.info(log_data)
+            
+            # Reset the button state to prevent re-execution
+            st.session_state.seo_url_button_clicked = False
     
     # --- SEO URL Results Display ---
     if st.session_state.get("seo_url_result"):
@@ -473,11 +463,12 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
         st.button(
             "🚀 Beschreibungen verarbeiten",
             key="process_accessibility_button",
-            on_click=start_accessibility_processing
+            on_click=set_run_state_true,
+            args=("accessibility_button_clicked",)
         )
     
     # --- Accessibility Processing Block ---
-    if st.session_state.run_accessibility_processing and accessibility_uploaded_files:
+    if st.session_state.accessibility_button_clicked and accessibility_uploaded_files:
         with st.spinner("Verarbeite barrierefreie Beschreibungen..."):
             results, export_data, summary = process_accessibility_files(accessibility_uploaded_files, ebook_context_input)
             
@@ -485,12 +476,13 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
             st.session_state.accessibility_results = results
             st.session_state.accessibility_export_data = export_data
             st.session_state.accessibility_summary = summary
-            # Reset the run status
-            st.session_state.run_accessibility_processing = False
             
-            # Perform analytics logging
+            # Perform analytics logging exactly once
             log_data = {"event_type": "accessibility_description_processed", "file_count": len(accessibility_uploaded_files)}
             cloud_logger.info(log_data)
+            
+            # Reset the button state to prevent re-execution
+            st.session_state.accessibility_button_clicked = False
     
     # --- Accessibility Results Display ---
     if st.session_state.accessibility_results:
@@ -674,11 +666,11 @@ elif selected_tool == "Text-to-Speech":
         
         st.divider()
         st.subheader("4. Finale Audio-Datei generieren")
-        if st.button("🎙️ Audio mit KI-Regie generieren", type="primary", key="generate_audio_button", on_click=start_tts_processing):
+        if st.button("🎙️ Audio mit KI-Regie generieren", type="primary", key="generate_audio_button", on_click=set_run_state_true, args=("tts_button_clicked",)):
             st.session_state.tts_step = 3
 
     # --- TTS Processing Block ---
-    if st.session_state.tts_step == 3 and st.session_state.run_tts_processing:
+    if st.session_state.tts_step == 3 and st.session_state.tts_button_clicked:
         final_selected_voice = st.session_state.selected_voice_name
         
         st.info(f"Audio-Generierung mit der Stimme '{final_selected_voice}' wird vorbereitet...")
@@ -688,13 +680,14 @@ elif selected_tool == "Text-to-Speech":
         
         # Store result in session state
         st.session_state.tts_result = result
-        # Reset the run status
-        st.session_state.run_tts_processing = False
         st.session_state.tts_step = 2
         
-        # Perform analytics logging
+        # Perform analytics logging exactly once
         log_data = {"event_type": "text_to_speech_processed", "file_count": 1}
         cloud_logger.info(log_data)
+        
+        # Reset the button state to prevent re-execution
+        st.session_state.tts_button_clicked = False
     
     # --- TTS Results Display ---
     if st.session_state.tts_result:
@@ -724,10 +717,10 @@ elif selected_tool == "Manuskript-Übersetzung":
     )
 
     if uploaded_file:
-        st.button("🚀 Übersetzung starten", type="primary", key="start_translation_button", on_click=start_translation_processing)
+        st.button("🚀 Übersetzung starten", type="primary", key="start_translation_button", on_click=set_run_state_true, args=("translation_button_clicked",))
     
     # --- Translation Processing Block ---
-    if st.session_state.run_translation_processing and uploaded_file:
+    if st.session_state.translation_button_clicked and uploaded_file:
         with st.status("Übersetzung läuft...", expanded=True) as status:
             # Status 1: Text extrahieren
             status.write("1. Extrahiere Text aus Dokument...")
@@ -781,8 +774,13 @@ elif selected_tool == "Manuskript-Übersetzung":
             "german_chunks": german_chunks,
             "file_name": uploaded_file.name
         }
-        # Reset the run status
-        st.session_state.run_translation_processing = False
+        
+        # Perform analytics logging exactly once
+        log_data = {"event_type": "translation_processed", "file_count": 1}
+        cloud_logger.info(log_data)
+        
+        # Reset the button state to prevent re-execution
+        st.session_state.translation_button_clicked = False
     
     # --- Translation Results Display ---
     if st.session_state.get("translation_result"):
