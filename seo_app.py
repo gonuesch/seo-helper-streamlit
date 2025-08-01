@@ -83,11 +83,19 @@ def set_run_state_true(state_key):
     """Reusable callback function that sets a state key to True."""
     st.session_state[state_key] = True
 
+# Button click tracking
+def get_button_click_id():
+    """Generates a unique click ID for tracking button clicks."""
+    if 'click_counter' not in st.session_state:
+        st.session_state.click_counter = 0
+    st.session_state.click_counter += 1
+    return f"click_{st.session_state.click_counter}_{int(time.time())}"
+
 # Comprehensive Processing Functions
 def run_seo_processing_and_logging(files_to_process):
     """Comprehensive SEO processing function that handles everything in one place."""
-    # Generate unique session ID for this processing run
-    session_id = str(uuid.uuid4())
+    # Generate unique click ID for this button click
+    click_id = get_button_click_id()
     
     # Store results in session state instead of displaying immediately
     results = []
@@ -128,14 +136,15 @@ def run_seo_processing_and_logging(files_to_process):
     # Store results in session state
     st.session_state.seo_results = results
     
-    # Safe logging happens exactly once at the end
-    safe_log_event("seo_tags_processed", len(files_to_process), session_id)
+    # Store click ID for logging
+    st.session_state.seo_click_id = click_id
+    
     st.success("SEO-Verarbeitung abgeschlossen.")
 
 def run_seo_url_processing_and_logging(image_url):
     """Comprehensive SEO URL processing function that handles everything in one place."""
-    # Generate unique session ID for this processing run
-    session_id = str(uuid.uuid4())
+    # Generate unique click ID for this button click
+    click_id = get_button_click_id()
     
     with st.spinner(f"Verarbeite Bild von URL..."):
         try:
@@ -152,13 +161,13 @@ def run_seo_url_processing_and_logging(image_url):
         except Exception as e:
             st.session_state.seo_url_result = {"error": f"🚨 Unerwarteter FEHLER bei der Verarbeitung der URL: {e}"}
     
-    # Safe logging happens exactly once at the end
-    safe_log_event("seo_url_processed", 1, session_id)
+    # Store click ID for logging
+    st.session_state.seo_url_click_id = click_id
 
 def run_accessibility_processing_and_logging(files_to_process, context):
     """Comprehensive accessibility processing function that handles everything in one place."""
-    # Generate unique session ID for this processing run
-    session_id = str(uuid.uuid4())
+    # Generate unique click ID for this button click
+    click_id = get_button_click_id()
     
     processed_count, failed_count = 0, 0
     results = []
@@ -219,14 +228,15 @@ def run_accessibility_processing_and_logging(files_to_process, context):
     st.session_state.accessibility_export_data = results_for_export
     st.session_state.accessibility_summary = {"processed_count": processed_count, "failed_count": failed_count}
     
-    # Safe logging happens exactly once at the end
-    safe_log_event("accessibility_description_processed", len(files_to_process), session_id)
+    # Store click ID for logging
+    st.session_state.accessibility_click_id = click_id
+    
     st.success("Verarbeitung abgeschlossen.")
 
 def run_tts_processing_and_logging():
     """Comprehensive TTS processing function that handles everything in one place."""
-    # Generate unique session ID for this processing run
-    session_id = str(uuid.uuid4())
+    # Generate unique click ID for this button click
+    click_id = get_button_click_id()
     
     with st.status("Generiere Audio-Datei...", expanded=True) as status:
         status.write("Teile Text in initiale Stücke (Chunks)...")
@@ -274,13 +284,13 @@ def run_tts_processing_and_logging():
         else:
             st.session_state.tts_result = {"error": "Fehler bei der Audio-Generierung"}
     
-    # Safe logging happens exactly once at the end
-    safe_log_event("text_to_speech_processed", 1, session_id)
+    # Store click ID for logging
+    st.session_state.tts_click_id = click_id
 
 def run_translation_processing_and_logging(uploaded_file):
     """Comprehensive translation processing function that handles everything in one place."""
-    # Generate unique session ID for this processing run
-    session_id = str(uuid.uuid4())
+    # Generate unique click ID for this button click
+    click_id = get_button_click_id()
     
     with st.status("Übersetzung läuft...", expanded=True) as status:
         # Status 1: Text extrahieren
@@ -336,8 +346,8 @@ def run_translation_processing_and_logging(uploaded_file):
         "file_name": uploaded_file.name
     }
     
-    # Safe logging happens exactly once at the end
-    safe_log_event("translation_processed", 1, session_id)
+    # Store click ID for logging
+    st.session_state.translation_click_id = click_id
 
 # Page config MUSS der erste Streamlit-Befehl sein
 st.set_page_config(page_title="Toolbox", page_icon="app_icon.png", layout="wide")
@@ -455,9 +465,9 @@ if selected_tool != st.session_state.get("last_selected_tool", ""):
     st.session_state.tts_result = None
     st.session_state.translation_result = None
     
-    # Clear all logging guards when switching tools
+    # Clear all logging guards and click IDs when switching tools
     for key in list(st.session_state.keys()):
-        if key.startswith("logged_"):
+        if key.startswith("logged_") or key.endswith("_click_id") or key.endswith("_logged"):
             del st.session_state[key]
     
     st.session_state.last_selected_tool = selected_tool
@@ -495,6 +505,11 @@ if selected_tool == "SEO Tags":
         st.divider()
         st.subheader("Verarbeitungsergebnisse")
         
+        # Log the event only once when displaying results
+        if st.session_state.get("seo_click_id") and not st.session_state.get("seo_logged"):
+            safe_log_event("seo_tags_processed", len(st.session_state.seo_results), st.session_state.seo_click_id)
+            st.session_state.seo_logged = True
+        
         for result in st.session_state.seo_results:
             if "error" in result:
                 st.error(result["error"])
@@ -530,6 +545,11 @@ if selected_tool == "SEO Tags":
     if st.session_state.get("seo_url_result"):
         st.divider()
         st.subheader("Verarbeitungsergebnis")
+        
+        # Log the event only once when displaying results
+        if st.session_state.get("seo_url_click_id") and not st.session_state.get("seo_url_logged"):
+            safe_log_event("seo_url_processed", 1, st.session_state.seo_url_click_id)
+            st.session_state.seo_url_logged = True
         
         result = st.session_state.seo_url_result
         if "error" in result:
@@ -584,6 +604,11 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
     if st.session_state.get("accessibility_results"):
         st.divider()
         st.subheader("Verarbeitungsergebnisse")
+        
+        # Log the event only once when displaying results
+        if st.session_state.get("accessibility_click_id") and not st.session_state.get("accessibility_logged"):
+            safe_log_event("accessibility_description_processed", len(st.session_state.accessibility_results), st.session_state.accessibility_click_id)
+            st.session_state.accessibility_logged = True
         
         for result in st.session_state.accessibility_results:
             if "error" in result:
@@ -768,6 +793,11 @@ elif selected_tool == "Text-to-Speech":
         st.divider()
         st.subheader("🎙️ Audio-Ergebnis")
         
+        # Log the event only once when displaying results
+        if st.session_state.get("tts_click_id") and not st.session_state.get("tts_logged"):
+            safe_log_event("text_to_speech_processed", 1, st.session_state.tts_click_id)
+            st.session_state.tts_logged = True
+        
         if "error" in st.session_state.tts_result:
             st.error(st.session_state.tts_result["error"])
         else:
@@ -796,6 +826,11 @@ elif selected_tool == "Manuskript-Übersetzung":
     # --- Translation Results Display ---
     if st.session_state.get("translation_result"):
         result = st.session_state.translation_result
+        
+        # Log the event only once when displaying results
+        if st.session_state.get("translation_click_id") and not st.session_state.get("translation_logged"):
+            safe_log_event("translation_processed", 1, st.session_state.translation_click_id)
+            st.session_state.translation_logged = True
         
         # Erfolgsmeldung anzeigen
         st.success("✅ Übersetzung erfolgreich abgeschlossen!")
