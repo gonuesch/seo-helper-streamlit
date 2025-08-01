@@ -18,7 +18,7 @@ from api_calls import generate_seo_tags_cached, generate_accessibility_descripti
 
 # Richte den Google Cloud Pub/Sub Publisher ein
 publisher = pubsub_v1.PublisherClient()
-topic_path = publisher.topic_path("avid-infinity-458913-p3", "event-tracking")
+topic_path = publisher.topic_path("avid-infinity-458913-p3", "event-tracking-toolbox")
 
 # Pub/Sub Event Tracking Funktion
 def send_event_to_pubsub(event_data):
