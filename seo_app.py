@@ -71,7 +71,7 @@ def run_seo_processing(files_to_process, container):
         try:
             original_image_bytes = uploaded_file.getvalue()
             
-            with container.spinner(f"Generiere SEO Tags für {file_name}..."):
+            with st.spinner(f"Generiere SEO Tags für {file_name}..."):
                 cloud_logger.info("Generiere SEO Tags für Datei: %s", file_name)
                 title, alt = generate_seo_tags_cached(original_image_bytes, file_name, gemini_api_key)
             
@@ -128,7 +128,7 @@ def run_accessibility_processing(files_to_process, context, container):
             original_image_bytes = uploaded_file.getvalue()
             image_bytes_for_api = original_image_bytes
             if Path(file_name).suffix.lower() in ['.tif', '.tiff']:
-                with container.spinner(f"Konvertiere {file_name} (TIFF) zu PNG..."):
+                with st.spinner(f"Konvertiere {file_name} (TIFF) zu PNG..."):
                     try:
                         image_bytes_for_api = convert_tiff_to_png_bytes(original_image_bytes)
                     except Exception as conv_e:
@@ -136,7 +136,7 @@ def run_accessibility_processing(files_to_process, context, container):
                         failed_count += 1
                         continue
             
-            with container.spinner(f"Generiere barrierefreie Beschreibung für {file_name}..."):
+            with st.spinner(f"Generiere barrierefreie Beschreibung für {file_name}..."):
                 cloud_logger.info("Generiere barrierefreie Beschreibung für Datei: %s", file_name)
                 short_desc, long_desc = generate_accessibility_description_cached(image_bytes_for_api, file_name, context, gemini_api_key)
             
@@ -206,7 +206,7 @@ def run_accessibility_processing(files_to_process, context, container):
 
 def run_tts_processing(container):
     """Verarbeitet Text-to-Speech und loggt das Event."""
-    with container.status("Generiere Audio-Datei...", expanded=True) as status:
+    with st.status("Generiere Audio-Datei...", expanded=True) as status:
         status.write("Teile Text in initiale Stücke (Chunks)...")
         initial_chunks = chunk_text(st.session_state.text_content)
         
