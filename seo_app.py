@@ -489,6 +489,13 @@ if selected_tool != st.session_state.get("last_selected_tool", ""):
     st.session_state.tts_result = None
     st.session_state.translation_result = None
     
+    # Reset button click states
+    st.session_state.seo_button_clicked = False
+    st.session_state.seo_url_button_clicked = False
+    st.session_state.accessibility_button_clicked = False
+    st.session_state.tts_button_clicked = False
+    st.session_state.translation_button_clicked = False
+    
     # Clear all logging guards and click IDs when switching tools
     for key in list(st.session_state.keys()):
         if key.startswith("logged_") or key.endswith("_click_id") or key.endswith("_logged") or key.endswith("_button_clicked"):
