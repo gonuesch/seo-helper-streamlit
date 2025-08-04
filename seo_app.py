@@ -53,6 +53,7 @@ def set_button_clicked_true(state_key):
 # Button click tracking for logging
 def get_button_click_id():
     """Generates a unique click ID for tracking button clicks."""
+    # Ensure click_counter is initialized
     if 'click_counter' not in st.session_state:
         st.session_state.click_counter = 0
     st.session_state.click_counter += 1
@@ -543,7 +544,7 @@ if selected_tool == "SEO Tags":
             )
     
     # --- Block 1: Verarbeitung und Event-Senden ---
-    if st.session_state.seo_button_clicked and seo_uploaded_files:
+    if st.session_state.get("seo_button_clicked", False) and seo_uploaded_files:
         # Führe die Verarbeitung aus
         results = []
         with st.spinner("Verarbeite SEO Tags..."):
@@ -603,11 +604,11 @@ if selected_tool == "SEO Tags":
         st.success("SEO-Verarbeitung abgeschlossen.")
     
     # --- Block 2: Ergebnisse anzeigen, wenn sie im State vorhanden sind ---
-    if st.session_state.seo_results:
+    if st.session_state.get("seo_results"):
         st.divider()
         st.subheader("Verarbeitungsergebnisse")
         
-        for result in st.session_state.seo_results:
+        for result in st.session_state.get("seo_results", []):
             if "error" in result:
                 st.error(result["error"])
             else:
@@ -639,7 +640,7 @@ if selected_tool == "SEO Tags":
             st.button("🚀 SEO Tags für URL verarbeiten", type="primary", key="process_seo_url_button", on_click=set_button_clicked_true, args=("seo_url_button_clicked",))
     
     # --- Block 1: URL Verarbeitung und Event-Senden ---
-    if st.session_state.seo_url_button_clicked and image_url:
+    if st.session_state.get("seo_url_button_clicked", False) and image_url:
         with st.spinner(f"Verarbeite Bild von URL..."):
             try:
                 title, alt = generate_seo_tags_cached(image_url, image_url, gemini_api_key)
@@ -664,7 +665,7 @@ if selected_tool == "SEO Tags":
                 }
 
         # Sende das Tracking-Event GENAU EINMAL
-        result = st.session_state.seo_url_result
+        result = st.session_state.get("seo_url_result")
         log_data = {
             "event_type": "seo_url_processed",
             "file_count": 1,
@@ -678,11 +679,11 @@ if selected_tool == "SEO Tags":
         st.session_state.seo_url_button_clicked = False
     
     # --- Block 2: URL Ergebnisse anzeigen ---
-    if st.session_state.seo_url_result:
+    if st.session_state.get("seo_url_result"):
         st.divider()
         st.subheader("Verarbeitungsergebnis")
         
-        result = st.session_state.seo_url_result
+        result = st.session_state.get("seo_url_result")
         if "error" in result:
             st.error(result["error"])
         else:
@@ -732,7 +733,7 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
         )
     
     # --- Block 1: Verarbeitung und Event-Senden ---
-    if st.session_state.accessibility_button_clicked and accessibility_uploaded_files:
+    if st.session_state.get("accessibility_button_clicked", False) and accessibility_uploaded_files:
         processed_count, failed_count = 0, 0
         results = []
         results_for_export = []
@@ -819,11 +820,11 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
         st.success("Verarbeitung abgeschlossen.")
     
     # --- Block 2: Ergebnisse anzeigen, wenn sie im State vorhanden sind ---
-    if st.session_state.accessibility_results:
+    if st.session_state.get("accessibility_results"):
         st.divider()
         st.subheader("Verarbeitungsergebnisse")
         
-        for result in st.session_state.accessibility_results:
+        for result in st.session_state.get("accessibility_results", []):
             if "error" in result:
                 st.error(result["error"])
             else:
@@ -845,10 +846,10 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
                         components.html(f"""<button id="{long_desc_button_id}">Langbeschreibung kopieren</button><script>document.getElementById("{long_desc_button_id}").addEventListener('click', function(){{navigator.clipboard.writeText({long_json}).then(function(){{let b=document.getElementById("{long_desc_button_id}");let o=b.innerText;b.innerText='Kopiert!';setTimeout(function(){{b.innerText=o}},1500)}})}});</script><style>#{long_desc_button_id}{{background-color:#007bff;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;margin-top:5px}}#{long_desc_button_id}:hover{{background-color:#0056b3}}</style>""", height=45)
         
         # Export section
-        if st.session_state.accessibility_export_data:
+        if st.session_state.get("accessibility_export_data"):
             st.divider()
             st.subheader("📊 Ergebnisse exportieren")
-            df = pd.DataFrame(st.session_state.accessibility_export_data)
+            df = pd.DataFrame(st.session_state.get("accessibility_export_data", []))
             output = BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 df.to_excel(writer, index=False, sheet_name='Bildbeschreibungen')
@@ -860,10 +861,10 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
             )
         
         # Summary section
-        if st.session_state.accessibility_summary:
+        if st.session_state.get("accessibility_summary"):
             st.divider()
             st.subheader("🏁 Zusammenfassung")
-            summary = st.session_state.accessibility_summary
+            summary = st.session_state.get("accessibility_summary")
             col1, col2 = st.columns(2)
             col1.metric("Erfolgreich verarbeitet", summary["processed_count"])
             col2.metric("Fehlgeschlagen", summary["failed_count"], delta=None if summary["failed_count"] == 0 else -summary["failed_count"], delta_color="inverse")
