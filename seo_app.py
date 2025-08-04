@@ -368,6 +368,50 @@ st.set_page_config(page_title="Toolbox", page_icon="app_icon.png", layout="wide"
 # bereits authentifizierten und autorisierten Nutzern erreicht.
 # ==============================================================================
 
+# Initialize ALL state variables at the very beginning
+if 'tts_step' not in st.session_state:
+    st.session_state.tts_step = 1
+if 'guideline' not in st.session_state:
+    st.session_state.guideline = None
+if 'top_3_voices' not in st.session_state:
+    st.session_state.top_3_voices = []
+if 'text_content' not in st.session_state:
+    st.session_state.text_content = None
+if 'summary' not in st.session_state:
+    st.session_state.summary = None
+if 'selected_voice_name' not in st.session_state:
+    st.session_state.selected_voice_name = ""
+if 'uploaded_file_name' not in st.session_state:
+    st.session_state.uploaded_file_name = None
+
+# Initialize button click state variables
+if 'seo_button_clicked' not in st.session_state:
+    st.session_state.seo_button_clicked = False
+if 'seo_url_button_clicked' not in st.session_state:
+    st.session_state.seo_url_button_clicked = False
+if 'accessibility_button_clicked' not in st.session_state:
+    st.session_state.accessibility_button_clicked = False
+if 'tts_button_clicked' not in st.session_state:
+    st.session_state.tts_button_clicked = False
+if 'translation_button_clicked' not in st.session_state:
+    st.session_state.translation_button_clicked = False
+
+# Initialize result state variables
+if 'seo_results' not in st.session_state:
+    st.session_state.seo_results = None
+if 'seo_url_result' not in st.session_state:
+    st.session_state.seo_url_result = None
+if 'accessibility_results' not in st.session_state:
+    st.session_state.accessibility_results = None
+if 'accessibility_export_data' not in st.session_state:
+    st.session_state.accessibility_export_data = None
+if 'accessibility_summary' not in st.session_state:
+    st.session_state.accessibility_summary = None
+if 'tts_result' not in st.session_state:
+    st.session_state.tts_result = None
+if 'translation_result' not in st.session_state:
+    st.session_state.translation_result = None
+
 # API-Schlüssel direkt aus st.secrets laden
 gemini_api_key = st.secrets.get("gemini_api_key")
 elevenlabs_api_key = st.secrets.get("elevenlabs_api_key")
@@ -426,49 +470,7 @@ logging.info("Streamlit-App gestartet, Tool ausgewählt: %s", selected_tool)
 
 
 # --- Logik für jedes Werkzeug ---
-# Initialize state variables for each tool
-if 'tts_step' not in st.session_state:
-    st.session_state.tts_step = 1
-if 'guideline' not in st.session_state:
-    st.session_state.guideline = None
-if 'top_3_voices' not in st.session_state:
-    st.session_state.top_3_voices = []
-if 'text_content' not in st.session_state:
-    st.session_state.text_content = None
-if 'summary' not in st.session_state:
-    st.session_state.summary = None
-if 'selected_voice_name' not in st.session_state:
-    st.session_state.selected_voice_name = ""
-if 'uploaded_file_name' not in st.session_state:
-    st.session_state.uploaded_file_name = None
 
-# Initialize button click state variables
-if 'seo_button_clicked' not in st.session_state:
-    st.session_state.seo_button_clicked = False
-if 'seo_url_button_clicked' not in st.session_state:
-    st.session_state.seo_url_button_clicked = False
-if 'accessibility_button_clicked' not in st.session_state:
-    st.session_state.accessibility_button_clicked = False
-if 'tts_button_clicked' not in st.session_state:
-    st.session_state.tts_button_clicked = False
-if 'translation_button_clicked' not in st.session_state:
-    st.session_state.translation_button_clicked = False
-
-# Initialize result state variables
-if 'seo_results' not in st.session_state:
-    st.session_state.seo_results = None
-if 'seo_url_result' not in st.session_state:
-    st.session_state.seo_url_result = None
-if 'accessibility_results' not in st.session_state:
-    st.session_state.accessibility_results = None
-if 'accessibility_export_data' not in st.session_state:
-    st.session_state.accessibility_export_data = None
-if 'accessibility_summary' not in st.session_state:
-    st.session_state.accessibility_summary = None
-if 'tts_result' not in st.session_state:
-    st.session_state.tts_result = None
-if 'translation_result' not in st.session_state:
-    st.session_state.translation_result = None
 
 # Clear state when switching tools
 if selected_tool != st.session_state.get("last_selected_tool", ""):
