@@ -16,3 +16,5 @@ requests
 google-cloud-logging
 google-cloud-secret-manager
 google-cloud-pubsub
+google-cloud-storage
+google-cloud-firestore

@@ -11,6 +11,8 @@ import logging
 import google.cloud.pubsub_v1 as pubsub_v1
 import uuid
 import time
+import datetime
+from google.cloud import storage, firestore, pubsub_v1
 
 # Importiere Funktionen aus deinen Modulen
 from utils import convert_tiff_to_png_bytes, read_text_from_docx, read_text_from_pdf, chunk_text
@@ -19,6 +21,17 @@ from api_calls import generate_seo_tags_cached, generate_accessibility_descripti
 # Richte den Google Cloud Pub/Sub Publisher ein
 publisher = pubsub_v1.PublisherClient()
 topic_path = publisher.topic_path("avid-infinity-458913-p3", "event-tracking-toolbox")
+
+# Google Cloud Clients für asynchrone Übersetzung initialisieren
+PROJECT_ID = "avid-infinity-458913-p3"
+BUCKET_NAME = "manuskripte-upload-avid-infinity"
+FIRESTORE_DB_ID = "hbu-toolbox-firestone"
+PUB_SUB_TOPIC = "start-translation"
+
+storage_client = storage.Client(project=PROJECT_ID)
+firestore_client = firestore.Client(project=PROJECT_ID, database=FIRESTORE_DB_ID)
+pubsub_publisher = pubsub_v1.PublisherClient()
+translation_topic_path = pubsub_publisher.topic_path(PROJECT_ID, PUB_SUB_TOPIC)
 
 # Pub/Sub Event Tracking Funktion
 def send_event_to_pubsub(event_data):
@@ -35,15 +48,7 @@ def send_event_to_pubsub(event_data):
         st.error(f"Fehler beim Senden des Tracking-Events: {e}")
         logging.error(f"Pub/Sub Fehler: {e}")
 
-# Platzhalter-Funktionen, um Fehler zu vermeiden.
-# Du musst hier noch deine eigentliche Logik implementieren.
-def generate_translation_guide(german_text, gemini_api_key=None):
-    st.warning("Platzhalter: Die Funktion 'generate_translation_guide' muss noch implementiert werden.")
-    return {"plot_summary": "Dies ist eine Test-Zusammenfassung.", "key_terms": {"Beispiel": "Example"}}
 
-def translate_chunk(translation_guide, german_chunk, previous_english_chunk, gemini_api_key=None):
-    st.warning("Platzhalter: Die Funktion 'translate_chunk' muss noch implementiert werden.")
-    return f"[Übersetzung für: {german_chunk[:50]}...]"
 
 # State Management Callback Functions
 def set_button_clicked_true(state_key):
@@ -58,6 +63,47 @@ def get_button_click_id():
         st.session_state.click_counter = 0
     st.session_state.click_counter += 1
     return f"click_{st.session_state.click_counter}_{int(time.time())}"
+
+def start_translation_job(uploaded_file):
+    """Startet einen asynchronen Übersetzungsauftrag."""
+    if not uploaded_file:
+        st.warning("Bitte zuerst eine Datei auswählen.")
+        return
+
+    job_id = str(uuid.uuid4())
+    gcs_file_name = f"{job_id}-{uploaded_file.name}"
+
+    try:
+        # 1. Datei in Cloud Storage hochladen
+        bucket = storage_client.bucket(BUCKET_NAME)
+        blob = bucket.blob(gcs_file_name)
+        blob.upload_from_file(uploaded_file, content_type=uploaded_file.type)
+        gcs_path = f"gs://{BUCKET_NAME}/{gcs_file_name}"
+
+        # 2. Job-Eintrag in Firestore erstellen
+        job_ref = firestore_client.collection("translation_jobs").document(job_id)
+        job_ref.set({
+            "status": "pending",
+            "source_gcs_path": gcs_path,
+            "user_email": st.session_state.get("email", "unknown"),  # Nutzt E-Mail aus dem session_state
+            "created_at": datetime.datetime.utcnow(),
+            "file_name": uploaded_file.name
+        })
+
+        # 3. Nachricht in Pub/Sub veröffentlichen
+        message_data = json.dumps({"job_id": job_id}).encode('utf-8')
+        future = pubsub_publisher.publish(translation_topic_path, data=message_data)
+        future.result()  # Stellt sicher, dass die Nachricht gesendet wurde
+
+        st.success(f"Übersetzungsauftrag '{uploaded_file.name}' wurde gestartet! Job-ID: {job_id}")
+        
+        # Store job info in session state for tracking
+        st.session_state.translation_job_id = job_id
+        st.session_state.translation_job_status = "pending"
+
+    except Exception as e:
+        st.error(f"Ein Fehler ist aufgetreten: {e}")
+        logging.error(f"Translation job error: {e}")
 
 # Comprehensive Processing Functions
 def run_seo_processing_and_logging(files_to_process):
@@ -280,85 +326,7 @@ def run_tts_processing_and_logging():
     # Store click ID for logging
     st.session_state.tts_click_id = click_id
 
-def run_translation_processing_and_logging(uploaded_file):
-    """Comprehensive translation processing function that handles everything in one place."""
-    # Generate unique click ID for this button click
-    click_id = get_button_click_id()
-    
-    with st.status("Übersetzung läuft...", expanded=True) as status:
-        # Status 1: Text extrahieren
-        status.write("1. Extrahiere Text aus Dokument...")
-        if uploaded_file.name.lower().endswith('.pdf'):
-            german_text = read_text_from_pdf(uploaded_file)
-        else:
-            german_text = read_text_from_docx(uploaded_file)
-        
-        if not german_text or not german_text.strip() or german_text == "NO_TEXT_IN_PDF":
-            status.update(label="Fehler: Kein lesbarer Text gefunden", state="error")
-            st.error("Das Dokument scheint keinen lesbaren Text zu enthalten.")
-            
-            # Store failed result
-            st.session_state.translation_result = {
-                "status": "failed",
-                "error_message": "No readable text found",
-                "file_name": uploaded_file.name
-            }
-            st.session_state.translation_click_id = click_id
-            return
-        
-        # Status 2: Übersetzungs-Leitfaden erstellen
-        status.write("2. Erstelle Übersetzungs-Leitfaden...")
-        translation_guide = generate_translation_guide(german_text, gemini_api_key)
-        
-        if not translation_guide or "Fehler" in str(translation_guide.get("plot_summary", "")):
-            status.update(label="Fehler beim Erstellen des Leitfadens", state="error")
-            st.error("Fehler beim Erstellen des Übersetzungs-Leitfadens.")
-            
-            # Store failed result
-            st.session_state.translation_result = {
-                "status": "failed",
-                "error_message": "Failed to create translation guide",
-                "file_name": uploaded_file.name
-            }
-            st.session_state.translation_click_id = click_id
-            return
-        
-        # Status 3: Text in Chunks aufteilen
-        status.write("3. Teile Text in Abschnitte...")
-        german_chunks = chunk_text(german_text, chunk_size=3000)
-        
-        # Status 4: Chunks übersetzen
-        status.write(f"4. Übersetze {len(german_chunks)} Abschnitte...")
-        english_chunks = []
-        
-        for i, german_chunk in enumerate(german_chunks):
-            status.write(f"   Übersetze Abschnitt {i+1} von {len(german_chunks)}...")
-            
-            # Übergebe den vorherigen englischen Chunk für flüssige Übergänge
-            previous_english_chunk = english_chunks[-1] if english_chunks else None
-            
-            english_chunk = translate_chunk(translation_guide, german_chunk, previous_english_chunk, gemini_api_key)
-            english_chunks.append(english_chunk)
-        
-        # Status 5: Übersetztes Manuskript zusammenfügen
-        status.write("5. Setze übersetztes Manuskript zusammen...")
-        final_english_text = "\n\n".join(english_chunks)
-        
-        status.update(label="Übersetzung abgeschlossen!", state="complete", expanded=False)
-    
-    # Store results in session state
-    st.session_state.translation_result = {
-        "translation_guide": translation_guide,
-        "final_english_text": final_english_text,
-        "german_text": german_text,
-        "german_chunks": german_chunks,
-        "file_name": uploaded_file.name,
-        "status": "success",
-        "chunks_processed": len(german_chunks)
-    }
-    
-    # Store click ID for logging
-    st.session_state.translation_click_id = click_id
+
 
 # Page config MUSS der erste Streamlit-Befehl sein
 st.set_page_config(page_title="Toolbox", page_icon="app_icon.png", layout="wide")
@@ -413,10 +381,10 @@ if 'tts_result' not in st.session_state:
     st.session_state.tts_result = None
 
 # Für Übersetzungs-Tool
-if 'translation_button_clicked' not in st.session_state:
-    st.session_state.translation_button_clicked = False
-if 'translation_result' not in st.session_state:
-    st.session_state.translation_result = None
+if 'translation_job_id' not in st.session_state:
+    st.session_state.translation_job_id = None
+if 'translation_job_status' not in st.session_state:
+    st.session_state.translation_job_status = None
 
 # Für allgemeine App-Funktionalität
 if 'last_selected_tool' not in st.session_state:
@@ -474,7 +442,7 @@ with st.sidebar:
     elif selected_tool == "Text-to-Speech":
         st.markdown("Wandle Text aus **Word-Dokumenten** oder **PDFs** in gesprochene Sprache um.\n\n**Unterstützte Formate:** `.docx`, `.pdf`\n\n**API:** ElevenLabs\n\nBei Fragen -> Gordon")
     elif selected_tool == "Manuskript-Übersetzung":
-        st.markdown("Übersetze **deutsche Manuskripte** ins Englische mit kontext-bewusster KI.\n\n**Unterstützte Formate:** `.docx`, `.pdf`\n\n**Features:** Style & Glossar-Leitfaden, konsistente Terminologie\n\nBei Fragen -> Gordon")
+        st.markdown("Übersetze **deutsche Manuskripte** ins Englische im Hintergrund.\n\n**Unterstützte Formate:** `.docx`, `.pdf`\n\n**Features:** Asynchrone Verarbeitung, Job-Tracking\n\nBei Fragen -> Gordon")
 
 st.divider()
 
@@ -499,14 +467,14 @@ if selected_tool != st.session_state.get("last_selected_tool", ""):
     st.session_state.accessibility_export_data = None
     st.session_state.accessibility_summary = None
     st.session_state.tts_result = None
-    st.session_state.translation_result = None
+    st.session_state.translation_job_id = None
+    st.session_state.translation_job_status = None
     
     # Reset button click states
     st.session_state.seo_button_clicked = False
     st.session_state.seo_url_button_clicked = False
     st.session_state.accessibility_button_clicked = False
     st.session_state.tts_button_clicked = False
-    st.session_state.translation_button_clicked = False
     
     # Clear all logging guards and click IDs when switching tools
     for key in list(st.session_state.keys()):
@@ -1090,7 +1058,7 @@ elif selected_tool == "Text-to-Speech":
 
 elif selected_tool == "Manuskript-Übersetzung":
     st.header("Manuskript-Übersetzung (Deutsch → Englisch)")
-    st.caption("Dieses Tool übersetzt deutsche Manuskripte ins Englische mit kontext-bewusster KI für hohe stilistische und terminologische Konsistenz.")
+    st.caption("Dieses Tool übersetzt deutsche Manuskripte im Hintergrund.")
 
     uploaded_file = st.file_uploader(
         label="Lade dein deutsches Manuskript hoch (.docx oder .pdf)",
@@ -1099,120 +1067,32 @@ elif selected_tool == "Manuskript-Übersetzung":
     )
 
     if uploaded_file:
-        st.button("🚀 Übersetzung starten", type="primary", key="start_translation_button", on_click=set_button_clicked_true, args=("translation_button_clicked",))
-    
-    # --- Block 1: Verarbeitung und Event-Senden ---
-    if st.session_state.translation_button_clicked and uploaded_file:
-        with st.status("Übersetzung läuft...", expanded=True) as status:
-            # Status 1: Text extrahieren
-            status.write("1. Extrahiere Text aus Dokument...")
-            if uploaded_file.name.lower().endswith('.pdf'):
-                german_text = read_text_from_pdf(uploaded_file)
-            else:
-                german_text = read_text_from_docx(uploaded_file)
-            
-            if not german_text or not german_text.strip() or german_text == "NO_TEXT_IN_PDF":
-                status.update(label="Fehler: Kein lesbarer Text gefunden", state="error")
-                st.error("Das Dokument scheint keinen lesbaren Text zu enthalten.")
-                
-                # Store failed result
-                st.session_state.translation_result = {
-                    "status": "failed",
-                    "error_message": "No readable text found",
-                    "file_name": uploaded_file.name
-                }
-                st.session_state.translation_button_clicked = False
-            else:
-                # Status 2: Übersetzungs-Leitfaden erstellen
-                status.write("2. Erstelle Übersetzungs-Leitfaden...")
-                translation_guide = generate_translation_guide(german_text, gemini_api_key)
-                
-                if not translation_guide or "Fehler" in str(translation_guide.get("plot_summary", "")):
-                    status.update(label="Fehler beim Erstellen des Leitfadens", state="error")
-                    st.error("Fehler beim Erstellen des Übersetzungs-Leitfadens.")
-                    
-                    # Store failed result
-                    st.session_state.translation_result = {
-                        "status": "failed",
-                        "error_message": "Failed to create translation guide",
-                        "file_name": uploaded_file.name
-                    }
-                    st.session_state.translation_button_clicked = False
-                else:
-                    # Status 3: Text in Chunks aufteilen
-                    status.write("3. Teile Text in Abschnitte...")
-                    german_chunks = chunk_text(german_text, chunk_size=3000)
-                    
-                    # Status 4: Chunks übersetzen
-                    status.write(f"4. Übersetze {len(german_chunks)} Abschnitte...")
-                    english_chunks = []
-                    
-                    for i, german_chunk in enumerate(german_chunks):
-                        status.write(f"   Übersetze Abschnitt {i+1} von {len(german_chunks)}...")
-                        
-                        # Übergebe den vorherigen englischen Chunk für flüssige Übergänge
-                        previous_english_chunk = english_chunks[-1] if english_chunks else None
-                        
-                        english_chunk = translate_chunk(translation_guide, german_chunk, previous_english_chunk, gemini_api_key)
-                        english_chunks.append(english_chunk)
-                    
-                    # Status 5: Übersetztes Manuskript zusammenfügen
-                    status.write("5. Setze übersetztes Manuskript zusammen...")
-                    final_english_text = "\n\n".join(english_chunks)
-                    
-                    status.update(label="Übersetzung abgeschlossen!", state="complete", expanded=False)
-
-                    # Store results in session state
-                    st.session_state.translation_result = {
-                        "translation_guide": translation_guide,
-                        "final_english_text": final_english_text,
-                        "german_text": german_text,
-                        "german_chunks": german_chunks,
-                        "file_name": uploaded_file.name,
-                        "status": "success",
-                        "chunks_processed": len(german_chunks)
-                    }
-
-                    # Sende das Tracking-Event GENAU EINMAL
-                    result = st.session_state.translation_result
-                    log_data = {
-                        "event_type": "translation_processed",
-                        "file_name": result["file_name"],
-                        "file_count": 1,
-                        "status": result["status"]
-                    }
-                    if "chunks_processed" in result:
-                        log_data["chunks_processed"] = result["chunks_processed"]
-                    if "error_message" in result:
-                        log_data["error_message"] = result["error_message"]
-                    send_event_to_pubsub(log_data)
-
-                    # Setze den Zustand zurück, um erneute Ausführung zu verhindern
-                    st.session_state.translation_button_clicked = False
-    
-    # --- Block 2: Übersetzungs-Ergebnisse anzeigen ---
-    if st.session_state.translation_result:
-        result = st.session_state.translation_result
-        
-        # Erfolgsmeldung anzeigen
-        st.success("✅ Übersetzung erfolgreich abgeschlossen!")
-        
-        # Style & Glossar-Leitfaden anzeigen
-        with st.expander("📋 Style & Glossar-Leitfaden anzeigen", expanded=False):
-            st.json(result["translation_guide"])
-        
-        # Download-Button für das übersetzte Manuskript
-        st.download_button(
-            label="💾 Übersetztes Manuskript herunterladen (.txt)",
-            data=result["final_english_text"].encode('utf-8'),
-            file_name=f"übersetzung_{Path(result['file_name']).stem}.txt",
-            mime="text/plain"
+        st.button(
+            "🚀 Übersetzung starten",
+            on_click=start_translation_job,
+            args=(uploaded_file,)
         )
-        
-        # Statistiken anzeigen
+    
+    # Job Status Anzeige
+    if st.session_state.get("translation_job_id"):
         st.divider()
-        st.subheader("📊 Übersetzungs-Statistiken")
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Deutsche Wörter", len(result["german_text"].split()))
-        col2.metric("Englische Wörter", len(result["final_english_text"].split()))
-        col3.metric("Verarbeitete Abschnitte", len(result["german_chunks"]))
+        st.subheader("📋 Übersetzungsauftrag Status")
+        
+        job_id = st.session_state.translation_job_id
+        st.info(f"**Job-ID:** {job_id}")
+        st.info(f"**Status:** {st.session_state.translation_job_status}")
+        
+        # Hier könnte später eine Funktion hinzugefügt werden, um den aktuellen Status
+        # aus Firestore abzurufen und anzuzeigen
+        if st.button("Status aktualisieren"):
+            try:
+                job_ref = firestore_client.collection("translation_jobs").document(job_id)
+                job_doc = job_ref.get()
+                if job_doc.exists:
+                    job_data = job_doc.to_dict()
+                    st.session_state.translation_job_status = job_data.get("status", "unknown")
+                    st.success(f"Status aktualisiert: {st.session_state.translation_job_status}")
+                else:
+                    st.warning("Job nicht gefunden")
+            except Exception as e:
+                st.error(f"Fehler beim Abrufen des Status: {e}")
