@@ -105,6 +105,74 @@ def start_translation_job(uploaded_file):
         st.error(f"Ein Fehler ist aufgetreten: {e}")
         logging.error(f"Translation job error: {e}")
 
+def refresh_translation_status():
+    """Aktualisiert den Status eines Übersetzungsauftrags und lädt bei Bedarf den Style-Guide herunter."""
+    job_id = st.session_state.get("translation_job_id")
+    if not job_id:
+        st.warning("Kein aktiver Job gefunden.")
+        return
+
+    try:
+        # Job-Status aus Firestore abrufen
+        job_ref = firestore_client.collection("translation_jobs").document(job_id)
+        job_doc = job_ref.get()
+        
+        if not job_doc.exists:
+            st.warning("Job nicht gefunden")
+            return
+        
+        job_data = job_doc.to_dict()
+        job_status = job_data.get("status", "unknown")
+        
+        # Status im Session State aktualisieren
+        st.session_state.translation_job_status = job_status
+        
+        # Wenn der Status "analyzed" ist, Style-Guide herunterladen
+        if job_status == "analyzed":
+            style_guide_gcs_path = job_data.get("style_guide_gcs_path")
+            if style_guide_gcs_path:
+                try:
+                    # GCS-Pfad parsen (Format: gs://bucket-name/path/to/file)
+                    if style_guide_gcs_path.startswith("gs://"):
+                        path_parts = style_guide_gcs_path[5:].split("/", 1)
+                        if len(path_parts) == 2:
+                            bucket_name = path_parts[0]
+                            blob_path = path_parts[1]
+                            
+                            # Style-Guide aus Cloud Storage herunterladen
+                            bucket = storage_client.bucket(bucket_name)
+                            blob = bucket.blob(blob_path)
+                            style_guide_content = blob.download_as_text()
+                            
+                            # JSON parsen und im Session State speichern
+                            parsed_style_guide = json.loads(style_guide_content)
+                            st.session_state.current_style_guide = parsed_style_guide
+                            
+                            st.success(f"Status aktualisiert: {job_status} - Style-Guide erfolgreich heruntergeladen!")
+                            logging.info(f"Style guide downloaded successfully for job {job_id}")
+                        else:
+                            st.error("Ungültiger GCS-Pfad für Style-Guide")
+                            logging.error(f"Invalid GCS path format: {style_guide_gcs_path}")
+                    else:
+                        st.error("Ungültiger GCS-Pfad für Style-Guide")
+                        logging.error(f"Invalid GCS path format: {style_guide_gcs_path}")
+                except json.JSONDecodeError as e:
+                    st.error(f"Fehler beim Parsen des Style-Guides (ungültiges JSON): {e}")
+                    logging.error(f"JSON parsing error for style guide: {e}")
+                except Exception as e:
+                    st.error(f"Fehler beim Herunterladen des Style-Guides: {e}")
+                    logging.error(f"Style guide download error: {e}")
+            else:
+                st.warning("Style-Guide-Pfad nicht in Job-Daten gefunden")
+                logging.warning(f"Style guide path not found in job data for job {job_id}")
+        else:
+            st.success(f"Status aktualisiert: {job_status}")
+            logging.info(f"Job status updated to {job_status} for job {job_id}")
+            
+    except Exception as e:
+        st.error(f"Fehler beim Abrufen des Status: {e}")
+        logging.error(f"Translation status refresh error: {e}")
+
 # Comprehensive Processing Functions
 def run_seo_processing_and_logging(files_to_process):
     """Comprehensive SEO processing function that handles everything in one place."""
@@ -385,6 +453,8 @@ if 'translation_job_id' not in st.session_state:
     st.session_state.translation_job_id = None
 if 'translation_job_status' not in st.session_state:
     st.session_state.translation_job_status = None
+if 'current_style_guide' not in st.session_state:
+    st.session_state.current_style_guide = None
 
 # Für allgemeine App-Funktionalität
 if 'last_selected_tool' not in st.session_state:
@@ -469,6 +539,7 @@ if selected_tool != st.session_state.get("last_selected_tool", ""):
     st.session_state.tts_result = None
     st.session_state.translation_job_id = None
     st.session_state.translation_job_status = None
+    st.session_state.current_style_guide = None
     
     # Reset button click states
     st.session_state.seo_button_clicked = False
@@ -1082,17 +1153,27 @@ elif selected_tool == "Manuskript-Übersetzung":
         st.info(f"**Job-ID:** {job_id}")
         st.info(f"**Status:** {st.session_state.translation_job_status}")
         
-        # Hier könnte später eine Funktion hinzugefügt werden, um den aktuellen Status
-        # aus Firestore abzurufen und anzuzeigen
+        # Status aktualisieren Button mit erweiterter Funktionalität
         if st.button("Status aktualisieren"):
-            try:
-                job_ref = firestore_client.collection("translation_jobs").document(job_id)
-                job_doc = job_ref.get()
-                if job_doc.exists:
-                    job_data = job_doc.to_dict()
-                    st.session_state.translation_job_status = job_data.get("status", "unknown")
-                    st.success(f"Status aktualisiert: {st.session_state.translation_job_status}")
-                else:
-                    st.warning("Job nicht gefunden")
-            except Exception as e:
-                st.error(f"Fehler beim Abrufen des Status: {e}")
+            refresh_translation_status()
+    
+    # Style-Guide Anzeige (wenn verfügbar)
+    if 'current_style_guide' in st.session_state and st.session_state.current_style_guide:
+        st.divider()
+        st.subheader("📋 Analyse-Ergebnis: Style-Guide & Glossar")
+        
+        # Erfolgsmeldung
+        st.success("✅ Dokumentanalyse abgeschlossen! Der Style-Guide wurde erfolgreich generiert.")
+        
+        # Style-Guide in einem Expander anzeigen
+        with st.expander("📋 Style-Guide & Glossar anzeigen", expanded=True):
+            st.json(st.session_state.current_style_guide)
+        
+        # Download-Button für den Style-Guide
+        style_guide_json = json.dumps(st.session_state.current_style_guide, indent=2, ensure_ascii=False)
+        st.download_button(
+            label="💾 Style-Guide herunterladen (.json)",
+            data=style_guide_json.encode('utf-8'),
+            file_name=f"style_guide_{job_id}.json",
+            mime="application/json"
+        )
