@@ -147,6 +147,7 @@ def refresh_translation_status():
                             # JSON parsen und im Session State speichern
                             parsed_style_guide = json.loads(style_guide_content)
                             st.session_state.current_style_guide = parsed_style_guide
+                            st.session_state.editable_style_guide = parsed_style_guide.copy()  # Kopie für Bearbeitung
                             
                             st.success(f"Status aktualisiert: {job_status} - Style-Guide erfolgreich heruntergeladen!")
                             logging.info(f"Style guide downloaded successfully for job {job_id}")
@@ -168,10 +169,88 @@ def refresh_translation_status():
         else:
             st.success(f"Status aktualisiert: {job_status}")
             logging.info(f"Job status updated to {job_status} for job {job_id}")
-            
+        
     except Exception as e:
         st.error(f"Fehler beim Abrufen des Status: {e}")
         logging.error(f"Translation status refresh error: {e}")
+
+def save_edited_style_guide():
+    """Speichert die bearbeiteten Style-Guide-Änderungen zurück in Cloud Storage."""
+    job_id = st.session_state.get("translation_job_id")
+    if not job_id:
+        st.error("Kein aktiver Job gefunden.")
+        return
+
+    try:
+        # Hole die bearbeiteten Werte direkt aus den Widget-Keys
+        edited_style_guide = st.session_state.get("edited_style_guide_text", "")
+        edited_key_terms_df = st.session_state.get("edited_key_terms_data", pd.DataFrame())
+        
+        # Konvertiere DataFrame zu Dictionary
+        edited_key_terms = {}
+        if not edited_key_terms_df.empty:
+            for _, row in edited_key_terms_df.iterrows():
+                if pd.notna(row["Deutscher Begriff"]) and pd.notna(row["Englische Übersetzung"]):
+                    edited_key_terms[row["Deutscher Begriff"]] = row["Englische Übersetzung"]
+        
+        # Baue das Style-Guide-Dictionary neu zusammen
+        updated_style_guide = {
+            "style_guide": edited_style_guide,
+            "key_terms": edited_key_terms
+        }
+        
+        # Konvertiere zu JSON-String
+        style_guide_json = json.dumps(updated_style_guide, indent=2, ensure_ascii=False)
+        
+        # Hole den ursprünglichen GCS-Pfad aus Firestore
+        job_ref = firestore_client.collection("translation_jobs").document(job_id)
+        job_doc = job_ref.get()
+        
+        if not job_doc.exists:
+            st.error("Job nicht gefunden")
+            return
+        
+        job_data = job_doc.to_dict()
+        style_guide_gcs_path = job_data.get("style_guide_gcs_path")
+        
+        if not style_guide_gcs_path:
+            st.error("Style-Guide-Pfad nicht gefunden")
+            return
+        
+        # Parse GCS-Pfad
+        if style_guide_gcs_path.startswith("gs://"):
+            path_parts = style_guide_gcs_path[5:].split("/", 1)
+            if len(path_parts) == 2:
+                bucket_name = path_parts[0]
+                blob_path = path_parts[1]
+                
+                # Überschreibe die Datei in Cloud Storage
+                bucket = storage_client.bucket(bucket_name)
+                blob = bucket.blob(blob_path)
+                blob.upload_from_string(style_guide_json, content_type='application/json')
+                
+                # Aktualisiere den Job-Status in Firestore
+                job_ref.update({
+                    "status": "guide_approved",
+                    "updated_at": datetime.datetime.utcnow()
+                })
+                
+                # Aktualisiere Session State
+                st.session_state.current_style_guide = updated_style_guide
+                st.session_state.editable_style_guide = updated_style_guide.copy()
+                st.session_state.translation_job_status = "guide_approved"
+                
+                st.success("✅ Style-Guide erfolgreich aktualisiert und freigegeben!")
+                logging.info(f"Style guide updated and approved for job {job_id}")
+                
+            else:
+                st.error("Ungültiger GCS-Pfad")
+        else:
+            st.error("Ungültiger GCS-Pfad")
+            
+    except Exception as e:
+        st.error(f"Fehler beim Speichern des Style-Guides: {e}")
+        logging.error(f"Style guide save error: {e}")
 
 # Comprehensive Processing Functions
 def run_seo_processing_and_logging(files_to_process):
@@ -455,6 +534,8 @@ if 'translation_job_status' not in st.session_state:
     st.session_state.translation_job_status = None
 if 'current_style_guide' not in st.session_state:
     st.session_state.current_style_guide = None
+if 'editable_style_guide' not in st.session_state:
+    st.session_state.editable_style_guide = None
 
 # Für allgemeine App-Funktionalität
 if 'last_selected_tool' not in st.session_state:
@@ -540,6 +621,7 @@ if selected_tool != st.session_state.get("last_selected_tool", ""):
     st.session_state.translation_job_id = None
     st.session_state.translation_job_status = None
     st.session_state.current_style_guide = None
+    st.session_state.editable_style_guide = None
     
     # Reset button click states
     st.session_state.seo_button_clicked = False
@@ -1165,14 +1247,65 @@ elif selected_tool == "Manuskript-Übersetzung":
         # Erfolgsmeldung
         st.success("✅ Dokumentanalyse abgeschlossen! Der Style-Guide wurde erfolgreich generiert.")
         
-        # Style-Guide in einem Expander anzeigen
-        with st.expander("📋 Style-Guide & Glossar anzeigen", expanded=True):
-            st.json(st.session_state.current_style_guide)
+        # Interaktive Bearbeitung des Style-Guides
+        with st.expander("✏️ Style-Guide & Glossar bearbeiten", expanded=True):
+            if st.session_state.editable_style_guide:
+                style_guide = st.session_state.editable_style_guide
+                
+                # Style-Guide Text bearbeiten
+                st.subheader("📝 Style-Guide Text")
+                style_guide_text = style_guide.get("style_guide", "")
+                edited_style_guide = st.text_area(
+                    "Style-Guide Text bearbeiten:",
+                    value=style_guide_text,
+                    height=200,
+                    key="edited_style_guide_text",
+                    help="Bearbeite den Style-Guide Text nach deinen Wünschen."
+                )
+                
+                # Key Terms (Glossar) bearbeiten
+                st.subheader("📚 Key Terms (Glossar)")
+                key_terms = style_guide.get("key_terms", {})
+                
+                # Konvertiere Dictionary zu DataFrame für bessere Bearbeitung
+                if key_terms:
+                    # Erstelle DataFrame aus Dictionary
+                    key_terms_df = pd.DataFrame([
+                        {"Deutscher Begriff": key, "Englische Übersetzung": value} 
+                        for key, value in key_terms.items()
+                    ])
+                else:
+                    # Leerer DataFrame mit korrekten Spalten
+                    key_terms_df = pd.DataFrame(columns=["Deutscher Begriff", "Englische Übersetzung"])
+                
+                # Data Editor für Key Terms
+                edited_key_terms_df = st.data_editor(
+                    key_terms_df,
+                    key="edited_key_terms_data",
+                    num_rows="dynamic",
+                    use_container_width=True,
+                    help="Bearbeite das Glossar. Füge neue Begriffe hinzu oder ändere bestehende Übersetzungen."
+                )
+                
+                # Konvertiere DataFrame zurück zu Dictionary
+                edited_key_terms = {}
+                for _, row in edited_key_terms_df.iterrows():
+                    if pd.notna(row["Deutscher Begriff"]) and pd.notna(row["Englische Übersetzung"]):
+                        edited_key_terms[row["Deutscher Begriff"]] = row["Englische Übersetzung"]
+                
+                # Speichern Button
+                st.divider()
+                col1, col2 = st.columns([1, 3])
+                with col1:
+                    if st.button("💾 Änderungen speichern", type="primary", on_click=save_edited_style_guide):
+                        st.rerun()
+                with col2:
+                    st.info("💡 Nach dem Speichern wird der Job-Status auf 'guide_approved' gesetzt.")
         
-        # Download-Button für den Style-Guide
+        # Download-Button für den ursprünglichen Style-Guide (nur zur Ansicht)
         style_guide_json = json.dumps(st.session_state.current_style_guide, indent=2, ensure_ascii=False)
         st.download_button(
-            label="💾 Style-Guide herunterladen (.json)",
+            label="💾 Ursprünglichen Style-Guide herunterladen (.json)",
             data=style_guide_json.encode('utf-8'),
             file_name=f"style_guide_{job_id}.json",
             mime="application/json"
