@@ -127,6 +127,11 @@ def refresh_translation_status():
         # Status im Session State aktualisieren
         st.session_state.translation_job_status = job_status
         
+        # Kosten- und Token-Informationen aus Firestore lesen
+        st.session_state.job_cost = job_data.get("estimated_cost_usd")
+        st.session_state.input_tokens = job_data.get("input_tokens")
+        st.session_state.output_tokens = job_data.get("output_tokens")
+
         # Wenn der Status "analyzed" ist, Style-Guide herunterladen
         if job_status == "analyzed":
             style_guide_gcs_path = job_data.get("style_guide_gcs_path")
@@ -251,6 +256,26 @@ def save_edited_style_guide():
     except Exception as e:
         st.error(f"Fehler beim Speichern des Style-Guides: {e}")
         logging.error(f"Style guide save error: {e}")
+
+def trigger_translation_runner(job_id):
+    """Sendet eine Nachricht an das 'run-translation' Pub/Sub-Thema."""
+    try:
+        # Job-Status in Firestore aktualisieren
+        firestore_client.collection("translation_jobs").document(job_id).update({"status": "translation_queued"})
+
+        # Nachricht an Pub/Sub senden
+        topic_path = pubsub_publisher.topic_path(PROJECT_ID, "run-translation")
+        message_data = json.dumps({"job_id": job_id}).encode('utf-8')
+        future = pubsub_publisher.publish(topic_path, data=message_data)
+        future.result()
+
+        st.success("Der Übersetzungs-Job wurde erfolgreich an die Pipeline übergeben!")
+        # Optional: Status in der App direkt aktualisieren
+        st.session_state.translation_job_status = "translation_queued"
+
+    except Exception as e:
+        st.error(f"Fehler beim Starten des Übersetzungs-Jobs: {e}")
+        logging.error(f"Translation runner trigger error: {e}")
 
 # Comprehensive Processing Functions
 def run_seo_processing_and_logging(files_to_process):
@@ -536,6 +561,12 @@ if 'current_style_guide' not in st.session_state:
     st.session_state.current_style_guide = None
 if 'editable_style_guide' not in st.session_state:
     st.session_state.editable_style_guide = None
+if 'job_cost' not in st.session_state:
+    st.session_state.job_cost = None
+if 'input_tokens' not in st.session_state:
+    st.session_state.input_tokens = None
+if 'output_tokens' not in st.session_state:
+    st.session_state.output_tokens = None
 
 # Für allgemeine App-Funktionalität
 if 'last_selected_tool' not in st.session_state:
@@ -622,6 +653,9 @@ if selected_tool != st.session_state.get("last_selected_tool", ""):
     st.session_state.translation_job_status = None
     st.session_state.current_style_guide = None
     st.session_state.editable_style_guide = None
+    st.session_state.job_cost = None
+    st.session_state.input_tokens = None
+    st.session_state.output_tokens = None
     
     # Reset button click states
     st.session_state.seo_button_clicked = False
@@ -1239,6 +1273,28 @@ elif selected_tool == "Manuskript-Übersetzung":
         if st.button("Status aktualisieren"):
             refresh_translation_status()
     
+    # Kosten-Informationen anzeigen (wenn verfügbar)
+    if st.session_state.get("job_cost") is not None:
+        st.divider()
+        st.subheader("💰 Analyse-Kosten")
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric(
+                label="Geschätzte Kosten (USD)", 
+                value=f"${st.session_state.job_cost:.4f}"
+            )
+        with col2:
+            st.metric(
+                label="Input Tokens", 
+                value=st.session_state.input_tokens
+            )
+        with col3:
+            st.metric(
+                label="Output Tokens", 
+                value=st.session_state.output_tokens
+            )
+
     # Style-Guide Anzeige (wenn verfügbar)
     if 'current_style_guide' in st.session_state and st.session_state.current_style_guide:
         st.divider()
@@ -1301,6 +1357,26 @@ elif selected_tool == "Manuskript-Übersetzung":
                         st.rerun()
                 with col2:
                     st.info("💡 Nach dem Speichern wird der Job-Status auf 'guide_approved' gesetzt.")
+                
+                # Übersetzung starten Button (nur aktiv wenn Status "analyzed" oder "guide_approved" ist)
+                st.divider()
+                current_status = st.session_state.get("translation_job_status")
+                is_ready_for_translation = current_status in ["analyzed", "guide_approved"]
+                
+                if is_ready_for_translation:
+                    st.subheader("🚀 Übersetzung starten")
+                    st.info("Der Style-Guide wurde geprüft. Du kannst jetzt die finale Übersetzung starten.")
+                    
+                    if st.button(
+                        "✅ Übersetzung jetzt starten",
+                        on_click=trigger_translation_runner,
+                        args=(st.session_state.translation_job_id,),
+                        type="primary",
+                        help="Startet den finalen, asynchronen Übersetzungsprozess über Pub/Sub"
+                    ):
+                        st.rerun()
+                else:
+                    st.info(f"⏳ Übersetzung kann gestartet werden, sobald der Status 'analyzed' oder 'guide_approved' ist. Aktueller Status: {current_status}")
         
         # Download-Button für den ursprünglichen Style-Guide (nur zur Ansicht)
         style_guide_json = json.dumps(st.session_state.current_style_guide, indent=2, ensure_ascii=False)
