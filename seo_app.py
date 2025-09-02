@@ -90,7 +90,7 @@ def start_translation_job(uploaded_file):
             "file_name": uploaded_file.name
         })
 
-        # 3. Nachricht in Pub/Sub veröffentlichen
+        # 3. Nachricht in Pub/Sub veröffentlichen (startet die Analyse)
         message_data = json.dumps({"job_id": job_id}).encode('utf-8')
         future = pubsub_publisher.publish(translation_topic_path, data=message_data)
         future.result()  # Stellt sicher, dass die Nachricht gesendet wurde
@@ -277,13 +277,13 @@ def save_edited_style_guide():
         logging.error(f"Style guide save error: {e}")
 
 def trigger_translation_runner(job_id):
-    """Sendet eine Nachricht an das 'start-translation' Pub/Sub-Thema."""
+    """Sendet eine Nachricht an das 'run-translation' Pub/Sub-Thema."""
     try:
         # Job-Status in Firestore aktualisieren
         firestore_client.collection("translation_jobs").document(job_id).update({"status": "translation_queued"})
 
-        # Nachricht an Pub/Sub senden
-        topic_path = pubsub_publisher.topic_path(PROJECT_ID, "start-translation")
+        # Nachricht an Pub/Sub senden (startet die Übersetzung)
+        topic_path = pubsub_publisher.topic_path(PROJECT_ID, "run-translation")
         message_data = json.dumps({"job_id": job_id}).encode('utf-8')
         future = pubsub_publisher.publish(topic_path, data=message_data)
         future.result()
