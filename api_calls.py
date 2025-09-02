@@ -274,53 +274,55 @@ def generate_audio_from_text(text: str, api_key: str, voice_id: str) -> Union[by
 
 @log_exceptions
 def generate_translation_guide(manuscript_bytes: bytes, job_id: str, gemini_api_key: str = None) -> dict:
-    """Erstellt einen Style & Glossar-Leitfaden für die Übersetzung mit Vertex AI Caching."""
     try:
-        # Initialisiere Vertex AI
         vertexai.init(project="avid-infinity-458913-p3")
+        model_for_caching = GenerativeModel("gemini-2.5-pro") # Updated from 1.5-pro-001
         
-        # 4a. Manuskript in den Vertex AI Cache laden
-        print(f"Erstelle Cache für Job {job_id}...")
-        model_for_caching = GenerativeModel("gemini-2.5-pro")
-        manuscript_part = Part.from_data(
-            data=manuscript_bytes,
-            mime_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        )
+        # Convert manuscript bytes to text first (DOCX/PDF -> text)
+        try:
+            # Try to read as DOCX first
+            manuscript_text = read_text_from_docx(BytesIO(manuscript_bytes))
+        except:
+            try:
+                # Try to read as PDF if DOCX fails
+                manuscript_text = read_text_from_pdf(BytesIO(manuscript_bytes))
+            except:
+                # Fallback: try to decode as UTF-8 text
+                manuscript_text = manuscript_bytes.decode('utf-8', errors='ignore')
+        
+        if not manuscript_text or manuscript_text.strip() == "":
+            raise ValueError("Konnte keinen lesbaren Text aus dem Manuskript extrahieren")
+        
+        # Create cached content with TEXT (not binary DOCX)
+        manuscript_part = Part.from_data(data=manuscript_text.encode('utf-8'), mime_type="text/plain")
         cache = vertexai.caching.CachedContent.create(
-            model_name=model_for_caching.model_name,
-            system_instruction="Du bist ein Experte für Literaturanalyse.",
+            model_name=model_for_caching.model_name, 
+            system_instruction="Du bist ein Experte für Literaturanalyse.", 
             contents=[manuscript_part]
         )
-        print(f"Cache erstellt: {cache.name}")
         
-        # 4b. Cache-Namen in Firestore speichern (falls job_ref verfügbar)
-        try:
-            from google.cloud import firestore
-            firestore_client = firestore.Client(project="avid-infinity-458913-p3", database="hbu-toolbox-firestone")
-            job_ref = firestore_client.collection("translation_jobs").document(job_id)
-            job_ref.update({"cached_content_name": cache.name})
-            print(f"Cache-Namen {cache.name} in Firestore gespeichert")
-        except Exception as e:
-            print(f"Warnung: Konnte Cache-Namen nicht in Firestore speichern: {e}")
+        # Store cache name in Firestore
+        firestore_client = firestore.Client(project="avid-infinity-458913-p3", database="hbu-toolbox-firestone")
+        firestore_client.collection("translation_jobs").document(job_id).update({
+            "cached_content_name": cache.name
+        })
         
-        # 5. Gemini zur Analyse aufrufen (mit dem Cache!)
+        # Use cached content for analysis
         model_with_cache = GenerativeModel.from_cached_content(cached_content=cache)
-        
-        # Erstelle den Prompt für die Analyse
         full_prompt = TRANSLATION_GUIDE_PROMPT.format(full_text="[Manuskript ist im Cache verfügbar]")
         response = model_with_cache.generate_content(full_prompt)
         
-        # 6. Finalen Style-Guide verarbeiten und in Cloud Storage speichern
+        # Robust JSON parsing with markdown removal
         raw_response_text = response.text.strip()
         style_guide_json_str = ""
-
+        
         try:
-            # Versuch 1: Direkter Parse
+            # Attempt 1: Direct parse
             json.loads(raw_response_text)
             style_guide_json_str = raw_response_text
         except json.JSONDecodeError:
-            # Versuch 2: Markdown-Block entfernen
-            logger.info("JSON-Parse fehlgeschlagen. Versuche, Markdown-Formatierung zu entfernen...")
+            # Attempt 2: Remove markdown formatting
+            print("JSON-Parse fehlgeschlagen. Versuche, Markdown-Formatierung zu entfernen...")
             if raw_response_text.startswith("```json") and raw_response_text.endswith("```"):
                 cleaned_text = raw_response_text[7:-3].strip()
                 try:
@@ -328,57 +330,78 @@ def generate_translation_guide(manuscript_bytes: bytes, job_id: str, gemini_api_
                     style_guide_json_str = cleaned_text
                 except json.JSONDecodeError as e:
                     error_message = f"Konnte JSON auch nach Bereinigung nicht parsen: {e}. Original-Antwort: {raw_response_text}"
-                    logger.error(error_message)
-                    raise ValueError(error_message)
-            elif raw_response_text.startswith("```") and raw_response_text.endswith("```"):
-                cleaned_text = raw_response_text[3:-3].strip()
-                try:
-                    json.loads(cleaned_text)
-                    style_guide_json_str = cleaned_text
-                except json.JSONDecodeError as e:
-                    error_message = f"Konnte JSON auch nach Bereinigung nicht parsen: {e}. Original-Antwort: {raw_response_text}"
-                    logger.error(error_message)
                     raise ValueError(error_message)
             else:
                 error_message = f"Antwort ist kein valides JSON. Original-Antwort: {raw_response_text}"
-                logger.error(error_message)
                 raise ValueError(error_message)
-
-        if not style_guide_json_str:
-            error_message = "Die KI hat eine leere Antwort für den Styleguide zurückgegeben."
-            logger.error(error_message)
-            raise ValueError(error_message)
         
-        # Parse das finale, bereinigte JSON
+        if not style_guide_json_str:
+            raise ValueError("Die KI hat eine leere Antwort für den Styleguide zurückgegeben.")
+        
+        # Parse the JSON response
         guide_dict = json.loads(style_guide_json_str)
         
-        # Validiere die Struktur des JSON
-        required_keys = ["style_guide", "key_terms"]
-        missing_keys = [key for key in required_keys if key not in guide_dict]
+        # Validate structure
+        if not isinstance(guide_dict, dict):
+            raise ValueError("KI-Antwort ist kein Dictionary")
         
-        if missing_keys:
-            error_message = f"JSON fehlt erforderliche Schlüssel: {missing_keys}. Gefundene Schlüssel: {list(guide_dict.keys())}"
-            logger.error(error_message)
-            raise ValueError(error_message)
+        if "style_guide" not in guide_dict or "key_terms" not in guide_dict:
+            raise ValueError("KI-Antwort fehlt erforderliche Schlüssel 'style_guide' oder 'key_terms'")
         
-        logger.info("Style-Guide erfolgreich generiert und validiert")
+        # Store style guide in Cloud Storage
+        storage_client = storage.Client(project="avid-infinity-458913-p3")
+        bucket = storage_client.bucket("manuskripte-upload-avid-infinity")
+        style_guide_blob_name = f"{job_id}/style_guide.json"
+        style_guide_blob = bucket.blob(style_guide_blob_name)
+        style_guide_blob.upload_from_string(style_guide_json_str, content_type='application/json')
+        
+        # Update Firestore with style guide path and status
+        style_guide_gcs_path = f"gs://manuskripte-upload-avid-infinity/{style_guide_blob_name}"
+        firestore_client.collection("translation_jobs").document(job_id).update({
+            "style_guide_gcs_path": style_guide_gcs_path,
+            "status": "analyzed",
+            "analyzed_at": datetime.datetime.utcnow()
+        })
+        
+        print(f"✅ Style-Guide erfolgreich generiert und gespeichert: {style_guide_gcs_path}")
         return guide_dict
         
     except ValueError as e:
-        # Re-raise ValueError für bessere Fehlerbehandlung im aufrufenden Code
-        logger.error(f"Fehler bei der Erstellung des Übersetzungs-Leitfadens: {e}")
-        raise
+        print(f"❌ Validierungsfehler: {e}")
+        # Update Firestore with error status
+        try:
+            firestore_client = firestore.Client(project="avid-infinity-458913-p3", database="hbu-toolbox-firestone")
+            firestore_client.collection("translation_jobs").document(job_id).update({
+                "status": "analysis_failed",
+                "error_message": str(e),
+                "analysis_failed_at": datetime.datetime.utcnow()
+            })
+        except Exception as firestore_error:
+            print(f"⚠️ Konnte Fehler-Status nicht speichern: {firestore_error}")
+        raise e
+        
     except Exception as e:
-        logger.error(f"Unerwarteter Fehler bei der Erstellung des Übersetzungs-Leitfadens: {e}", exc_info=True)
-        # Fallback: Erstelle ein minimales Guide-Dictionary mit der neuen Struktur
+        print(f"❌ Unerwarteter Fehler: {e}")
+        # Update Firestore with error status
+        try:
+            firestore_client = firestore.Client(project="avid-infinity-458913-p3", database="hbu-toolbox-firestone")
+            firestore_client.collection("translation_jobs").document(job_id).update({
+                "status": "analysis_failed",
+                "error_message": str(e),
+                "analysis_failed_at": datetime.datetime.utcnow()
+            })
+        except Exception as firestore_error:
+            print(f"⚠️ Konnte Fehler-Status nicht speichern: {firestore_error}")
+        
+        # Return fallback dictionary with new structure
         return {
             "style_guide": {
-                "genre_audience": "Fehler beim Analysieren des Genres",
-                "tone_mood": "Fehler beim Analysieren des Tons",
-                "narrative_perspective": "Fehler beim Analysieren der Erzählperspektive",
-                "character_names": "Fehler beim Analysieren der Charaktere",
-                "key_concepts": "Fehler beim Analysieren der Schlüsselkonzepte",
-                "stylistic_features": "Fehler beim Analysieren der Stilmerkmale"
+                "genre_audience": "Genre und Zielgruppe konnten nicht analysiert werden",
+                "tone_mood": "Ton und Stimmung konnten nicht analysiert werden", 
+                "narrative_perspective": "Erzählperspektive konnte nicht analysiert werden",
+                "character_names": "Charakternamen konnten nicht analysiert werden",
+                "key_concepts": "Schlüsselkonzepte konnten nicht analysiert werden",
+                "stylistic_features": "Stilistische Merkmale konnten nicht analysiert werden"
             },
             "key_terms": {}
         }
