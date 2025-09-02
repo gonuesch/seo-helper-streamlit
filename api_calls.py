@@ -360,18 +360,33 @@ def translate_chunk(guide: dict, german_chunk: str, previous_english_chunk: str 
     try:
         if gemini_api_key:
             genai.configure(api_key=gemini_api_key)
-            
-        # Konvertiere das Guide-Dictionary zu einem String für den Prompt
-        guide_str = json.dumps(guide, ensure_ascii=False, indent=2)
+        
+        # Extrahiere die Style-Guide-Komponenten
+        style_guide = guide.get("style_guide", {})
+        key_terms = guide.get("key_terms", {})
+        
+        # Formatiere die Key Terms für den Prompt
+        key_terms_formatted = "\n".join([f"  '{deutsch}' → '{englisch}'" for deutsch, englisch in key_terms.items()])
+        if not key_terms_formatted:
+            key_terms_formatted = "  Keine spezifischen Übersetzungen definiert"
         
         # Verwende leeren String falls kein vorheriger Chunk vorhanden
         prev_chunk = previous_english_chunk if previous_english_chunk else ""
         
         full_prompt = TRANSLATE_CHUNK_PROMPT.format(
-            guide=guide_str,
+            genre_audience=style_guide.get("genre_audience", "Nicht spezifiziert"),
+            tone_mood=style_guide.get("tone_mood", "Nicht spezifiziert"),
+            narrative_perspective=style_guide.get("narrative_perspective", "Nicht spezifiziert"),
+            character_names=style_guide.get("character_names", "Nicht spezifiziert"),
+            key_concepts=style_guide.get("key_concepts", "Nicht spezifiziert"),
+            stylistic_features=style_guide.get("stylistic_features", "Nicht spezifiziert"),
+            key_terms_formatted=key_terms_formatted,
             german_chunk=german_chunk,
             previous_english_chunk=prev_chunk
         )
+        
+        logger.info(f"Übersetze Chunk mit Style-Guide: Genre={style_guide.get('genre_audience', 'N/A')}, Ton={style_guide.get('tone_mood', 'N/A')}")
+        logger.info(f"Verfügbare Key Terms: {list(key_terms.keys())}")
         
         response = model_gemini.generate_content(full_prompt)
         return response.text.strip()

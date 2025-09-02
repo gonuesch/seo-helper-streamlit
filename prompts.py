@@ -191,15 +191,21 @@ Deine Aufgabe ist es, einen deutschen Textabschnitt ins Englische zu übersetzen
 
 **WICHTIGE REGELN:**
 1. Übersetze den Text wortgetreu, aber idiomatisch korrekt
-2. Halte dich strikt an das vorgegebene Glossar
-3. Bewahre den ursprünglichen Ton und Stil
+2. Halte dich STRIKT an das vorgegebene Glossar (key_terms) - verwende NUR die dort angegebenen Übersetzungen
+3. Bewahre den ursprünglichen Ton und Stil basierend auf dem Style-Guide
 4. Stelle sicher, dass Übergänge zum vorherigen englischen Abschnitt flüssig sind
-5. Gib AUSSCHLIESSLICH die englische Übersetzung zurück, ohne zusätzliche Kommentare
+5. Gib AUSSCHLIESSLICH die englische Übersetzung zurück, ohne zusätzliche Kommentare oder Formatierung
 
-**Style & Glossar-Leitfaden:**
----
-{guide}
----
+**STYLE-GUIDE (strikt befolgen):**
+Genre & Zielgruppe: {genre_audience}
+Ton & Stimmung: {tone_mood}
+Erzählperspektive: {narrative_perspective}
+Charakternamen: {character_names}
+Schlüsselkonzepte: {key_concepts}
+Stilistische Merkmale: {stylistic_features}
+
+**GLOSSAR (key_terms) - VERWENDE NUR DIESE ÜBERSETZUNGEN:**
+{key_terms_formatted}
 
 **Deutscher Textabschnitt:**
 ---
@@ -211,5 +217,5 @@ Deine Aufgabe ist es, einen deutschen Textabschnitt ins Englische zu übersetzen
 {previous_english_chunk}
 ---
 
-**Englische Übersetzung:**
+**Englische Übersetzung (nur der übersetzte Text, keine Kommentare):**
 """
