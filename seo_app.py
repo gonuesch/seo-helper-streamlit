@@ -131,6 +131,13 @@ def refresh_translation_status():
         st.session_state.job_cost = job_data.get("estimated_cost_usd")
         st.session_state.input_tokens = job_data.get("input_tokens")
         st.session_state.output_tokens = job_data.get("output_tokens")
+        
+        # Neue Felder für Übersetzung
+        st.session_state.cached_content_name = job_data.get("cached_content_name")
+        st.session_state.translation_cost_usd = job_data.get("translation_cost_usd")
+        st.session_state.input_tokens_translation = job_data.get("input_tokens_translation")
+        st.session_state.output_tokens_translation = job_data.get("output_tokens_translation")
+        st.session_state.final_gcs_path = job_data.get("final_gcs_path")
 
         # Wenn der Status "analyzed" ist, Style-Guide herunterladen
         if job_status == "analyzed":
@@ -579,6 +586,16 @@ if 'input_tokens' not in st.session_state:
     st.session_state.input_tokens = None
 if 'output_tokens' not in st.session_state:
     st.session_state.output_tokens = None
+if 'cached_content_name' not in st.session_state:
+    st.session_state.cached_content_name = None
+if 'translation_cost_usd' not in st.session_state:
+    st.session_state.translation_cost_usd = None
+if 'input_tokens_translation' not in st.session_state:
+    st.session_state.input_tokens_translation = None
+if 'output_tokens_translation' not in st.session_state:
+    st.session_state.output_tokens_translation = None
+if 'final_gcs_path' not in st.session_state:
+    st.session_state.final_gcs_path = None
 
 # Für allgemeine App-Funktionalität
 if 'last_selected_tool' not in st.session_state:
@@ -668,6 +685,11 @@ if selected_tool != st.session_state.get("last_selected_tool", ""):
     st.session_state.job_cost = None
     st.session_state.input_tokens = None
     st.session_state.output_tokens = None
+    st.session_state.cached_content_name = None
+    st.session_state.translation_cost_usd = None
+    st.session_state.input_tokens_translation = None
+    st.session_state.output_tokens_translation = None
+    st.session_state.final_gcs_path = None
     
     # Reset button click states
     st.session_state.seo_button_clicked = False
@@ -1279,33 +1301,87 @@ elif selected_tool == "Manuskript-Übersetzung":
         
         job_id = st.session_state.translation_job_id
         st.info(f"**Job-ID:** {job_id}")
-        st.info(f"**Status:** {st.session_state.translation_job_status}")
+        
+        # Erweiterte Status-Anzeige mit Icons
+        status = st.session_state.translation_job_status
+        if status == "pending":
+            st.info("⏳ **Status:** Wartet auf Analyse...")
+        elif status == "analyzing":
+            st.info("🔍 **Status:** Analysiere Manuskript...")
+        elif status == "analyzed":
+            st.success("✅ **Status:** Analyse abgeschlossen!")
+        elif status == "guide_approved":
+            st.success("✅ **Status:** Style-Guide freigegeben!")
+        elif status == "translation_queued":
+            st.info("🚀 **Status:** Übersetzung in Warteschlange...")
+        elif status == "translating":
+            st.info("🤖 **Status:** Übersetze Manuskript...")
+        elif status == "completed":
+            st.success("🎉 **Status:** Übersetzung abgeschlossen!")
+        elif status == "translation_failed":
+            st.error("❌ **Status:** Übersetzung fehlgeschlagen!")
+        else:
+            st.info(f"**Status:** {status}")
         
         # Status aktualisieren Button mit erweiterter Funktionalität
-        if st.button("Status aktualisieren"):
+        if st.button("🔄 Status aktualisieren"):
             refresh_translation_status()
+        
+        # Cache-Informationen anzeigen (falls verfügbar)
+        if st.session_state.get("cached_content_name"):
+            st.info(f"💾 **Cache:** {st.session_state.cached_content_name}")
+            st.caption("Das Manuskript ist im Vertex AI Cache gespeichert für schnelle Übersetzung.")
     
     # Kosten-Informationen anzeigen (wenn verfügbar)
-    if st.session_state.get("job_cost") is not None:
+    if st.session_state.get("job_cost") is not None or st.session_state.get("translation_cost_usd") is not None:
         st.divider()
-        st.subheader("💰 Analyse-Kosten")
+        st.subheader("💰 Kosten-Übersicht")
         
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
+        
+        # Analyse-Kosten
         with col1:
-            st.metric(
-                label="Geschätzte Kosten (USD)", 
-                value=f"${st.session_state.job_cost:.4f}"
-            )
+            if st.session_state.get("job_cost") is not None:
+                st.metric(
+                    label="📊 Analyse-Kosten (USD)", 
+                    value=f"${st.session_state.job_cost:.4f}"
+                )
+            else:
+                st.metric(label="📊 Analyse-Kosten (USD)", value="N/A")
+        
+        # Übersetzungs-Kosten
         with col2:
-            st.metric(
-                label="Input Tokens", 
-                value=st.session_state.input_tokens
-            )
+            if st.session_state.get("translation_cost_usd") is not None:
+                st.metric(
+                    label="🤖 Übersetzungs-Kosten (USD)", 
+                    value=f"${st.session_state.translation_cost_usd:.4f}"
+                )
+            else:
+                st.metric(label="🤖 Übersetzungs-Kosten (USD)", value="N/A")
+        
+        # Gesamtkosten
         with col3:
-            st.metric(
-                label="Output Tokens", 
-                value=st.session_state.output_tokens
-            )
+            total_cost = 0
+            if st.session_state.get("job_cost"):
+                total_cost += st.session_state.job_cost
+            if st.session_state.get("translation_cost_usd"):
+                total_cost += st.session_state.translation_cost_usd
+            
+            if total_cost > 0:
+                st.metric(
+                    label="💵 Gesamtkosten (USD)", 
+                    value=f"${total_cost:.4f}"
+                )
+            else:
+                st.metric(label="💵 Gesamtkosten (USD)", value="N/A")
+        
+        # Token-Informationen
+        with col4:
+            if st.session_state.get("input_tokens") or st.session_state.get("input_tokens_translation"):
+                total_input = (st.session_state.get("input_tokens") or 0) + (st.session_state.get("input_tokens_translation") or 0)
+                st.metric(label="📝 Input Tokens", value=total_input)
+            else:
+                st.metric(label="📝 Input Tokens", value="N/A")
 
     # Style-Guide Anzeige (wenn verfügbar)
     if 'current_style_guide' in st.session_state and st.session_state.current_style_guide:
@@ -1442,11 +1518,31 @@ elif selected_tool == "Manuskript-Übersetzung":
                 else:
                     st.info(f"⏳ Übersetzung kann gestartet werden, sobald der Status 'analyzed' oder 'guide_approved' ist. Aktueller Status: {current_status}")
         
-        # Download-Button für den ursprünglichen Style-Guide (nur zur Ansicht)
-        style_guide_json = json.dumps(st.session_state.current_style_guide, indent=2, ensure_ascii=False)
-        st.download_button(
-            label="💾 Ursprünglichen Style-Guide herunterladen (.json)",
-            data=style_guide_json.encode('utf-8'),
-            file_name=f"style_guide_{job_id}.json",
-            mime="application/json"
-        )
+        # Download-Bereich
+        st.divider()
+        st.subheader("📥 Downloads")
+        
+        col1, col2 = st.columns(2)
+        
+        # Style-Guide Download
+        with col1:
+            style_guide_json = json.dumps(st.session_state.current_style_guide, indent=2, ensure_ascii=False)
+            st.download_button(
+                label="💾 Style-Guide herunterladen (.json)",
+                data=style_guide_json.encode('utf-8'),
+                file_name=f"style_guide_{job_id}.json",
+                mime="application/json"
+            )
+        
+        # Übersetztes Dokument Download (falls verfügbar)
+        with col2:
+            if st.session_state.get("final_gcs_path"):
+                st.success("🎉 Übersetzung verfügbar!")
+                st.info(f"**Pfad:** {st.session_state.final_gcs_path}")
+                st.caption("Das übersetzte Dokument kann über Google Cloud Storage heruntergeladen werden.")
+                
+                # Hier könnte ein direkter Download-Button hinzugefügt werden
+                # falls wir die Datei direkt aus dem Frontend zugänglich machen wollen
+            else:
+                st.info("⏳ Übersetzung noch nicht verfügbar")
+                st.caption("Das übersetzte Dokument wird nach Abschluss der Übersetzung hier angezeigt.")

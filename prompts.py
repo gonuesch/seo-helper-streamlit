@@ -154,13 +154,8 @@ Beispiel für das JSON-Format:
 
 # Neue Prompts für die Manuskript-Übersetzung
 TRANSLATION_GUIDE_PROMPT = """
-Analysiere das folgende, vollständige Manuskript und erstelle ein einziges, valides JSON-Objekt.
+Analysiere das vollständige Manuskript, das im Cache verfügbar ist, und erstelle ein einziges, valides JSON-Objekt.
 Das JSON-Objekt muss zwei Schlüssel enthalten: 'style_guide' und 'key_terms'.
-
-**Deutsche Originaltext:**
----
-{full_text}
----
 
 **Ausgabeformat (JSON):**
 {{
@@ -179,6 +174,7 @@ Das JSON-Objekt muss zwei Schlüssel enthalten: 'style_guide' und 'key_terms'.
 }}
 
 **WICHTIGE REGELN:**
+- Analysiere das Manuskript, das im Cache verfügbar ist
 - Antworte AUSSCHLIESSLICH mit dem JSON-Objekt
 - Füge keine Erklärungen oder Markdown-Formatierungen wie ```json hinzu
 - Das JSON muss valide sein und die beiden Hauptschlüssel enthalten

@@ -26,3 +26,7 @@ pics_done/
 google-cloud-sdk/
 *.tar.gz
 anthoscli
+
+# Cloud Function files (not tracked in GitHub)
+translation_runner.py
+translation_runner_requirements.txt

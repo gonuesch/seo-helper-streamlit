@@ -11,6 +11,8 @@ import logging
 import re
 import requests
 import json
+import vertexai
+from vertexai.generative_models import GenerativeModel, Part
 
 # Importiere die Prompt-Vorlagen aus der prompts.py Datei
 from prompts import ACCESSIBILITY_PROMPT_TEMPLATE, SEO_PROMPT, SUMMARY_PROMPT, GUIDELINE_PROMPT_WITH_MATCHING, SSML_PROMPT, TRANSLATION_GUIDE_PROMPT, TRANSLATE_CHUNK_PROMPT
@@ -271,14 +273,42 @@ def generate_audio_from_text(text: str, api_key: str, voice_id: str) -> Union[by
 
 
 @log_exceptions
-def generate_translation_guide(full_text: str, gemini_api_key: str = None) -> dict:
-    """Erstellt einen Style & Glossar-Leitfaden für die Übersetzung."""
+def generate_translation_guide(manuscript_bytes: bytes, job_id: str, gemini_api_key: str = None) -> dict:
+    """Erstellt einen Style & Glossar-Leitfaden für die Übersetzung mit Vertex AI Caching."""
     try:
-        if gemini_api_key:
-            genai.configure(api_key=gemini_api_key)
-            
-        full_prompt = TRANSLATION_GUIDE_PROMPT.format(full_text=full_text)
-        response = model_gemini.generate_content(full_prompt)
+        # Initialisiere Vertex AI
+        vertexai.init(project="avid-infinity-458913-p3")
+        
+        # 4a. Manuskript in den Vertex AI Cache laden
+        print(f"Erstelle Cache für Job {job_id}...")
+        model_for_caching = GenerativeModel("gemini-2.5-pro")
+        manuscript_part = Part.from_data(
+            data=manuscript_bytes,
+            mime_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+        cache = vertexai.caching.CachedContent.create(
+            model_name=model_for_caching.model_name,
+            system_instruction="Du bist ein Experte für Literaturanalyse.",
+            contents=[manuscript_part]
+        )
+        print(f"Cache erstellt: {cache.name}")
+        
+        # 4b. Cache-Namen in Firestore speichern (falls job_ref verfügbar)
+        try:
+            from google.cloud import firestore
+            firestore_client = firestore.Client(project="avid-infinity-458913-p3", database="hbu-toolbox-firestone")
+            job_ref = firestore_client.collection("translation_jobs").document(job_id)
+            job_ref.update({"cached_content_name": cache.name})
+            print(f"Cache-Namen {cache.name} in Firestore gespeichert")
+        except Exception as e:
+            print(f"Warnung: Konnte Cache-Namen nicht in Firestore speichern: {e}")
+        
+        # 5. Gemini zur Analyse aufrufen (mit dem Cache!)
+        model_with_cache = GenerativeModel.from_cached_content(cached_content=cache)
+        
+        # Erstelle den Prompt für die Analyse
+        full_prompt = TRANSLATION_GUIDE_PROMPT.format(full_text="[Manuskript ist im Cache verfügbar]")
+        response = model_with_cache.generate_content(full_prompt)
         
         # 6. Finalen Style-Guide verarbeiten und in Cloud Storage speichern
         raw_response_text = response.text.strip()
@@ -393,3 +423,88 @@ def translate_chunk(guide: dict, german_chunk: str, previous_english_chunk: str 
     except Exception as e:
         logger.error(f"Fehler bei der Übersetzung des Chunks: {e}", exc_info=True)
         return f"[Übersetzungsfehler: {e}]"
+
+
+@log_exceptions
+def translate_manuscript_with_cache(cached_content_name: str, style_guide: dict, job_id: str, gemini_api_key: str = None) -> str:
+    """Übersetzt ein komplettes Manuskript mit Vertex AI Cache und behält die Formatierung bei."""
+    try:
+        # Initialisiere Vertex AI
+        vertexai.init(project="avid-infinity-458913-p3")
+        
+        # Lade den Cache
+        cache = vertexai.caching.CachedContent.get(cached_content_name)
+        if not cache:
+            raise ValueError(f"Cache {cached_content_name} nicht gefunden")
+        
+        # Erstelle das Modell mit dem Cache
+        model_with_cache = GenerativeModel.from_cached_content(cached_content=cache)
+        
+        # Erstelle den Übersetzungs-Prompt
+        prompt = f"""Übersetze das folgende, vollständige deutsche Manuskript ins Englische. 
+Gib NUR den übersetzten Text zurück, ohne zusätzliche Kommentare oder Formatierungen.
+
+Beachte dabei strikt die folgenden Regeln aus dem Styleguide und dem Glossar, um Konsistenz zu gewährleisten:
+
+STYLEGUIDE & GLOSSAR:
+{json.dumps(style_guide, ensure_ascii=False, indent=2)}
+
+DEUTSCHES MANUSKRIPT:
+"""
+        
+        # Übersetzung durchführen
+        response = model_with_cache.generate_content(prompt)
+        
+        if not response.text:
+            raise ValueError("Gemini hat keine Antwort zurückgegeben")
+        
+        translated_text = response.text.strip()
+        logger.info(f"Übersetzung erhalten: {len(translated_text)} Zeichen")
+        
+        return translated_text
+        
+    except Exception as e:
+        logger.error(f"Fehler bei der Übersetzung mit Cache: {e}", exc_info=True)
+        raise e
+
+
+@log_exceptions
+def create_formatted_docx(translated_text: str, output_filename: str) -> bytes:
+    """Erstellt ein formatiertes DOCX-Dokument mit erhaltener Absatzstruktur."""
+    try:
+        from docx import Document
+        from docx.shared import Inches
+        import io
+        
+        # Neues Dokument erstellen
+        doc = Document()
+        
+        # Standard-Seiteneinstellungen
+        section = doc.sections[0]
+        section.page_width = Inches(8.5)
+        section.page_height = Inches(11)
+        section.left_margin = Inches(1)
+        section.right_margin = Inches(1)
+        section.top_margin = Inches(1)
+        section.bottom_margin = Inches(1)
+        
+        # Teile den Gesamttext in einzelne Absätze auf
+        paragraphs = translated_text.split('\n')
+        for paragraph_text in paragraphs:
+            # Füge leere Absätze für Zeilenumbrüche hinzu oder Text für normale Absätze
+            if paragraph_text.strip():
+                doc.add_paragraph(paragraph_text)
+            else:
+                doc.add_paragraph()  # Fügt einen leeren Absatz für die Formatierung hinzu
+        
+        # Dokument im Speicher speichern
+        doc_stream = io.BytesIO()
+        doc.save(doc_stream)
+        doc_stream.seek(0)
+        
+        logger.info(f"Formatiertes DOCX-Dokument erstellt: {output_filename}")
+        return doc_stream.getvalue()
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Erstellen des DOCX-Dokuments: {e}", exc_info=True)
+        raise e
