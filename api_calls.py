@@ -280,47 +280,77 @@ def generate_translation_guide(full_text: str, gemini_api_key: str = None) -> di
         full_prompt = TRANSLATION_GUIDE_PROMPT.format(full_text=full_text)
         response = model_gemini.generate_content(full_prompt)
         
-        # Bereinige die Antwort von Markdown-Codeblöcken
-        cleaned_response = response.text.strip()
-        
-        # Entferne Markdown-Codeblock-Formatierung (```json ... ```)
-        if cleaned_response.startswith("```json"):
-            cleaned_response = cleaned_response[7:]  # Entferne "```json"
-        if cleaned_response.startswith("```"):
-            cleaned_response = cleaned_response[3:]  # Entferne "```"
-        if cleaned_response.endswith("```"):
-            cleaned_response = cleaned_response[:-3]  # Entferne "```" am Ende
-        
-        cleaned_response = cleaned_response.strip()
-        
-        # Versuche das JSON zu parsen
+        # 6. Finalen Style-Guide verarbeiten und in Cloud Storage speichern
+        raw_response_text = response.text.strip()
+        style_guide_json_str = ""
+
         try:
-            guide_dict = json.loads(cleaned_response)
-            return guide_dict
-        except json.JSONDecodeError as e:
-            logger.error(f"Fehler beim Parsen des JSON-Responses: {e}")
-            logger.error(f"Raw response: {response.text}")
-            logger.error(f"Cleaned response: {cleaned_response}")
-            # Fallback: Erstelle ein minimales Guide-Dictionary
-            return {
-                "plot_summary": "Fehler beim Parsen der KI-Antwort",
-                "main_characters": [],
-                "key_locations": [],
-                "tone_style": "neutral",
-                "writing_style": "direkt",
-                "glossary": {},
-                "special_instructions": "Fehler beim Erstellen des Leitfadens"
-            }
+            # Versuch 1: Direkter Parse
+            json.loads(raw_response_text)
+            style_guide_json_str = raw_response_text
+        except json.JSONDecodeError:
+            # Versuch 2: Markdown-Block entfernen
+            logger.info("JSON-Parse fehlgeschlagen. Versuche, Markdown-Formatierung zu entfernen...")
+            if raw_response_text.startswith("```json") and raw_response_text.endswith("```"):
+                cleaned_text = raw_response_text[7:-3].strip()
+                try:
+                    json.loads(cleaned_text)
+                    style_guide_json_str = cleaned_text
+                except json.JSONDecodeError as e:
+                    error_message = f"Konnte JSON auch nach Bereinigung nicht parsen: {e}. Original-Antwort: {raw_response_text}"
+                    logger.error(error_message)
+                    raise ValueError(error_message)
+            elif raw_response_text.startswith("```") and raw_response_text.endswith("```"):
+                cleaned_text = raw_response_text[3:-3].strip()
+                try:
+                    json.loads(cleaned_text)
+                    style_guide_json_str = cleaned_text
+                except json.JSONDecodeError as e:
+                    error_message = f"Konnte JSON auch nach Bereinigung nicht parsen: {e}. Original-Antwort: {raw_response_text}"
+                    logger.error(error_message)
+                    raise ValueError(error_message)
+            else:
+                error_message = f"Antwort ist kein valides JSON. Original-Antwort: {raw_response_text}"
+                logger.error(error_message)
+                raise ValueError(error_message)
+
+        if not style_guide_json_str:
+            error_message = "Die KI hat eine leere Antwort für den Styleguide zurückgegeben."
+            logger.error(error_message)
+            raise ValueError(error_message)
+        
+        # Parse das finale, bereinigte JSON
+        guide_dict = json.loads(style_guide_json_str)
+        
+        # Validiere die Struktur des JSON
+        required_keys = ["style_guide", "key_terms"]
+        missing_keys = [key for key in required_keys if key not in guide_dict]
+        
+        if missing_keys:
+            error_message = f"JSON fehlt erforderliche Schlüssel: {missing_keys}. Gefundene Schlüssel: {list(guide_dict.keys())}"
+            logger.error(error_message)
+            raise ValueError(error_message)
+        
+        logger.info("Style-Guide erfolgreich generiert und validiert")
+        return guide_dict
+        
+    except ValueError as e:
+        # Re-raise ValueError für bessere Fehlerbehandlung im aufrufenden Code
+        logger.error(f"Fehler bei der Erstellung des Übersetzungs-Leitfadens: {e}")
+        raise
     except Exception as e:
-        logger.error(f"Fehler bei der Erstellung des Übersetzungs-Leitfadens: {e}", exc_info=True)
+        logger.error(f"Unerwarteter Fehler bei der Erstellung des Übersetzungs-Leitfadens: {e}", exc_info=True)
+        # Fallback: Erstelle ein minimales Guide-Dictionary mit der neuen Struktur
         return {
-            "plot_summary": f"Fehler: {e}",
-            "main_characters": [],
-            "key_locations": [],
-            "tone_style": "neutral",
-            "writing_style": "direkt",
-            "glossary": {},
-            "special_instructions": f"Fehler beim Erstellen des Leitfadens: {e}"
+            "style_guide": {
+                "genre_audience": "Fehler beim Analysieren des Genres",
+                "tone_mood": "Fehler beim Analysieren des Tons",
+                "narrative_perspective": "Fehler beim Analysieren der Erzählperspektive",
+                "character_names": "Fehler beim Analysieren der Charaktere",
+                "key_concepts": "Fehler beim Analysieren der Schlüsselkonzepte",
+                "stylistic_features": "Fehler beim Analysieren der Stilmerkmale"
+            },
+            "key_terms": {}
         }
 
 

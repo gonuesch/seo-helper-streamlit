@@ -154,35 +154,35 @@ Beispiel für das JSON-Format:
 
 # Neue Prompts für die Manuskript-Übersetzung
 TRANSLATION_GUIDE_PROMPT = """
-Du bist ein erfahrener Literaturübersetzer und Lektor.
-Deine Aufgabe ist es, einen "Style & Glossar"-Leitfaden für die Übersetzung eines deutschen Manuskripts ins Englische zu erstellen.
-
-**WICHTIGE ANWEISUNG:** Gib deine Antwort AUSSCHLIESSLICH als valides JSON-Objekt zurück. Verwende keine einleitenden Sätze oder Erklärungen.
+Analysiere das folgende, vollständige Manuskript und erstelle ein einziges, valides JSON-Objekt.
+Das JSON-Objekt muss zwei Schlüssel enthalten: 'style_guide' und 'key_terms'.
 
 **Deutsche Originaltext:**
 ---
 {full_text}
 ---
 
-**Deine Aufgaben:**
-1. Analysiere den Text gründlich und erstelle eine kurze Zusammenfassung der Handlung/Thematik
-2. Identifiziere die Hauptfiguren, Orte und wiederkehrende Schlüsselbegriffe
-3. Bestimme den allgemeinen Ton und Stil des Textes
-4. Erstelle ein Glossar wichtiger Begriffe mit ihren englischen Entsprechungen
-
 **Ausgabeformat (JSON):**
 {{
-  "plot_summary": "Kurze Zusammenfassung der Handlung/Thematik (max. 200 Wörter)",
-  "main_characters": ["Liste der wichtigsten Figuren mit kurzen Beschreibungen"],
-  "key_locations": ["Liste wichtiger Orte/Schauplätze"],
-  "tone_style": "Beschreibung des Tons (z.B. 'sachlich', 'melancholisch', 'humorvoll', 'dramatisch')",
-  "writing_style": "Beschreibung des Schreibstils (z.B. 'direkt', 'lyrisch', 'akademisch')",
-  "glossary": {{
+  "style_guide": {{
+    "genre_audience": "Eine kurze Analyse des Genres (z.B. 'Postapokalypse', 'Coming-of-Age') und der wahrscheinlichen Zielgruppe",
+    "tone_mood": "Beschreibe den Ton (z.B. düster, hoffnungsvoll) und die Stimmung des Textes",
+    "narrative_perspective": "Identifiziere die Erzählperspektive (z.B. 'dritte Person, personal')",
+    "character_names": "Liste die Hauptcharaktere auf (z.B. Elias, Buster) und deren konsistente Benennung",
+    "key_concepts": "Führe zentrale Begriffe der Geschichte auf (z.B. 'Das Große Vergehen', 'Geisterstadt')",
+    "stylistic_features": "Beschreibe auffällige sprachliche Stilmittel (z.B. Metaphern, Satzbau, einfache, direkte Sprache)"
+  }},
+  "key_terms": {{
     "deutscher_begriff_1": "englische_übersetzung_1",
     "deutscher_begriff_2": "englische_übersetzung_2"
-  }},
-  "special_instructions": "Besondere Anweisungen für die Übersetzung (z.B. Dialekte, Fachbegriffe, etc.)"
+  }}
 }}
+
+**WICHTIGE REGELN:**
+- Antworte AUSSCHLIESSLICH mit dem JSON-Objekt
+- Füge keine Erklärungen oder Markdown-Formatierungen wie ```json hinzu
+- Das JSON muss valide sein und die beiden Hauptschlüssel enthalten
+- Das Glossar soll Eigennamen und Schlüsselkonzepte aus dem Text extrahieren
 """
 
 TRANSLATE_CHUNK_PROMPT = """

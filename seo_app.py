@@ -188,7 +188,12 @@ def save_edited_style_guide():
 
     try:
         # Hole die bearbeiteten Werte direkt aus den Widget-Keys
-        edited_style_guide = st.session_state.get("edited_style_guide_text", "")
+        edited_genre_audience = st.session_state.get("edited_genre_audience", "")
+        edited_tone_mood = st.session_state.get("edited_tone_mood", "")
+        edited_narrative_perspective = st.session_state.get("edited_narrative_perspective", "")
+        edited_character_names = st.session_state.get("edited_character_names", "")
+        edited_key_concepts = st.session_state.get("edited_key_concepts", "")
+        edited_stylistic_features = st.session_state.get("edited_stylistic_features", "")
         edited_key_terms_df = st.session_state.get("edited_key_terms_data", pd.DataFrame())
         
         # Konvertiere DataFrame zu Dictionary
@@ -200,7 +205,14 @@ def save_edited_style_guide():
         
         # Baue das Style-Guide-Dictionary neu zusammen
         updated_style_guide = {
-            "style_guide": edited_style_guide,
+            "style_guide": {
+                "genre_audience": edited_genre_audience,
+                "tone_mood": edited_tone_mood,
+                "narrative_perspective": edited_narrative_perspective,
+                "character_names": edited_character_names,
+                "key_concepts": edited_key_concepts,
+                "stylistic_features": edited_stylistic_features
+            },
             "key_terms": edited_key_terms
         }
         
@@ -1308,15 +1320,67 @@ elif selected_tool == "Manuskript-Übersetzung":
             if st.session_state.editable_style_guide:
                 style_guide = st.session_state.editable_style_guide
                 
-                # Style-Guide Text bearbeiten
-                st.subheader("📝 Style-Guide Text")
-                style_guide_text = style_guide.get("style_guide", "")
-                edited_style_guide = st.text_area(
-                    "Style-Guide Text bearbeiten:",
-                    value=style_guide_text,
-                    height=200,
-                    key="edited_style_guide_text",
-                    help="Bearbeite den Style-Guide Text nach deinen Wünschen."
+                # Style-Guide Details bearbeiten
+                st.subheader("📝 Style-Guide Details")
+                
+                # Genre und Zielgruppe
+                genre_audience = style_guide.get("style_guide", {}).get("genre_audience", "")
+                edited_genre_audience = st.text_area(
+                    "Genre und Zielgruppe:",
+                    value=genre_audience,
+                    height=60,
+                    key="edited_genre_audience",
+                    help="Bearbeite die Genre- und Zielgruppen-Analyse."
+                )
+                
+                # Ton und Stimmung
+                tone_mood = style_guide.get("style_guide", {}).get("tone_mood", "")
+                edited_tone_mood = st.text_area(
+                    "Ton und Stimmung:",
+                    value=tone_mood,
+                    height=60,
+                    key="edited_tone_mood",
+                    help="Bearbeite die Beschreibung von Ton und Stimmung."
+                )
+                
+                # Erzählperspektive
+                narrative_perspective = style_guide.get("style_guide", {}).get("narrative_perspective", "")
+                edited_narrative_perspective = st.text_area(
+                    "Erzählperspektive:",
+                    value=narrative_perspective,
+                    height=60,
+                    key="edited_narrative_perspective",
+                    help="Bearbeite die Erzählperspektive."
+                )
+                
+                # Charakternamen
+                character_names = style_guide.get("style_guide", {}).get("character_names", "")
+                edited_character_names = st.text_area(
+                    "Charakternamen:",
+                    value=character_names,
+                    height=60,
+                    key="edited_character_names",
+                    help="Bearbeite die Liste der Hauptcharaktere."
+                )
+                
+                # Schlüsselkonzepte
+                key_concepts = style_guide.get("style_guide", {}).get("key_concepts", "")
+                edited_key_concepts = st.text_area(
+                    "Schlüsselkonzepte:",
+                    value=key_concepts,
+                    height=60,
+                    key="edited_key_concepts",
+                    help="Bearbeite die zentralen Begriffe der Geschichte."
+                )
+                
+                # Stilistische Merkmale
+                stylistic_features = style_guide.get("style_guide", {}).get("stylistic_features", "")
+                edited_stylistic_features = st.text_area(
+                    "Stilistische Merkmale:",
+                    value=stylistic_features,
+                    height=60,
+                    key="edited_stylistic_features",
+                    help="Bearbeite die Beschreibung der sprachlichen Stilmittel."
                 )
                 
                 # Key Terms (Glossar) bearbeiten
