@@ -30,3 +30,4 @@ anthoscli
 # Cloud Function files (not tracked in GitHub)
 translation_runner.py
 translation_runner_requirements.txt
+translation_analyzer.py
