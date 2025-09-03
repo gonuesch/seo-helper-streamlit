@@ -279,62 +279,60 @@ def save_edited_style_guide():
 def auto_refresh_translation_status():
     """Automatische Status-Aktualisierung alle 30 Sekunden für aktive Übersetzungsaufträge."""
     if st.session_state.get("translation_job_id") and st.session_state.get("translation_job_status"):
-        # Nur bei aktiven Jobs automatisch aktualisieren
-        active_statuses = ["pending", "analyzing", "translation_queued", "translating"]
-        if st.session_state.translation_job_status in active_statuses:
-            try:
-                # Job-Status aus Firestore abrufen
-                job_ref = firestore_client.collection("translation_jobs").document(st.session_state.translation_job_id)
-                job_doc = job_ref.get()
+        # Bei allen Jobs automatisch aktualisieren (auch bei completed/failed)
+        try:
+            # Job-Status aus Firestore abrufen
+            job_ref = firestore_client.collection("translation_jobs").document(st.session_state.translation_job_id)
+            job_doc = job_ref.get()
+            
+            if job_doc.exists:
+                job_data = job_doc.to_dict()
+                new_status = job_data.get("status", "unknown")
                 
-                if job_doc.exists:
-                    job_data = job_doc.to_dict()
-                    new_status = job_data.get("status", "unknown")
+                # Nur aktualisieren, wenn sich der Status geändert hat
+                if new_status != st.session_state.translation_job_status:
+                    st.session_state.translation_job_status = new_status
                     
-                    # Nur aktualisieren, wenn sich der Status geändert hat
-                    if new_status != st.session_state.translation_job_status:
-                        st.session_state.translation_job_status = new_status
-                        
-                        # Aktualisiere alle relevanten Session State Werte
-                        st.session_state.job_cost = job_data.get("estimated_cost_usd")
-                        st.session_state.input_tokens = job_data.get("input_tokens")
-                        st.session_state.output_tokens = job_data.get("output_tokens")
-                        st.session_state.translation_cost_usd = job_data.get("translation_cost_usd")
-                        st.session_state.input_tokens_translation = job_data.get("input_tokens_translation")
-                        st.session_state.output_tokens_translation = job_data.get("output_tokens_translation")
-                        st.session_state.final_gcs_path = job_data.get("final_gcs_path")
-                        
-                        # Wenn der Status "analyzed" ist, Style-Guide herunterladen
-                        if new_status == "analyzed":
-                            style_guide_gcs_path = job_data.get("style_guide_gcs_path")
-                            if style_guide_gcs_path:
-                                try:
-                                    # GCS-Pfad parsen und Style-Guide herunterladen
-                                    if style_guide_gcs_path.startswith("gs://"):
-                                        path_parts = style_guide_gcs_path[5:].split("/", 1)
-                                        if len(path_parts) == 2:
-                                            bucket_name = path_parts[0]
-                                            blob_path = path_parts[1]
-                                            
-                                            bucket = storage_client.bucket(bucket_name)
-                                            blob = bucket.blob(blob_path)
-                                            style_guide_content = blob.download_as_text()
-                                            
-                                            parsed_style_guide = json.loads(style_guide_content)
-                                            st.session_state.current_style_guide = parsed_style_guide
-                                            st.session_state.editable_style_guide = parsed_style_guide.copy()
-                                            
-                                            logging.info(f"Style guide auto-downloaded for job {st.session_state.translation_job_id}")
-                                except Exception as e:
-                                    logging.error(f"Auto-download style guide error: {e}")
-                        
-                        logging.info(f"Auto-status update: {st.session_state.translation_job_status} -> {new_status}")
-                        
-                        # Rerun nur bei Status-Änderungen
-                        st.rerun()
-                        
-            except Exception as e:
-                logging.error(f"Auto-refresh error: {e}")
+                    # Aktualisiere alle relevanten Session State Werte
+                    st.session_state.job_cost = job_data.get("estimated_cost_usd")
+                    st.session_state.input_tokens = job_data.get("input_tokens")
+                    st.session_state.output_tokens = job_data.get("output_tokens")
+                    st.session_state.translation_cost_usd = job_data.get("translation_cost_usd")
+                    st.session_state.input_tokens_translation = job_data.get("input_tokens_translation")
+                    st.session_state.output_tokens_translation = job_data.get("output_tokens_translation")
+                    st.session_state.final_gcs_path = job_data.get("final_gcs_path")
+                    
+                    # Wenn der Status "analyzed" ist, Style-Guide herunterladen
+                    if new_status == "analyzed":
+                        style_guide_gcs_path = job_data.get("style_guide_gcs_path")
+                        if style_guide_gcs_path:
+                            try:
+                                # GCS-Pfad parsen und Style-Guide herunterladen
+                                if style_guide_gcs_path.startswith("gs://"):
+                                    path_parts = style_guide_gcs_path[5:].split("/", 1)
+                                    if len(path_parts) == 2:
+                                        bucket_name = path_parts[0]
+                                        blob_path = path_parts[1]
+                                        
+                                        bucket = storage_client.bucket(bucket_name)
+                                        blob = bucket.blob(blob_path)
+                                        style_guide_content = blob.download_as_text()
+                                        
+                                        parsed_style_guide = json.loads(style_guide_content)
+                                        st.session_state.current_style_guide = parsed_style_guide
+                                        st.session_state.editable_style_guide = parsed_style_guide.copy()
+                                        
+                                        logging.info(f"Style guide auto-downloaded for job {st.session_state.translation_job_id}")
+                            except Exception as e:
+                                logging.error(f"Auto-download style guide error: {e}")
+                    
+                    logging.info(f"Auto-status update: {st.session_state.translation_job_status} -> {new_status}")
+                    
+                    # Rerun nur bei Status-Änderungen
+                    st.rerun()
+                    
+        except Exception as e:
+            logging.error(f"Auto-refresh error: {e}")
 
 def get_time_estimate(status, file_size_mb=None):
     """Gibt eine Zeitabschätzung für den aktuellen Status zurück."""
@@ -1418,22 +1416,21 @@ elif selected_tool == "Manuskript-Übersetzung":
             st.info(time_estimate)
         
         # Automatische Status-Updates alle 30 Sekunden
-        if status in ["pending", "analyzing", "translation_queued", "translating"]:
-            st.info("🔄 **Automatische Updates:** Der Status wird alle 30 Sekunden aktualisiert.")
-            st.caption("💡 **Tipp:** Du kannst auch manuell den Status prüfen.")
-            
-            # Automatischer Timer für Status-Updates alle 30 Sekunden
-            import time
-            current_time = time.time()
-            
-            # Initialisiere den Timer im Session State
-            if 'last_status_check' not in st.session_state:
-                st.session_state.last_status_check = current_time
-            
-            # Prüfe alle 30 Sekunden
-            if current_time - st.session_state.last_status_check >= 30:
-                auto_refresh_translation_status()
-                st.session_state.last_status_check = current_time
+        st.info("🔄 **Automatische Updates:** Der Status wird alle 30 Sekunden aktualisiert.")
+        st.caption("💡 **Tipp:** Du kannst auch manuell den Status prüfen.")
+        
+        # Automatischer Timer für Status-Updates alle 30 Sekunden
+        import time
+        current_time = time.time()
+        
+        # Initialisiere den Timer im Session State
+        if 'last_status_check' not in st.session_state:
+            st.session_state.last_status_check = current_time
+        
+        # Prüfe alle 30 Sekunden
+        if current_time - st.session_state.last_status_check >= 30:
+            auto_refresh_translation_status()
+            st.session_state.last_status_check = current_time
         
         # Manueller Status-Update Button (empfohlen)
         if st.button("🔄 Status jetzt aktualisieren"):
