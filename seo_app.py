@@ -1323,21 +1323,12 @@ elif selected_tool == "Manuskript-Übersetzung":
         else:
             st.info(f"**Status:** {status}")
         
-        # Automatische Status-Aktualisierung mit Timer
+        # Sanfte Status-Updates ohne App-Neustarts
         if status in ["pending", "analyzing", "translation_queued", "translating"]:
-            # Timer für automatische Updates
-            if 'last_status_check' not in st.session_state:
-                st.session_state.last_status_check = time.time()
-            
-            # Alle 10 Sekunden Status prüfen
-            if time.time() - st.session_state.last_status_check > 10:
-                st.session_state.last_status_check = time.time()
-                refresh_translation_status()
-                st.rerun()
-            
-            st.info("🔄 **Automatische Aktualisierung:** Status wird alle 10 Sekunden geprüft...")
+            st.info("🔄 **Status-Update:** Klicke den Button unten, um den aktuellen Status zu prüfen.")
+            st.caption("💡 **Tipp:** Bei langen Jobs alle 1-2 Minuten den Status prüfen.")
         
-        # Manueller Status-Update Button
+        # Manueller Status-Update Button (empfohlen)
         if st.button("🔄 Status jetzt aktualisieren"):
             refresh_translation_status()
             st.rerun()
