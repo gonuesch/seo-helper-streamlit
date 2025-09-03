@@ -1323,16 +1323,24 @@ elif selected_tool == "Manuskript-Übersetzung":
         else:
             st.info(f"**Status:** {status}")
         
-        # Automatische Status-Aktualisierung alle 5 Sekunden
+        # Automatische Status-Aktualisierung mit Timer
         if status in ["pending", "analyzing", "translation_queued", "translating"]:
-            st.info("🔄 **Automatische Aktualisierung:** Der Status wird alle 5 Sekunden aktualisiert...")
-            # Streamlit auto-refresh alle 5 Sekunden
-            time.sleep(5)
-            st.rerun()
+            # Timer für automatische Updates
+            if 'last_status_check' not in st.session_state:
+                st.session_state.last_status_check = time.time()
+            
+            # Alle 10 Sekunden Status prüfen
+            if time.time() - st.session_state.last_status_check > 10:
+                st.session_state.last_status_check = time.time()
+                refresh_translation_status()
+                st.rerun()
+            
+            st.info("🔄 **Automatische Aktualisierung:** Status wird alle 10 Sekunden geprüft...")
         
-        # Manueller Status-Update Button (als Fallback)
-        if st.button("🔄 Status manuell aktualisieren"):
+        # Manueller Status-Update Button
+        if st.button("🔄 Status jetzt aktualisieren"):
             refresh_translation_status()
+            st.rerun()
         
         # Cache-Informationen anzeigen (falls verfügbar)
         if st.session_state.get("cached_content_name"):
