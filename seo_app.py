@@ -316,15 +316,49 @@ def auto_refresh_translation_status():
                                         
                                         bucket = storage_client.bucket(bucket_name)
                                         blob = bucket.blob(blob_path)
-                                        style_guide_content = blob.download_as_text()
                                         
-                                        parsed_style_guide = json.loads(style_guide_content)
-                                        st.session_state.current_style_guide = parsed_style_guide
-                                        st.session_state.editable_style_guide = parsed_style_guide.copy()
-                                        
-                                        logging.info(f"Style guide auto-downloaded for job {st.session_state.translation_job_id}")
+                                        # Prüfe Dateigröße
+                                        blob.reload()
+                                        if blob.size == 0:
+                                            st.warning("⚠️ Style-Guide ist leer (0 Bytes). Übersetzung kann nicht gestartet werden.")
+                                            logging.warning(f"Empty style guide file for job {st.session_state.translation_job_id}")
+                                            # Style-Guide nicht laden, aber Status-Update fortsetzen
+                                        else:
+                                            style_guide_content = blob.download_as_text()
+                                            
+                                            # Prüfe ob der Inhalt leer ist
+                                            if not style_guide_content or not style_guide_content.strip():
+                                                st.warning("⚠️ Style-Guide ist leer. Übersetzung kann nicht gestartet werden.")
+                                                logging.warning(f"Empty style guide content for job {st.session_state.translation_job_id}")
+                                                # Style-Guide nicht laden, aber Status-Update fortsetzen
+                                            else:
+                                                # Prüfe ob es gültiges JSON ist
+                                                try:
+                                                    parsed_style_guide = json.loads(style_guide_content)
+                                                    
+                                                    # Prüfe ob der Style-Guide die erwartete Struktur hat
+                                                    if not isinstance(parsed_style_guide, dict) or 'style_guide' not in parsed_style_guide:
+                                                        st.warning("⚠️ Style-Guide hat ungültige Struktur. Übersetzung kann nicht gestartet werden.")
+                                                        logging.warning(f"Invalid style guide structure for job {st.session_state.translation_job_id}")
+                                                        # Style-Guide nicht laden, aber Status-Update fortsetzen
+                                                    else:
+                                                        st.session_state.current_style_guide = parsed_style_guide
+                                                        st.session_state.editable_style_guide = parsed_style_guide.copy()
+                                                        
+                                                        st.success("✅ Style-Guide erfolgreich geladen!")
+                                                        logging.info(f"Style guide auto-downloaded for job {st.session_state.translation_job_id}")
+                                                        
+                                                except json.JSONDecodeError as json_error:
+                                                    st.error(f"❌ Style-Guide enthält ungültiges JSON: {json_error}")
+                                                    st.info("💡 Der Style-Guide wird neu generiert...")
+                                                    logging.error(f"Invalid JSON in style guide for job {st.session_state.translation_job_id}: {json_error}")
+                                                    
+                                                    # Style-Guide nicht laden, aber Status-Update fortsetzen
+                                            
                             except Exception as e:
-                                logging.error(f"Auto-download style guide error: {e}")
+                                st.error(f"❌ Fehler beim Laden des Style-Guides: {e}")
+                                logging.error(f"Style guide download error via status update: {e}")
+                                # Fehler beim Laden, aber Status-Update fortsetzen
                     
                     logging.info(f"Auto-status update: {st.session_state.translation_job_status} -> {new_status}")
                     
