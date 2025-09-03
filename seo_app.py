@@ -1415,90 +1415,14 @@ elif selected_tool == "Manuskript-Übersetzung":
         if time_estimate:
             st.info(time_estimate)
         
-        # Automatische Status-Updates alle 30 Sekunden
-        st.info("🔄 **Automatische Updates:** Der Status wird alle 30 Sekunden aktualisiert.")
-        st.caption("💡 **Tipp:** Du kannst auch manuell den Status prüfen.")
+        # Status-Updates
+        st.info("🔄 **Status-Updates:** Klicke den Button unten, um den aktuellen Status zu prüfen.")
+        st.caption("💡 **Tipp:** Bei langen Jobs regelmäßig den Status prüfen.")
         
-        # Einfacher Timer für Status-Updates alle 30 Sekunden
-        import time
-        
-        # Initialisiere den Timer im Session State
-        if 'last_status_check' not in st.session_state:
-            st.session_state.last_status_check = time.time()
-        
-        # Zeige Countdown
-        time_since_last_check = time.time() - st.session_state.last_status_check
-        time_until_next = max(0, 30 - time_since_last_check)
-        
-        st.caption(f"⏱️ Nächster Update in {int(time_until_next)} Sekunden...")
-        
-        # Prüfe alle 30 Sekunden
-        if time_since_last_check >= 30:
-            # Status aktualisieren
-            try:
-                job_ref = firestore_client.collection("translation_jobs").document(st.session_state.translation_job_id)
-                job_doc = job_ref.get()
-                
-                if job_doc.exists:
-                    job_data = job_doc.to_dict()
-                    new_status = job_data.get("status", "unknown")
-                    
-                    # Status im Session State aktualisieren
-                    if new_status != st.session_state.translation_job_status:
-                        st.session_state.translation_job_status = new_status
-                        st.session_state.job_cost = job_data.get("estimated_cost_usd")
-                        st.session_state.input_tokens = job_data.get("input_tokens")
-                        st.session_state.output_tokens = job_data.get("output_tokens")
-                        st.session_state.translation_cost_usd = job_data.get("translation_cost_usd")
-                        st.session_state.input_tokens_translation = job_data.get("input_tokens_translation")
-                        st.session_state.output_tokens_translation = job_data.get("output_tokens_translation")
-                        st.session_state.final_gcs_path = job_data.get("final_gcs_path")
-                        
-                        # Style-Guide herunterladen bei "analyzed" Status
-                        if new_status == "analyzed":
-                            style_guide_gcs_path = job_data.get("style_guide_gcs_path")
-                            if style_guide_gcs_path:
-                                try:
-                                    if style_guide_gcs_path.startswith("gs://"):
-                                        path_parts = style_guide_gcs_path[5:].split("/", 1)
-                                        if len(path_parts) == 2:
-                                            bucket_name = path_parts[0]
-                                            blob_path = path_parts[1]
-                                            
-                                            bucket = storage_client.bucket(bucket_name)
-                                            blob = bucket.blob(blob_path)
-                                            style_guide_content = blob.download_as_text()
-                                            
-                                            parsed_style_guide = json.loads(style_guide_content)
-                                            st.session_state.current_style_guide = parsed_style_guide
-                                            st.session_state.editable_style_guide = parsed_style_guide.copy()
-                                            
-                                            logging.info(f"Style guide auto-downloaded for job {st.session_state.translation_job_id}")
-                                except Exception as e:
-                                    logging.error(f"Auto-download style guide error: {e}")
-                        
-                        logging.info(f"Auto-status update: {st.session_state.translation_job_status} -> {new_status}")
-                        
-                        # Zeige Update-Bestätigung
-                        st.success(f"✅ Status automatisch aktualisiert: {new_status}")
-                        
-                        # Timer zurücksetzen
-                        st.session_state.last_status_check = time.time()
-                        
-                        # Rerun für UI-Update
-                        st.rerun()
-                        
-            except Exception as e:
-                logging.error(f"Auto-refresh error: {e}")
-                st.error(f"❌ Fehler beim automatischen Update: {e}")
-            
-            # Timer zurücksetzen
-            st.session_state.last_status_check = time.time()
-        
-        # Auto-rerun alle 30 Sekunden für kontinuierliche Updates
-        if time_since_last_check >= 30:
+        # Manueller Status-Update Button (empfohlen)
+        if st.button("🔄 Status jetzt aktualisieren"):
+            refresh_translation_status()
             st.rerun()
-        
 
     
     # Kosten-Informationen anzeigen (wenn verfügbar)
