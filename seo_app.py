@@ -1323,8 +1323,15 @@ elif selected_tool == "Manuskript-Übersetzung":
         else:
             st.info(f"**Status:** {status}")
         
-        # Status aktualisieren Button mit erweiterter Funktionalität
-        if st.button("🔄 Status aktualisieren"):
+        # Automatische Status-Aktualisierung alle 5 Sekunden
+        if status in ["pending", "analyzing", "translation_queued", "translating"]:
+            st.info("🔄 **Automatische Aktualisierung:** Der Status wird alle 5 Sekunden aktualisiert...")
+            # Streamlit auto-refresh alle 5 Sekunden
+            time.sleep(5)
+            st.rerun()
+        
+        # Manueller Status-Update Button (als Fallback)
+        if st.button("🔄 Status manuell aktualisieren"):
             refresh_translation_status()
         
         # Cache-Informationen anzeigen (falls verfügbar)
@@ -1536,11 +1543,49 @@ elif selected_tool == "Manuskript-Übersetzung":
         with col2:
             if st.session_state.get("final_gcs_path"):
                 st.success("🎉 Übersetzung verfügbar!")
-                st.info(f"**Pfad:** {st.session_state.final_gcs_path}")
-                st.caption("Das übersetzte Dokument kann über Google Cloud Storage heruntergeladen werden.")
                 
-                # Hier könnte ein direkter Download-Button hinzugefügt werden
-                # falls wir die Datei direkt aus dem Frontend zugänglich machen wollen
+                # Download-Button für die übersetzte Datei
+                if st.button("📥 Übersetztes Dokument herunterladen", type="primary"):
+                    try:
+                        # Lade Datei aus Cloud Storage
+                        from google.cloud import storage
+                        storage_client = storage.Client()
+                        
+                        # Parse GCS-Pfad
+                        gcs_path = st.session_state.final_gcs_path
+                        if gcs_path.startswith("gs://"):
+                            path_parts = gcs_path[5:].split("/", 1)
+                            if len(path_parts) == 2:
+                                bucket_name = path_parts[0]
+                                blob_path = path_parts[1]
+                                
+                                # Datei herunterladen
+                                bucket = storage_client.bucket(bucket_name)
+                                blob = bucket.blob(blob_path)
+                                file_bytes = blob.download_as_bytes()
+                                
+                                # Dateiname extrahieren
+                                file_name = blob_path.split("/")[-1]
+                                
+                                # Download-Button anzeigen
+                                st.download_button(
+                                    label=f"💾 {file_name} herunterladen",
+                                    data=file_bytes,
+                                    file_name=file_name,
+                                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                )
+                                
+                                st.success("✅ Download bereit!")
+                            else:
+                                st.error("❌ Ungültiger GCS-Pfad")
+                        else:
+                            st.error("❌ Ungültiger GCS-Pfad")
+                    except Exception as e:
+                        st.error(f"❌ Fehler beim Laden der Datei: {e}")
+                        st.info("Du kannst die Datei auch direkt über den GCS-Pfad herunterladen:")
+                        st.code(st.session_state.final_gcs_path)
+                
+                st.caption("Klicke den Button oben, um die übersetzte Datei direkt herunterzuladen.")
             else:
                 st.info("⏳ Übersetzung noch nicht verfügbar")
                 st.caption("Das übersetzte Dokument wird nach Abschluss der Übersetzung hier angezeigt.")
