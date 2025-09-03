@@ -1039,7 +1039,7 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
                                     "error_message": str(conv_e)
                                 })
                                 continue
-                    
+                
                     logging.info("Generiere barrierefreie Beschreibung für Datei: %s", file_name)
                     short_desc, long_desc = generate_accessibility_description_cached(image_bytes_for_api, file_name, ebook_context_input, gemini_api_key)
                     
@@ -1419,32 +1419,21 @@ elif selected_tool == "Manuskript-Übersetzung":
         st.info("🔄 **Automatische Updates:** Der Status wird alle 30 Sekunden aktualisiert.")
         st.caption("💡 **Tipp:** Du kannst auch manuell den Status prüfen.")
         
-        # JavaScript-basierter Auto-Refresh alle 30 Sekunden
-        if status in ["pending", "analyzing", "translation_queued", "translating"]:
-            # Auto-refresh mit JavaScript
-            st.markdown("""
-            <script>
-            setTimeout(function() {
-                window.location.reload();
-            }, 30000);
-            </script>
-            """, unsafe_allow_html=True)
-            
-            st.caption("🔄 Seite wird automatisch in 30 Sekunden neu geladen...")
-        
-        # Container für automatische Updates
-        update_container = st.empty()
-        
-        # Automatischer Timer für Status-Updates alle 30 Sekunden
+        # Einfacher Timer für Status-Updates alle 30 Sekunden
         import time
-        current_time = time.time()
         
         # Initialisiere den Timer im Session State
         if 'last_status_check' not in st.session_state:
-            st.session_state.last_status_check = current_time
+            st.session_state.last_status_check = time.time()
+        
+        # Zeige Countdown
+        time_since_last_check = time.time() - st.session_state.last_status_check
+        time_until_next = max(0, 30 - time_since_last_check)
+        
+        st.caption(f"⏱️ Nächster Update in {int(time_until_next)} Sekunden...")
         
         # Prüfe alle 30 Sekunden
-        if current_time - st.session_state.last_status_check >= 30:
+        if time_since_last_check >= 30:
             # Status aktualisieren
             try:
                 job_ref = firestore_client.collection("translation_jobs").document(st.session_state.translation_job_id)
@@ -1490,24 +1479,24 @@ elif selected_tool == "Manuskript-Übersetzung":
                         
                         logging.info(f"Auto-status update: {st.session_state.translation_job_status} -> {new_status}")
                         
-                        # Zeige Update-Bestätigung im Container
-                        with update_container.container():
-                            st.success(f"✅ Status automatisch aktualisiert: {new_status}")
+                        # Zeige Update-Bestätigung
+                        st.success(f"✅ Status automatisch aktualisiert: {new_status}")
                         
-                        # Rerun für vollständiges UI-Update
+                        # Timer zurücksetzen
+                        st.session_state.last_status_check = time.time()
+                        
+                        # Rerun für UI-Update
                         st.rerun()
                         
             except Exception as e:
                 logging.error(f"Auto-refresh error: {e}")
-                with update_container.container():
-                    st.error(f"❌ Fehler beim automatischen Update: {e}")
+                st.error(f"❌ Fehler beim automatischen Update: {e}")
             
             # Timer zurücksetzen
-            st.session_state.last_status_check = current_time
+            st.session_state.last_status_check = time.time()
         
-        # Manueller Status-Update Button (empfohlen)
-        if st.button("🔄 Status jetzt aktualisieren"):
-            refresh_translation_status()
+        # Auto-rerun alle 30 Sekunden für kontinuierliche Updates
+        if time_since_last_check >= 30:
             st.rerun()
         
 
