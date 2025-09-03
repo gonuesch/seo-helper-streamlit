@@ -1479,8 +1479,7 @@ elif selected_tool == "Manuskript-Übersetzung":
                     key_terms_df,
                     key="edited_key_terms_data",
                     num_rows="dynamic",
-                    use_container_width=True,
-                    help="Bearbeite das Glossar. Füge neue Begriffe hinzu oder ändere bestehende Übersetzungen."
+                    use_container_width=True
                 )
                 
                 # Konvertiere DataFrame zurück zu Dictionary
@@ -1511,8 +1510,7 @@ elif selected_tool == "Manuskript-Übersetzung":
                         "✅ Übersetzung jetzt starten",
                         on_click=trigger_translation_runner,
                         args=(st.session_state.translation_job_id,),
-                        type="primary",
-                        help="Startet den finalen, asynchronen Übersetzungsprozess über Pub/Sub"
+                        type="primary"
                     ):
                         st.rerun()
                 else:
