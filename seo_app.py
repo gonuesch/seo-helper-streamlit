@@ -234,7 +234,7 @@ def save_edited_style_guide():
             st.error("Job nicht gefunden")
             return
         
-        job_data = job_doc.to_dict()
+        job_data = job_ref.to_dict()
         style_guide_gcs_path = job_data.get("style_guide_gcs_path")
         
         if not style_guide_gcs_path:
@@ -275,6 +275,93 @@ def save_edited_style_guide():
     except Exception as e:
         st.error(f"Fehler beim Speichern des Style-Guides: {e}")
         logging.error(f"Style guide save error: {e}")
+
+def auto_refresh_translation_status():
+    """Automatische Status-Aktualisierung alle 30 Sekunden für aktive Übersetzungsaufträge."""
+    if st.session_state.get("translation_job_id") and st.session_state.get("translation_job_status"):
+        # Nur bei aktiven Jobs automatisch aktualisieren
+        active_statuses = ["pending", "analyzing", "translation_queued", "translating"]
+        if st.session_state.translation_job_status in active_statuses:
+            try:
+                # Job-Status aus Firestore abrufen
+                job_ref = firestore_client.collection("translation_jobs").document(st.session_state.translation_job_id)
+                job_doc = job_ref.get()
+                
+                if job_doc.exists:
+                    job_data = job_doc.to_dict()
+                    new_status = job_data.get("status", "unknown")
+                    
+                    # Nur aktualisieren, wenn sich der Status geändert hat
+                    if new_status != st.session_state.translation_job_status:
+                        st.session_state.translation_job_status = new_status
+                        
+                        # Aktualisiere alle relevanten Session State Werte
+                        st.session_state.job_cost = job_data.get("estimated_cost_usd")
+                        st.session_state.input_tokens = job_data.get("input_tokens")
+                        st.session_state.output_tokens = job_data.get("output_tokens")
+                        st.session_state.translation_cost_usd = job_data.get("translation_cost_usd")
+                        st.session_state.input_tokens_translation = job_data.get("input_tokens_translation")
+                        st.session_state.output_tokens_translation = job_data.get("output_tokens_translation")
+                        st.session_state.final_gcs_path = job_data.get("final_gcs_path")
+                        
+                        # Wenn der Status "analyzed" ist, Style-Guide herunterladen
+                        if new_status == "analyzed":
+                            style_guide_gcs_path = job_data.get("style_guide_gcs_path")
+                            if style_guide_gcs_path:
+                                try:
+                                    # GCS-Pfad parsen und Style-Guide herunterladen
+                                    if style_guide_gcs_path.startswith("gs://"):
+                                        path_parts = style_guide_gcs_path[5:].split("/", 1)
+                                        if len(path_parts) == 2:
+                                            bucket_name = path_parts[0]
+                                            blob_path = path_parts[1]
+                                            
+                                            bucket = storage_client.bucket(bucket_name)
+                                            blob = bucket.blob(blob_path)
+                                            style_guide_content = blob.download_as_text()
+                                            
+                                            parsed_style_guide = json.loads(style_guide_content)
+                                            st.session_state.current_style_guide = parsed_style_guide
+                                            st.session_state.editable_style_guide = parsed_style_guide.copy()
+                                            
+                                            logging.info(f"Style guide auto-downloaded for job {st.session_state.translation_job_id}")
+                                except Exception as e:
+                                    logging.error(f"Auto-download style guide error: {e}")
+                        
+                        logging.info(f"Auto-status update: {st.session_state.translation_job_status} -> {new_status}")
+                        
+                        # Rerun nur bei Status-Änderungen
+                        st.rerun()
+                        
+            except Exception as e:
+                logging.error(f"Auto-refresh error: {e}")
+
+def get_time_estimate(status, file_size_mb=None):
+    """Gibt eine Zeitabschätzung für den aktuellen Status zurück."""
+    if status == "pending":
+        return "⏱️ **Geschätzte Dauer:** 2-5 Minuten"
+    elif status == "analyzing":
+        if file_size_mb:
+            if file_size_mb < 1:
+                return "⏱️ **Geschätzte Dauer:** 3-7 Minuten"
+            elif file_size_mb < 5:
+                return "⏱️ **Geschätzte Dauer:** 5-12 Minuten"
+            else:
+                return "⏱️ **Geschätzte Dauer:** 8-20 Minuten"
+        return "⏱️ **Geschätzte Dauer:** 5-15 Minuten"
+    elif status == "translation_queued":
+        return "⏱️ **Geschätzte Dauer:** 1-3 Minuten (Warteschlange)"
+    elif status == "translating":
+        if file_size_mb:
+            if file_size_mb < 1:
+                return "⏱️ **Geschätzte Dauer:** 10-25 Minuten"
+            elif file_size_mb < 5:
+                return "⏱️ **Geschätzte Dauer:** 20-45 Minuten"
+            else:
+                return "⏱️ **Geschätzte Dauer:** 35-80 Minuten"
+        return "⏱️ **Geschätzte Dauer:** 20-60 Minuten"
+    else:
+        return ""
 
 def trigger_translation_runner(job_id):
     """Sendet eine Nachricht an das 'run-translation' Pub/Sub-Thema."""
@@ -630,11 +717,16 @@ with st.sidebar:
     st.subheader("ℹ️ Info")
 
 # --- Hauptbereich mit Navigation ---
+# Bestimme den Standard-Index basierend auf dem letzten ausgewählten Tool
+default_index = 0
+if st.session_state.get("last_selected_tool") == "Manuskript-Übersetzung":
+    default_index = 3
+
 selected_tool = option_menu(
     menu_title=None,
     options=["SEO Tags", "Barrierefreie Bildbeschreibung", "Text-to-Speech", "Manuskript-Übersetzung"],
     icons=['search', 'universal-access-circle', 'sound-wave', 'translate'],
-    menu_icon="cast", default_index=0, orientation="horizontal",
+    menu_icon="cast", default_index=default_index, orientation="horizontal",
     styles={
         "container": {"padding": "5px !important", "background-color": "#fafafa", "border-radius": "10px"},
         "icon": {"color": "#4A90E2", "font-size": "24px"},
@@ -1289,7 +1381,7 @@ elif selected_tool == "Manuskript-Übersetzung":
 
     if uploaded_file:
         st.button(
-            "🚀 Übersetzung starten",
+            "🚀 Analyse starten",
             on_click=start_translation_job,
             args=(uploaded_file,)
         )
@@ -1298,9 +1390,6 @@ elif selected_tool == "Manuskript-Übersetzung":
     if st.session_state.get("translation_job_id"):
         st.divider()
         st.subheader("📋 Übersetzungsauftrag Status")
-        
-        job_id = st.session_state.translation_job_id
-        st.info(f"**Job-ID:** {job_id}")
         
         # Erweiterte Status-Anzeige mit Icons
         status = st.session_state.translation_job_status
@@ -1323,20 +1412,35 @@ elif selected_tool == "Manuskript-Übersetzung":
         else:
             st.info(f"**Status:** {status}")
         
-        # Sanfte Status-Updates ohne App-Neustarts
+        # Zeitabschätzung anzeigen
+        time_estimate = get_time_estimate(status)
+        if time_estimate:
+            st.info(time_estimate)
+        
+        # Automatische Status-Updates alle 30 Sekunden
         if status in ["pending", "analyzing", "translation_queued", "translating"]:
-            st.info("🔄 **Status-Update:** Klicke den Button unten, um den aktuellen Status zu prüfen.")
-            st.caption("💡 **Tipp:** Bei langen Jobs alle 1-2 Minuten den Status prüfen.")
+            st.info("🔄 **Automatische Updates:** Der Status wird alle 30 Sekunden aktualisiert.")
+            st.caption("💡 **Tipp:** Du kannst auch manuell den Status prüfen.")
+            
+            # Automatischer Timer für Status-Updates alle 30 Sekunden
+            import time
+            current_time = time.time()
+            
+            # Initialisiere den Timer im Session State
+            if 'last_status_check' not in st.session_state:
+                st.session_state.last_status_check = current_time
+            
+            # Prüfe alle 30 Sekunden
+            if current_time - st.session_state.last_status_check >= 30:
+                auto_refresh_translation_status()
+                st.session_state.last_status_check = current_time
         
         # Manueller Status-Update Button (empfohlen)
         if st.button("🔄 Status jetzt aktualisieren"):
             refresh_translation_status()
             st.rerun()
         
-        # Cache-Informationen anzeigen (falls verfügbar)
-        if st.session_state.get("cached_content_name"):
-            st.info(f"💾 **Cache:** {st.session_state.cached_content_name}")
-            st.caption("Das Manuskript ist im Vertex AI Cache gespeichert für schnelle Übersetzung.")
+
     
     # Kosten-Informationen anzeigen (wenn verfügbar)
     if st.session_state.get("job_cost") is not None or st.session_state.get("translation_cost_usd") is not None:
@@ -1494,14 +1598,32 @@ elif selected_tool == "Manuskript-Übersetzung":
                     if pd.notna(row["Deutscher Begriff"]) and pd.notna(row["Englische Übersetzung"]):
                         edited_key_terms[row["Deutscher Begriff"]] = row["Englische Übersetzung"]
                 
+                # Prüfe, ob Änderungen vorgenommen wurden
+                has_changes = (
+                    edited_genre_audience != genre_audience or
+                    edited_tone_mood != tone_mood or
+                    edited_narrative_perspective != narrative_perspective or
+                    edited_character_names != character_names or
+                    edited_key_concepts != key_concepts or
+                    edited_stylistic_features != stylistic_features or
+                    edited_key_terms != key_terms
+                )
+                
                 # Speichern Button
                 st.divider()
                 col1, col2 = st.columns([1, 3])
                 with col1:
-                    if st.button("💾 Änderungen speichern", type="primary", on_click=save_edited_style_guide):
+                    button_type = "primary" if has_changes else "secondary"
+                    button_text = "💾 Änderungen speichern" if has_changes else "💾 Keine Änderungen"
+                    button_disabled = not has_changes
+                    
+                    if st.button(button_text, type=button_type, disabled=button_disabled, on_click=save_edited_style_guide):
                         st.rerun()
                 with col2:
-                    st.info("💡 Nach dem Speichern wird der Job-Status auf 'guide_approved' gesetzt.")
+                    if has_changes:
+                        st.info("💡 Nach dem Speichern wird der Job-Status auf 'guide_approved' gesetzt.")
+                    else:
+                        st.info("ℹ️ Keine Änderungen zum Speichern vorhanden.")
                 
                 # Übersetzung starten Button (nur aktiv wenn Status "analyzed" oder "guide_approved" ist)
                 st.divider()
@@ -1534,7 +1656,7 @@ elif selected_tool == "Manuskript-Übersetzung":
             st.download_button(
                 label="💾 Style-Guide herunterladen (.json)",
                 data=style_guide_json.encode('utf-8'),
-                file_name=f"style_guide_{job_id}.json",
+                file_name="style_guide.json",
                 mime="application/json"
             )
         

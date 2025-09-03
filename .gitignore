@@ -31,3 +31,4 @@ anthoscli
 translation_runner.py
 translation_runner_requirements.txt
 translation_analyzer.py
+translation_analyzer_requirements.txt
