@@ -31,4 +31,6 @@ anthoscli
 translation_runner.py
 translation_runner_requirements.txt
 translation_analyzer.py
-translation_analyzer_requirements.txt
+translation_analyzer_requirements.txt# Temporäre JSON-Bereinigungsdateien
+fix_json_cleaning.py
+improved_json_cleaning.py
