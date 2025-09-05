@@ -248,7 +248,7 @@ def generate_audio_from_text(text: str, api_key: str, voice_id: str) -> Union[by
         audio_generator = client.text_to_speech.convert(
             voice_id=voice_id,
             text=text,
-            model_id="eleven_multilingual_v2", 
+            model_id="eleven_turbo_v2",  # ← Änderung zu Turbo!
         )
 
         logger.info(f"Sammle Audio-Chunks von der ElevenLabs API für Stimme {voice_id}...")
