@@ -115,3 +115,102 @@ def chunk_text(text: str, chunk_size: int = 8000) -> list[str]:
 
     chunk_recursively(text)
     return [c for c in chunks if c.strip()]
+
+@log_exceptions
+def chunk_text_by_paragraphs(text: str, max_chunk_size: int = 8000) -> list[str]:
+    """
+    Teilt Text intelligent nach Absätzen auf, ideal für Gemini-Verarbeitung.
+    Versucht Absätze zusammenzuhalten, solange sie unter der max_chunk_size bleiben.
+    """
+    if not isinstance(text, str):
+        return []
+    
+    # Teile Text in Absätze auf
+    paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
+    
+    if not paragraphs:
+        return []
+    
+    chunks = []
+    current_chunk = ""
+    
+    for paragraph in paragraphs:
+        # Wenn der aktuelle Chunk + neuer Absatz zu groß wäre
+        if current_chunk and len(current_chunk) + len(paragraph) + 2 > max_chunk_size:
+            # Speichere den aktuellen Chunk
+            chunks.append(current_chunk.strip())
+            current_chunk = paragraph
+        else:
+            # Füge Absatz zum aktuellen Chunk hinzu
+            if current_chunk:
+                current_chunk += "\n\n" + paragraph
+            else:
+                current_chunk = paragraph
+    
+    # Füge den letzten Chunk hinzu
+    if current_chunk.strip():
+        chunks.append(current_chunk.strip())
+    
+    return chunks
+
+@log_exceptions
+def chunk_ssml_for_elevenlabs(ssml_text: str, max_chunk_size: int = 40000) -> list[str]:
+    """
+    Teilt SSML-Text für ElevenLabs API auf (40000 Zeichen Limit).
+    Versucht SSML-Tags intakt zu halten.
+    """
+    if not isinstance(ssml_text, str):
+        return []
+    
+    if len(ssml_text) <= max_chunk_size:
+        return [ssml_text]
+    
+    chunks = []
+    current_chunk = ""
+    
+    # Teile SSML in Sätze auf (nach </speak> oder </s> Tags)
+    sentences = []
+    remaining_text = ssml_text
+    
+    while remaining_text:
+        # Suche nach </speak> oder </s> Tags
+        speak_end = remaining_text.find('</speak>')
+        s_end = remaining_text.find('</s>')
+        
+        if speak_end == -1 and s_end == -1:
+            # Keine Tags mehr gefunden, füge Rest hinzu
+            if remaining_text.strip():
+                sentences.append(remaining_text.strip())
+            break
+        
+        # Finde das nächste Ende-Tag
+        if speak_end == -1:
+            next_end = s_end + 4  # </s> ist 4 Zeichen lang
+        elif s_end == -1:
+            next_end = speak_end + 8  # </speak> ist 8 Zeichen lang
+        else:
+            next_end = min(speak_end + 8, s_end + 4)
+        
+        # Füge Satz hinzu
+        sentence = remaining_text[:next_end].strip()
+        if sentence:
+            sentences.append(sentence)
+        
+        remaining_text = remaining_text[next_end:]
+    
+    # Gruppiere Sätze zu Chunks
+    for sentence in sentences:
+        if current_chunk and len(current_chunk) + len(sentence) + 1 > max_chunk_size:
+            chunks.append(current_chunk.strip())
+            current_chunk = sentence
+        else:
+            if current_chunk:
+                current_chunk += sentence
+            else:
+                current_chunk = sentence
+    
+    # Füge den letzten Chunk hinzu
+    if current_chunk.strip():
+        chunks.append(current_chunk.strip())
+    
+    return chunks
