@@ -1186,15 +1186,6 @@ elif selected_tool == "Text-to-Speech":
     st.header("Text-to-Speech mit KI-Regieanweisung")
     st.caption("Dieses Tool analysiert deinen Text, um eine passende Stimme vorzuschlagen und eine natürliche Sprachausgabe zu erzeugen.")
 
-    if "tts_step" not in st.session_state:
-        st.session_state.tts_step = 1
-        st.session_state.guideline = None
-        st.session_state.top_3_voices = []
-        st.session_state.text_content = None
-        st.session_state.summary = None
-        st.session_state.selected_voice_name = ""
-        st.session_state.uploaded_file_name = None
-
     if st.session_state.tts_step > 1:
         if st.button("Neue Analyse starten"):
             st.session_state.tts_step = 1
@@ -1315,91 +1306,61 @@ elif selected_tool == "Text-to-Speech":
         if st.button("🎙️ Audio mit KI-Regie generieren", type="primary", key="generate_audio_button", on_click=set_button_clicked_true, args=("tts_button_clicked",)):
             st.session_state.tts_step = 3
     
-    # --- Block 1: TTS Verarbeitung und Event-Senden ---
-    if st.session_state.tts_button_clicked and st.session_state.text_content and st.session_state.selected_voice_name:
-        with st.status("Generiere Audio-Datei...", expanded=True) as status:
-            status.write("Teile Text in initiale Stücke (Chunks)...")
-            initial_chunks = chunk_text(st.session_state.text_content)
-            
-            final_ssml_chunks = []
-            
-            for i, chunk in enumerate(initial_chunks):
-                status.write(f"Verarbeite initialen Chunk {i+1}/{len(initial_chunks)}: Erzeuge SSML...")
-                ssml_chunk = generate_ssml_chunk(st.session_state.guideline, chunk, gemini_api_key)
+        # --- Block 1: TTS Verarbeitung und Event-Senden ---
+        if st.session_state.tts_button_clicked and st.session_state.text_content and st.session_state.selected_voice_name:
+            with st.status("Generiere Audio-Datei...", expanded=True) as status:
+                status.write("Teile Text in initiale Stücke (Chunks)...")
+                initial_chunks = chunk_text(st.session_state.text_content)
                 
-                if len(ssml_chunk) < 9800:
-                    final_ssml_chunks.append(ssml_chunk)
-                else:
-                    status.warning(f"Chunk {i+1} ist nach SSML zu lang ({len(ssml_chunk)} Zeichen). Teile ihn auf...")
-                    sub_chunks = chunk_text(chunk, 4000)
+                final_ssml_chunks = []
+                
+                for i, chunk in enumerate(initial_chunks):
+                    status.write(f"Verarbeite initialen Chunk {i+1}/{len(initial_chunks)}: Erzeuge SSML...")
+                    ssml_chunk = generate_ssml_chunk(st.session_state.guideline, chunk, gemini_api_key)
                     
-                    for sub_chunk in sub_chunks:
-                        final_ssml_chunks.append(generate_ssml_chunk(st.session_state.guideline, sub_chunk, gemini_api_key))
-            
-            status.write(f"Finale Audio-Generierung aus {len(final_ssml_chunks)} SSML-Blöcken...")
-            all_audio_bytes = []
-            available_voices = get_available_voices(elevenlabs_api_key)
-            selected_voice_id = available_voices[st.session_state.selected_voice_name]["voice_id"]
-            
-            for i, final_chunk in enumerate(final_ssml_chunks):
-                status.write(f"Generiere Audio für finalen Block {i+1}/{len(final_ssml_chunks)}...")
-                audio_segment = generate_audio_from_text(final_chunk, elevenlabs_api_key, selected_voice_id)
+                    if len(ssml_chunk) < 9800:
+                        final_ssml_chunks.append(ssml_chunk)
+                    else:
+                        status.warning(f"Chunk {i+1} ist nach SSML zu lang ({len(ssml_chunk)} Zeichen). Teile ihn auf...")
+                        sub_chunks = chunk_text(chunk, 4000)
+                        
+                        for sub_chunk in sub_chunks:
+                            final_ssml_chunks.append(generate_ssml_chunk(st.session_state.guideline, sub_chunk, gemini_api_key))
                 
-                if audio_segment:
-                    all_audio_bytes.append(audio_segment)
-                else:
-                    status.update(label=f"Fehler bei Block {i+1}", state="error")
-                    break
-            
-            if len(all_audio_bytes) == len(final_ssml_chunks):
-                status.update(label="Audio-Generierung abgeschlossen!", state="complete")
-                final_audio = b"".join(all_audio_bytes)
+                status.write(f"Finale Audio-Generierung aus {len(final_ssml_chunks)} SSML-Blöcken...")
+                all_audio_bytes = []
+                available_voices = get_available_voices(elevenlabs_api_key)
+                selected_voice_id = available_voices[st.session_state.selected_voice_name]["voice_id"]
                 
-                # Store result in session state
-                st.session_state.tts_result = {
-                    "audio_bytes": final_audio,
-                    "file_name": f"{Path(st.session_state.uploaded_file_name).stem}_mit_regie.mp3",
-                    "status": "success",
-                    "chunks_processed": len(final_ssml_chunks)
-                }
-            else:
-                st.session_state.tts_result = {
-                    "error": "Fehler bei der Audio-Generierung",
-                    "status": "failed"
-                }
-
-        # Sende das Tracking-Event GENAU EINMAL
-        result = st.session_state.tts_result
-        log_data = {
-            "event_type": "text_to_speech_processed",
-            "file_count": 1,
-            "status": result["status"]
-        }
-        if "chunks_processed" in result:
-            log_data["chunks_processed"] = result["chunks_processed"]
-        if "error_message" in result:
-            log_data["error_message"] = result["error_message"]
-        send_event_to_pubsub(log_data)
-
-        # Setze den Zustand zurück, um erneute Ausführung zu verhindern
-        st.session_state.tts_button_clicked = False
-    
-    # --- Block 2: TTS Ergebnisse anzeigen ---
-    if st.session_state.tts_result:
-        st.divider()
-        st.subheader("🎙️ Audio-Ergebnis")
-        
-        if "error" in st.session_state.tts_result:
-            st.error(st.session_state.tts_result["error"])
-        else:
-            st.success("Finale Audiodatei erfolgreich erstellt!")
-            st.audio(st.session_state.tts_result["audio_bytes"], format="audio/mpeg")
-            st.download_button(
-                "MP3-Datei herunterladen", 
-                st.session_state.tts_result["audio_bytes"], 
-                file_name=st.session_state.tts_result["file_name"],
-                mime="audio/mpeg"
-            )
+                for i, final_chunk in enumerate(final_ssml_chunks):
+                    status.write(f"Generiere Audio für finalen Block {i+1}/{len(final_ssml_chunks)}...")
+                    audio_segment = generate_audio_from_text(final_chunk, elevenlabs_api_key, selected_voice_id)
+                    
+                    if audio_segment:
+                        all_audio_bytes.append(audio_segment)
+                    else:
+                        status.update(label=f"Fehler bei Block {i+1}", state="error")
+                        break
+                
+                if len(all_audio_bytes) == len(final_ssml_chunks):
+                    status.update(label="Audio-Generierung abgeschlossen!", state="complete")
+                    final_audio = b"".join(all_audio_bytes)
+                    
+                    # Store result in session state
+                    st.session_state.tts_result = {
+                        "audio_bytes": final_audio,
+                        "file_name": f"{st.session_state.uploaded_file_name}_audio.mp3"
+                    }
+                    
+                    # Log the successful TTS generation
+                    run_tts_processing_and_logging()
+                    
+                    # Display the audio player
+                    st.audio(
+                        st.session_state.tts_result["audio_bytes"], 
+                        file_name=st.session_state.tts_result["file_name"],
+                        mime="audio/mpeg"
+                    )
 
 elif selected_tool == "Manuskript-Übersetzung":
     st.header("Manuskript-Übersetzung (Deutsch → Englisch)")
