@@ -14,10 +14,14 @@ import time
 import datetime
 from google.cloud import storage, firestore, pubsub_v1
 import random
+from typing import Tuple, Dict
+import re
+import requests
 
 # Importiere Funktionen aus deinen Modulen
 from utils import convert_tiff_to_png_bytes, read_text_from_docx, read_text_from_pdf, chunk_text, chunk_text_by_paragraphs, chunk_ssml_for_elevenlabs
 from api_calls import generate_seo_tags_cached, generate_accessibility_description_cached, generate_audio_from_text, get_available_voices, generate_text_summary, get_voice_recommendations, generate_ssml_chunk
+from log_exceptions import log_exceptions
 
 # --- SICHERHEITSKONFIGURATION FÜR TTS ---
 MAX_TTS_COST_USD = 10.0  # Maximal 10 USD pro TTS-Job (erhöht von 5.0)
@@ -1702,3 +1706,98 @@ def check_tts_safety(start_time, current_cost=0.0, chunks_processed=0, total_chu
     except Exception as e:
         st.error(f"⚠️ Fehler bei TTS-Sicherheitsprüfung: {e}")
         return False
+
+@st.cache_data(ttl=3600)
+@log_exceptions
+def get_available_voices(api_key: str) -> Dict[str, Dict[str, str]]:
+    """
+    Ruft die verfügbaren Stimmen von der ElevenLabs v2 API ab.
+    Gibt ein Dictionary zurück: 
+    {'Stimmenname': {'voice_id': 'xyz', 'preview_url': 'http://...'}}
+    """
+    try:
+        headers = {
+            "xi-api-key": api_key
+        }
+        
+        # Verwende die neue v2 API mit Filter für Standard-Stimmen
+        params = {
+            "voice_type": "default",
+            "page_size": 100
+        }
+        
+        response = requests.get(
+            "https://api.elevenlabs.io/v2/voices",
+            headers=headers,
+            params=params,
+            timeout=60.0
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            voices = data.get("voices", [])
+            
+            return {
+                voice["name"]: {
+                    "voice_id": voice["voice_id"],
+                    "preview_url": voice.get("preview_url", ""),
+                    "description": voice.get("description", "")
+                }
+                for voice in voices
+            }
+        else:
+            logger.error(f"ElevenLabs API Fehler: {response.status_code} - {response.text}")
+            return {"Fehler": {"voice_id": "", "preview_url": ""}}
+            
+    except Exception as e:
+        logger.error(f"Fehler beim Abrufen der ElevenLabs-Stimmen: {e}", exc_info=True)
+        return {"Fehler": {"voice_id": "", "preview_url": ""}}
+
+@log_exceptions
+def get_voice_recommendations(_summary: str, _voices_info: str = None, gemini_api_key: str = None) -> Tuple[str, list]:
+    """Erstellt eine Regieleitlinie und extrahiert die Top 3 Stimmen."""
+    try:
+        if gemini_api_key:
+            genai.configure(api_key=gemini_api_key)
+            
+        # Falls keine Stimmen übergeben wurden, automatisch abrufen
+        if not _voices_info or not _voices_info.strip():
+            # Versuche ElevenLabs API Key aus Streamlit Secrets zu holen
+            try:
+                elevenlabs_api_key = st.secrets.get("elevenlabs_api_key")
+                if elevenlabs_api_key:
+                    available_voices = get_available_voices(elevenlabs_api_key)
+                    if available_voices and "Fehler" not in available_voices:
+                        _voices_info = "\n".join([f"{name}" for name in available_voices.keys()])
+                    else:
+                        _voices_info = "Adam, Antoni, Arnold, Bella, Domi, Elli, Josh, Rachel, Sam"
+                else:
+                    _voices_info = "Adam, Antoni, Arnold, Bella, Domi, Elli, Josh, Rachel, Sam"
+            except:
+                _voices_info = "Adam, Antoni, Arnold, Bella, Domi, Elli, Josh, Rachel, Sam"
+
+        full_prompt = GUIDELINE_PROMPT_WITH_MATCHING.format(
+            summary=_summary, 
+            voices_with_descriptions=_voices_info
+        )
+        response = model_gemini.generate_content(full_prompt)
+        guideline_text = response.text
+        
+        # Extrahiere die Top 3 Stimmen mit Regex
+        top_1 = re.search(r"TOP_STIMME_1:\s*(.*)", guideline_text)
+        top_2 = re.search(r"TOP_STIMME_2:\s*(.*)", guideline_text)
+        top_3 = re.search(r"TOP_STIMME_3:\s*(.*)", guideline_text)
+        
+        recommendations = []
+        if top_1: recommendations.append(top_1.group(1).strip())
+        if top_2: recommendations.append(top_2.group(1).strip())
+        if top_3: recommendations.append(top_3.group(1).strip())
+        
+        # Fallback, falls die KI die Anweisungen nicht befolgt
+        if not recommendations:
+             return guideline_text, ["KI konnte keine Stimmen auswählen."]
+
+        return guideline_text, recommendations
+    except Exception as e:
+        logger.error(f"Fehler bei der Regie-Erstellung: {e}", exc_info=True)
+        return f"Fehler bei der Regie-Erstellung: {e}", []
