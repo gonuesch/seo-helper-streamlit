@@ -1721,13 +1721,42 @@ elif selected_tool == "Manuskript-Übersetzung":
                 st.caption("Das übersetzte Dokument wird nach Abschluss der Übersetzung hier angezeigt.")
 
 # --- SICHERHEITSKONFIGURATION FÜR TTS ---
-MAX_TTS_COST_USD = 5.0  # Maximal 5 USD pro TTS-Job
+MAX_TTS_COST_USD = 10.0  # Maximal 10 USD pro TTS-Job (erhöht von 5.0)
 MAX_TTS_RUNTIME_MINUTES = 30  # Maximal 30 Minuten Laufzeit
 TTS_STATUS_CHECK_INTERVAL = 2  # Status alle 2 Sekunden prüfen
 MAX_TTS_RETRIES = 3  # Maximal 3 Wiederholungen bei Fehlern
 
 # ElevenLabs Preise (pro 1000 Zeichen)
 ELEVENLABS_PRICE_PER_1K_CHARS = 0.18  # $0.18 pro 1000 Zeichen
+
+# Berechnung der maximalen Seitenanzahl
+# Annahme: 250 Wörter/Seite × 5 Zeichen/Wort = 1250 Zeichen/Seite
+# SSML-Expansion: +25% = 1562.5 Zeichen/Seite
+# $10 ÷ $0.18 × 1000 Zeichen = 55.556 Zeichen
+# 55.556 ÷ 1562.5 = ~35.5 Seiten
+MAX_PAGES_FOR_TTS = 35  # Maximale Seitenanzahl für TTS
+
+def calculate_tts_cost(text_length_chars):
+    """Berechnet die Kosten für ElevenLabs TTS basierend auf Textlänge."""
+    return (text_length_chars / 1000) * ELEVENLABS_PRICE_PER_1K_CHARS
+
+def estimate_total_tts_cost(text_content):
+    """Schätzt die Gesamtkosten für einen TTS-Job."""
+    if not text_content:
+        return 0.0
+    
+    # Schätze SSML-Expansion (SSML ist meist 20-30% länger als Originaltext)
+    estimated_ssml_length = len(text_content) * 1.25
+    return calculate_tts_cost(estimated_ssml_length)
+
+def estimate_page_count(text_content):
+    """Schätzt die Seitenanzahl basierend auf Textlänge."""
+    if not text_content:
+        return 0
+    
+    # Annahme: 250 Wörter/Seite × 5 Zeichen/Wort = 1250 Zeichen/Seite
+    chars_per_page = 1250
+    return max(1, len(text_content) // chars_per_page)
 
 def check_tts_safety(start_time, current_cost=0.0, chunks_processed=0, total_chunks=0):
     """
@@ -1756,16 +1785,3 @@ def check_tts_safety(start_time, current_cost=0.0, chunks_processed=0, total_chu
     except Exception as e:
         st.error(f"⚠️ Fehler bei TTS-Sicherheitsprüfung: {e}")
         return False
-
-def calculate_tts_cost(text_length_chars):
-    """Berechnet die Kosten für ElevenLabs TTS basierend auf Textlänge."""
-    return (text_length_chars / 1000) * ELEVENLABS_PRICE_PER_1K_CHARS
-
-def estimate_total_tts_cost(text_content):
-    """Schätzt die Gesamtkosten für einen TTS-Job."""
-    if not text_content:
-        return 0.0
-    
-    # Schätze SSML-Expansion (SSML ist meist 20-30% länger als Originaltext)
-    estimated_ssml_length = len(text_content) * 1.25
-    return calculate_tts_cost(estimated_ssml_length)
