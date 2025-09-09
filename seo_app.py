@@ -1273,7 +1273,7 @@ elif selected_tool == "Text-to-Speech":
             if estimated_cost > MAX_TTS_COST_USD:
                 st.error(f"🚨 KOSTENÜBERSCHREITUNG: Geschätzte Kosten (${estimated_cost:.2f}) überschreiten Limit (${MAX_TTS_COST_USD})")
                 st.warning("Bitte verwenden Sie einen kürzeren Text oder kontaktieren Sie den Administrator.")
-                return
+                st.stop()
             
             # Kill Switch initialisieren
             st.session_state.tts_kill_switch = False
@@ -1302,7 +1302,7 @@ elif selected_tool == "Text-to-Speech":
                     # Sicherheitsprüfung vor jedem Chunk
                     if not check_tts_safety(start_time, total_cost, i, len(paragraph_chunks)):
                         status.update(label="TTS-Job gestoppt (Sicherheit)", state="error")
-                        return
+                        break
                     
                     status.write(f"Erzeuge SSML für Absatz {i+1}/{len(paragraph_chunks)}...")
                     ssml_chunk = generate_ssml_chunk(st.session_state.guideline, chunk, gemini_api_key)
@@ -1337,7 +1337,7 @@ elif selected_tool == "Text-to-Speech":
                     # Sicherheitsprüfung vor jedem Audio-Chunk
                     if not check_tts_safety(start_time, total_cost, i, len(final_ssml_chunks)):
                         status.update(label="TTS-Job gestoppt (Sicherheit)", state="error")
-                        return
+                        break
                     
                     status.write(f"Generiere Audio für Block {i+1}/{len(final_ssml_chunks)} ({len(final_chunk)} Zeichen)...")
                     
