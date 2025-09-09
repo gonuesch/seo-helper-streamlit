@@ -1322,11 +1322,10 @@ elif selected_tool == "Manuskript-Übersetzung":
     )
 
     if uploaded_file:
-        st.button(
-            "🚀 Analyse starten",
-            on_click=start_translation_job,
-            args=(uploaded_file,)
-        )
+        if st.button("🚀 Analyse starten", type="primary"):
+            with st.spinner("Starte Übersetzungsauftrag..."):
+                start_translation_job(uploaded_file)
+            st.rerun()
     
     # Job Status Anzeige
     if st.session_state.get("translation_job_id"):
