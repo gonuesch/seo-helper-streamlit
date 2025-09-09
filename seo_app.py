@@ -1291,6 +1291,25 @@ elif selected_tool == "Text-to-Speech":
         if st.button("Text analysieren & Stimmen empfehlen", type="primary"):
             st.session_state.uploaded_file_name = uploaded_file.name 
             st.session_state.text_content = text_content
+            
+            with st.status("Führe KI-Analyse aus...", expanded=True) as status:
+                status.write("Schritt 1/3: Erstelle Zusammenfassung des Textes...")
+                summary = generate_text_summary(text_content, gemini_api_key)
+                st.session_state.summary = summary
+                status.write("✅ Zusammenfassung erstellt")
+                
+                status.write("Schritt 2/3: Generiere KI-Regieanweisung...")
+                guideline = generate_ssml_chunk(summary, gemini_api_key)
+                st.session_state.guideline = guideline
+                status.write("✅ KI-Regieanweisung generiert")
+                
+                status.write("Schritt 3/3: Empfehle passende Stimmen...")
+                top_3_voices = get_voice_recommendations(summary, gemini_api_key)
+                st.session_state.top_3_voices = top_3_voices
+                status.write("✅ Stimmen-Empfehlungen erstellt")
+            
+            st.session_state.tts_step = 2
+            st.rerun()
 
 elif selected_tool == "Manuskript-Übersetzung":
     st.header("Manuskript-Übersetzung (Deutsch → Englisch)")
