@@ -1211,6 +1211,21 @@ elif selected_tool == "Text-to-Speech":
     st.header("Text-to-Speech mit KI-Regieanweisung")
     st.caption("Dieses Tool analysiert deinen Text, um eine passende Stimme vorzuschlagen und eine natürliche Sprachausgabe zu erzeugen.")
 
+    # --- LIMITS UND KOSTENINFORMATION ---
+    st.info("📋 **Wichtige Informationen:**")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("💰 Kostendeckel", f"${MAX_TTS_COST_USD}")
+    
+    with col2:
+        st.metric("📄 Max. Seiten", f"{MAX_PAGES_FOR_TTS}")
+    
+    with col3:
+        st.metric("⏱️ Zeitlimit", f"{MAX_TTS_RUNTIME_MINUTES} Min")
+    
+    st.caption(f"💡 **Empfehlung:** Dokumente mit maximal {MAX_PAGES_FOR_TTS} Seiten (ca. {MAX_PAGES_FOR_TTS * 1250:,} Zeichen) für optimale Ergebnisse. Größere Dokumente können aufgeteilt werden.")
+
     if st.session_state.tts_step > 1:
         if st.button("Neue Analyse starten"):
             st.session_state.tts_step = 1
@@ -1234,230 +1249,48 @@ elif selected_tool == "Text-to-Speech":
         uploaded_file = None 
 
     if uploaded_file and st.session_state.tts_step == 1:
+        # Kosten- und Seitenanalyse vor der Verarbeitung
+        with st.spinner("Analysiere Dokument..."):
+            if uploaded_file.name.lower().endswith('.pdf'):
+                text_content = read_text_from_pdf(uploaded_file)
+            else:
+                text_content = read_text_from_docx(uploaded_file)
+        
+        if not text_content or not text_content.strip() or text_content == "NO_TEXT_IN_PDF":
+            st.error("Das Dokument scheint keinen lesbaren Text zu enthalten.")
+        else:
+            # Kosten- und Seitenanalyse anzeigen
+            estimated_cost = estimate_total_tts_cost(text_content)
+            estimated_pages = estimate_page_count(text_content)
+            
+            st.success("✅ Dokument erfolgreich gelesen!")
+            
+            # Kosten- und Seitenanalyse
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("📄 Geschätzte Seiten", estimated_pages)
+            with col2:
+                st.metric("💰 Geschätzte Kosten", f"${estimated_cost:.2f}")
+            with col3:
+                if estimated_pages <= MAX_PAGES_FOR_TTS and estimated_cost <= MAX_TTS_COST_USD:
+                    st.metric("✅ Status", "OK")
+                else:
+                    st.metric("⚠️ Status", "Limit überschritten")
+            
+            # Warnung bei Überschreitung
+            if estimated_pages > MAX_PAGES_FOR_TTS or estimated_cost > MAX_TTS_COST_USD:
+                st.warning(f"⚠️ **Achtung:** Ihr Dokument überschreitet die Limits!")
+                if estimated_pages > MAX_PAGES_FOR_TTS:
+                    st.write(f"• **Seitenlimit:** {estimated_pages} Seiten > {MAX_PAGES_FOR_TTS} Seiten (maximal)")
+                if estimated_cost > MAX_TTS_COST_USD:
+                    st.write(f"• **Kostenlimit:** ${estimated_cost:.2f} > ${MAX_TTS_COST_USD} (maximal)")
+                st.write("**Empfehlung:** Teilen Sie das Dokument in kleinere Abschnitte auf oder kontaktieren Sie den Administrator.")
+            else:
+                st.success("✅ Ihr Dokument liegt innerhalb der Limits und kann verarbeitet werden!")
+        
         if st.button("Text analysieren & Stimmen empfehlen", type="primary"):
             st.session_state.uploaded_file_name = uploaded_file.name 
-            with st.spinner("Lese Text aus Datei..."):
-                if uploaded_file.name.lower().endswith('.pdf'):
-                    text_content = read_text_from_pdf(uploaded_file)
-                else:
-                    text_content = read_text_from_docx(uploaded_file)
-            
-            if not text_content or not text_content.strip() or text_content == "NO_TEXT_IN_PDF":
-                st.error("Das Dokument scheint keinen lesbaren Text zu enthalten.")
-            else:
-                st.session_state.text_content = text_content
-                
-                with st.status("Führe KI-Analyse aus...", expanded=True) as status:
-                    status.write("Schritt 1/3: Erstelle Zusammenfassung des Textes...")
-                    summary = generate_text_summary(text_content, gemini_api_key)
-                    st.session_state.summary = summary
-                    
-                    status.write("Schritt 2/3: Rufe verfügbare Stimmen ab...")
-                    available_voices = get_available_voices(elevenlabs_api_key)
-                    if "Fehler" in available_voices:
-                        status.update(label="Fehler beim Abrufen der Stimmen.", state="error")
-                        st.stop()
-                    
-                    voices_info_for_prompt = "\n".join([f"Name: {n} (Beschreibung: {', '.join(f'{k}: {v}' for k, v in details.get('labels', {}).items())})" for n, details in available_voices.items() if details.get('labels')])
-                    
-                    if not voices_info_for_prompt:
-                        status.warning("Keine Stimmen mit detaillierten Beschreibungen gefunden. Verwende stattdessen nur die Namen für die Empfehlung.")
-                        voices_info_for_prompt = "\n".join([f"Name: {n}" for n in available_voices.keys()])
-
-                    status.write("Schritt 3/3: Erstelle Regieleitlinie und finde passende Stimmen...")
-                    guideline, recommendations = get_voice_recommendations(summary, voices_info_for_prompt, gemini_api_key)
-                    
-                    st.session_state.guideline = guideline
-                    st.session_state.top_3_voices = recommendations
-                    status.update(label="Analyse abgeschlossen!", state="complete", expanded=False)
-                
-                st.session_state.tts_step = 2
-                st.rerun()
-
-    if st.session_state.tts_step >= 2:
-        st.divider()
-        st.subheader("2. Analyse-Ergebnisse")
-
-        with st.expander("KI-Regieanweisung und Stimmen-Empfehlung anzeigen", expanded=True):
-            st.markdown(st.session_state.guideline)
-
-        if st.session_state.summary:
-            with st.expander("Inhaltliche Zusammenfassung des Textes anzeigen"):
-                st.markdown(st.session_state.summary)
-                st.download_button(
-                    label="Zusammenfassung herunterladen (.txt)",
-                    data=st.session_state.summary.encode('utf-8'),
-                    file_name=f"zusammenfassung_{st.session_state.uploaded_file_name}.txt",
-                    mime="text/plain"
-                )
-        
-        st.divider()
-        st.subheader("3. Stimme auswählen")
-        
-        if st.session_state.top_3_voices:
-            st.write("**Top 3 Empfehlungen der KI:**")
-            if len(st.session_state.top_3_voices) > 0:
-                st.success(f"🥇 **{st.session_state.top_3_voices[0]}**")
-            if len(st.session_state.top_3_voices) > 1:
-                st.info(f"🥈 {st.session_state.top_3_voices[1]}")
-            if len(st.session_state.top_3_voices) > 2:
-                st.info(f"🥉 {st.session_state.top_3_voices[2]}")
-        
-        available_voices = get_available_voices(elevenlabs_api_key)
-        voice_names = list(available_voices.keys())
-        
-        default_index = 0
-        if st.session_state.top_3_voices:
-            try:
-                default_index = voice_names.index(st.session_state.top_3_voices[0])
-            except (ValueError, IndexError):
-                st.warning(f"Empfohlene Stimme '{st.session_state.top_3_voices[0]}' nicht in der Liste gefunden. Wähle manuell.")
-                default_index = 0
-
-        st.session_state.selected_voice_name = st.selectbox(
-            "Wähle eine Stimme (Top-Empfehlung ist vorausgewählt)",
-            options=voice_names,
-            index=default_index,
-            key="voice_selector"
-        )
-        
-        if st.session_state.selected_voice_name:
-            preview_url = available_voices[st.session_state.selected_voice_name].get("preview_url")
-            if preview_url:
-                st.audio(preview_url)
-        
-        st.divider()
-        st.subheader("4. Finale Audio-Datei generieren")
-        if st.button("🎙️ Audio mit KI-Regie generieren", type="primary", key="generate_audio_button", on_click=set_button_clicked_true, args=("tts_button_clicked",)):
-            st.session_state.tts_step = 3
-    
-        # --- Block 1: TTS Verarbeitung mit Sicherheitsmechanismen ---
-        if st.session_state.tts_button_clicked and st.session_state.text_content and st.session_state.selected_voice_name:
-            # Sicherheitsprüfung vor Start
-            estimated_cost = estimate_total_tts_cost(st.session_state.text_content)
-            
-            if estimated_cost > MAX_TTS_COST_USD:
-                st.error(f"🚨 KOSTENÜBERSCHREITUNG: Geschätzte Kosten (${estimated_cost:.2f}) überschreiten Limit (${MAX_TTS_COST_USD})")
-                st.warning("Bitte verwenden Sie einen kürzeren Text oder kontaktieren Sie den Administrator.")
-                st.stop()
-            
-            # Kill Switch initialisieren
-            st.session_state.tts_kill_switch = False
-            start_time = datetime.datetime.utcnow()
-            
-            with st.status("Generiere Audio-Datei...", expanded=True) as status:
-                # Kosten- und Sicherheitsanzeige
-                status.write(f" Geschätzte Kosten: ${estimated_cost:.2f} | ⏱️ Zeitlimit: {MAX_TTS_RUNTIME_MINUTES} Min")
-                
-                # Kill Switch Button
-                if st.button("🚨 TTS-Job stoppen", key="tts_kill_switch"):
-                    st.session_state.tts_kill_switch = True
-                    st.rerun()
-                
-                # Schritt 1: Intelligentes Chunking nach Absätzen für Gemini 2.5 Pro (1M Token)
-                status.write("Teile Text intelligent nach Absätzen...")
-                paragraph_chunks = chunk_text_by_paragraphs(st.session_state.text_content, max_chunk_size=100000)
-                status.write(f"Text in {len(paragraph_chunks)} Absatz-Chunks aufgeteilt")
-                
-                # Schritt 2: SSML-Generierung für jeden Absatz-Chunk
-                status.write("Generiere SSML für jeden Absatz...")
-                ssml_chunks = []
-                total_cost = 0.0
-                
-                for i, chunk in enumerate(paragraph_chunks):
-                    # Sicherheitsprüfung vor jedem Chunk
-                    if not check_tts_safety(start_time, total_cost, i, len(paragraph_chunks)):
-                        status.update(label="TTS-Job gestoppt (Sicherheit)", state="error")
-                        break
-                    
-                    status.write(f"Erzeuge SSML für Absatz {i+1}/{len(paragraph_chunks)}...")
-                    ssml_chunk = generate_ssml_chunk(st.session_state.guideline, chunk, gemini_api_key)
-                    ssml_chunks.append(ssml_chunk)
-                    
-                    # Kosten aktualisieren
-                    chunk_cost = calculate_tts_cost(len(ssml_chunk))
-                    total_cost += chunk_cost
-                    status.write(f"💰 Aktuelle Kosten: ${total_cost:.2f}")
-                
-                # Schritt 3: Intelligentes Chunking für ElevenLabs (40000 Zeichen)
-                status.write("Optimiere SSML-Chunks für ElevenLabs API...")
-                final_ssml_chunks = []
-                
-                for i, ssml_chunk in enumerate(ssml_chunks):
-                    if len(ssml_chunk) <= 40000:
-                        final_ssml_chunks.append(ssml_chunk)
-                    else:
-                        status.write(f"SSML-Chunk {i+1} zu lang ({len(ssml_chunk)} Zeichen). Teile für ElevenLabs auf...")
-                        elevenlabs_chunks = chunk_ssml_for_elevenlabs(ssml_chunk, max_chunk_size=40000)
-                        final_ssml_chunks.extend(elevenlabs_chunks)
-                
-                status.write(f"Finale Audio-Generierung aus {len(final_ssml_chunks)} optimierten SSML-Blöcken...")
-                all_audio_bytes = []
-                available_voices = get_available_voices(elevenlabs_api_key)
-                selected_voice_id = available_voices[st.session_state.selected_voice_name]["voice_id"]
-                
-                # ElevenLabs History-Feature: Speichere previous_request_ids für Kontinuität
-                previous_request_ids = []
-                
-                for i, final_chunk in enumerate(final_ssml_chunks):
-                    # Sicherheitsprüfung vor jedem Audio-Chunk
-                    if not check_tts_safety(start_time, total_cost, i, len(final_ssml_chunks)):
-                        status.update(label="TTS-Job gestoppt (Sicherheit)", state="error")
-                        break
-                    
-                    status.write(f"Generiere Audio für Block {i+1}/{len(final_ssml_chunks)} ({len(final_chunk)} Zeichen)...")
-                    
-                    # Rate Limiting: Pause zwischen Chunks
-                    if i > 0:
-                        sleep_time = random.uniform(0.5, 1.5)
-                        time.sleep(sleep_time)
-                    
-                    # Verwende previous_request_ids für bessere Kontinuität
-                    audio_segment, history_item_id = generate_audio_from_text(
-                        final_chunk, 
-                        elevenlabs_api_key, 
-                        selected_voice_id,
-                        previous_request_ids=previous_request_ids if previous_request_ids else None
-                    )
-                    
-                    if audio_segment:
-                        all_audio_bytes.append(audio_segment)
-                        # Speichere die history_item_id für den nächsten Chunk
-                        if history_item_id:
-                            previous_request_ids = [history_item_id]
-                        status.write(f"✅ Block {i+1} erfolgreich generiert")
-                    else:
-                        status.update(label=f"Fehler bei Block {i+1}", state="error")
-                        break
-                
-                if len(all_audio_bytes) == len(final_ssml_chunks):
-                    status.update(label="Audio-Generierung abgeschlossen!", state="complete")
-                    final_audio = b"".join(all_audio_bytes)
-                    
-                    # Finale Kostenberechnung
-                    final_cost = calculate_tts_cost(sum(len(chunk) for chunk in final_ssml_chunks))
-                    
-                    # Store result in session state
-                    st.session_state.tts_result = {
-                        "audio_bytes": final_audio,
-                        "file_name": f"{st.session_state.uploaded_file_name}_audio.mp3",
-                        "chunks_processed": len(final_ssml_chunks),
-                        "total_cost_usd": final_cost,
-                        "processing_time_minutes": (datetime.datetime.utcnow() - start_time).total_seconds() / 60
-                    }
-                    
-                    # Log the successful TTS generation
-                    run_tts_processing_and_logging()
-                    
-                    # Display the audio player
-                    st.audio(
-                        st.session_state.tts_result["audio_bytes"], 
-                        file_name=st.session_state.tts_result["file_name"],
-                        mime="audio/mpeg"
-                    )
-                    
-                    # Kostenanzeige
-                    st.success(f"✅ TTS erfolgreich generiert! Kosten: ${final_cost:.2f} | Zeit: {st.session_state.tts_result['processing_time_minutes']:.1f} Min")
+            st.session_state.text_content = text_content
 
 elif selected_tool == "Manuskript-Übersetzung":
     st.header("Manuskript-Übersetzung (Deutsch → Englisch)")
