@@ -13,6 +13,7 @@ import uuid
 import time
 import datetime
 from google.cloud import storage, firestore, pubsub_v1
+import random
 
 # Importiere Funktionen aus deinen Modulen
 from utils import convert_tiff_to_png_bytes, read_text_from_docx, read_text_from_pdf, chunk_text, chunk_text_by_paragraphs, chunk_ssml_for_elevenlabs
@@ -1264,22 +1265,53 @@ elif selected_tool == "Text-to-Speech":
         if st.button("🎙️ Audio mit KI-Regie generieren", type="primary", key="generate_audio_button", on_click=set_button_clicked_true, args=("tts_button_clicked",)):
             st.session_state.tts_step = 3
     
-        # --- Block 1: TTS Verarbeitung und Event-Senden ---
+        # --- Block 1: TTS Verarbeitung mit Sicherheitsmechanismen ---
         if st.session_state.tts_button_clicked and st.session_state.text_content and st.session_state.selected_voice_name:
+            # Sicherheitsprüfung vor Start
+            estimated_cost = estimate_total_tts_cost(st.session_state.text_content)
+            
+            if estimated_cost > MAX_TTS_COST_USD:
+                st.error(f"🚨 KOSTENÜBERSCHREITUNG: Geschätzte Kosten (${estimated_cost:.2f}) überschreiten Limit (${MAX_TTS_COST_USD})")
+                st.warning("Bitte verwenden Sie einen kürzeren Text oder kontaktieren Sie den Administrator.")
+                return
+            
+            # Kill Switch initialisieren
+            st.session_state.tts_kill_switch = False
+            start_time = datetime.datetime.utcnow()
+            
             with st.status("Generiere Audio-Datei...", expanded=True) as status:
-                # Schritt 1: Intelligentes Chunking nach Absätzen für Gemini
+                # Kosten- und Sicherheitsanzeige
+                status.write(f" Geschätzte Kosten: ${estimated_cost:.2f} | ⏱️ Zeitlimit: {MAX_TTS_RUNTIME_MINUTES} Min")
+                
+                # Kill Switch Button
+                if st.button("🚨 TTS-Job stoppen", key="tts_kill_switch"):
+                    st.session_state.tts_kill_switch = True
+                    st.rerun()
+                
+                # Schritt 1: Intelligentes Chunking nach Absätzen für Gemini 2.5 Pro (1M Token)
                 status.write("Teile Text intelligent nach Absätzen...")
-                paragraph_chunks = chunk_text_by_paragraphs(st.session_state.text_content, max_chunk_size=100000)  # 1M Token
+                paragraph_chunks = chunk_text_by_paragraphs(st.session_state.text_content, max_chunk_size=100000)
                 status.write(f"Text in {len(paragraph_chunks)} Absatz-Chunks aufgeteilt")
                 
                 # Schritt 2: SSML-Generierung für jeden Absatz-Chunk
                 status.write("Generiere SSML für jeden Absatz...")
                 ssml_chunks = []
+                total_cost = 0.0
                 
                 for i, chunk in enumerate(paragraph_chunks):
+                    # Sicherheitsprüfung vor jedem Chunk
+                    if not check_tts_safety(start_time, total_cost, i, len(paragraph_chunks)):
+                        status.update(label="TTS-Job gestoppt (Sicherheit)", state="error")
+                        return
+                    
                     status.write(f"Erzeuge SSML für Absatz {i+1}/{len(paragraph_chunks)}...")
                     ssml_chunk = generate_ssml_chunk(st.session_state.guideline, chunk, gemini_api_key)
                     ssml_chunks.append(ssml_chunk)
+                    
+                    # Kosten aktualisieren
+                    chunk_cost = calculate_tts_cost(len(ssml_chunk))
+                    total_cost += chunk_cost
+                    status.write(f"💰 Aktuelle Kosten: ${total_cost:.2f}")
                 
                 # Schritt 3: Intelligentes Chunking für ElevenLabs (40000 Zeichen)
                 status.write("Optimiere SSML-Chunks für ElevenLabs API...")
@@ -1298,17 +1330,36 @@ elif selected_tool == "Text-to-Speech":
                 available_voices = get_available_voices(elevenlabs_api_key)
                 selected_voice_id = available_voices[st.session_state.selected_voice_name]["voice_id"]
                 
+                # ElevenLabs History-Feature: Speichere previous_request_ids für Kontinuität
+                previous_request_ids = []
+                
                 for i, final_chunk in enumerate(final_ssml_chunks):
+                    # Sicherheitsprüfung vor jedem Audio-Chunk
+                    if not check_tts_safety(start_time, total_cost, i, len(final_ssml_chunks)):
+                        status.update(label="TTS-Job gestoppt (Sicherheit)", state="error")
+                        return
+                    
                     status.write(f"Generiere Audio für Block {i+1}/{len(final_ssml_chunks)} ({len(final_chunk)} Zeichen)...")
+                    
+                    # Rate Limiting: Pause zwischen Chunks
+                    if i > 0:
+                        sleep_time = random.uniform(0.5, 1.5)
+                        time.sleep(sleep_time)
+                    
+                    # Verwende previous_request_ids für bessere Kontinuität
                     audio_segment, history_item_id = generate_audio_from_text(
                         final_chunk, 
                         elevenlabs_api_key, 
                         selected_voice_id,
-                        previous_request_ids=previous_request_ids  # 🎯 History-Feature!
+                        previous_request_ids=previous_request_ids if previous_request_ids else None
                     )
                     
                     if audio_segment:
                         all_audio_bytes.append(audio_segment)
+                        # Speichere die history_item_id für den nächsten Chunk
+                        if history_item_id:
+                            previous_request_ids = [history_item_id]
+                        status.write(f"✅ Block {i+1} erfolgreich generiert")
                     else:
                         status.update(label=f"Fehler bei Block {i+1}", state="error")
                         break
@@ -1317,11 +1368,16 @@ elif selected_tool == "Text-to-Speech":
                     status.update(label="Audio-Generierung abgeschlossen!", state="complete")
                     final_audio = b"".join(all_audio_bytes)
                     
+                    # Finale Kostenberechnung
+                    final_cost = calculate_tts_cost(sum(len(chunk) for chunk in final_ssml_chunks))
+                    
                     # Store result in session state
                     st.session_state.tts_result = {
                         "audio_bytes": final_audio,
                         "file_name": f"{st.session_state.uploaded_file_name}_audio.mp3",
-                        "chunks_processed": len(final_ssml_chunks)
+                        "chunks_processed": len(final_ssml_chunks),
+                        "total_cost_usd": final_cost,
+                        "processing_time_minutes": (datetime.datetime.utcnow() - start_time).total_seconds() / 60
                     }
                     
                     # Log the successful TTS generation
@@ -1333,6 +1389,9 @@ elif selected_tool == "Text-to-Speech":
                         file_name=st.session_state.tts_result["file_name"],
                         mime="audio/mpeg"
                     )
+                    
+                    # Kostenanzeige
+                    st.success(f"✅ TTS erfolgreich generiert! Kosten: ${final_cost:.2f} | Zeit: {st.session_state.tts_result['processing_time_minutes']:.1f} Min")
 
 elif selected_tool == "Manuskript-Übersetzung":
     st.header("Manuskript-Übersetzung (Deutsch → Englisch)")
@@ -1660,3 +1719,53 @@ elif selected_tool == "Manuskript-Übersetzung":
             else:
                 st.info("⏳ Übersetzung noch nicht verfügbar")
                 st.caption("Das übersetzte Dokument wird nach Abschluss der Übersetzung hier angezeigt.")
+
+# --- SICHERHEITSKONFIGURATION FÜR TTS ---
+MAX_TTS_COST_USD = 5.0  # Maximal 5 USD pro TTS-Job
+MAX_TTS_RUNTIME_MINUTES = 30  # Maximal 30 Minuten Laufzeit
+TTS_STATUS_CHECK_INTERVAL = 2  # Status alle 2 Sekunden prüfen
+MAX_TTS_RETRIES = 3  # Maximal 3 Wiederholungen bei Fehlern
+
+# ElevenLabs Preise (pro 1000 Zeichen)
+ELEVENLABS_PRICE_PER_1K_CHARS = 0.18  # $0.18 pro 1000 Zeichen
+
+def check_tts_safety(start_time, current_cost=0.0, chunks_processed=0, total_chunks=0):
+    """
+    Prüft alle Sicherheitsbedingungen für den TTS-Job.
+    Gibt True zurück wenn Job sicher weiterlaufen kann, False wenn gestoppt werden muss.
+    """
+    try:
+        # 1. Zeit-Limit prüfen
+        runtime_minutes = (datetime.datetime.utcnow() - start_time).total_seconds() / 60
+        if runtime_minutes > MAX_TTS_RUNTIME_MINUTES:
+            st.error(f"🚨 SICHERHEIT: TTS-Job läuft seit {runtime_minutes:.1f} Minuten. Maximal {MAX_TTS_RUNTIME_MINUTES} Minuten erlaubt.")
+            return False
+        
+        # 2. Kosten-Limit prüfen
+        if current_cost > MAX_TTS_COST_USD:
+            st.error(f" SICHERHEIT: Kosten von ${current_cost:.2f} überschreiten Limit von ${MAX_TTS_COST_USD}")
+            return False
+        
+        # 3. Kill Switch prüfen (aus Session State)
+        if st.session_state.get("tts_kill_switch", False):
+            st.error(" KILL SWITCH: TTS-Job wurde manuell gestoppt")
+            return False
+        
+        return True
+        
+    except Exception as e:
+        st.error(f"⚠️ Fehler bei TTS-Sicherheitsprüfung: {e}")
+        return False
+
+def calculate_tts_cost(text_length_chars):
+    """Berechnet die Kosten für ElevenLabs TTS basierend auf Textlänge."""
+    return (text_length_chars / 1000) * ELEVENLABS_PRICE_PER_1K_CHARS
+
+def estimate_total_tts_cost(text_content):
+    """Schätzt die Gesamtkosten für einen TTS-Job."""
+    if not text_content:
+        return 0.0
+    
+    # Schätze SSML-Expansion (SSML ist meist 20-30% länger als Originaltext)
+    estimated_ssml_length = len(text_content) * 1.25
+    return calculate_tts_cost(estimated_ssml_length)
