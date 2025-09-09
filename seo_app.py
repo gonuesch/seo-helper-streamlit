@@ -1307,7 +1307,10 @@ elif selected_tool == "Text-to-Speech":
                 status.write("✅ KI-Regieanweisung generiert")
                 
                 status.write("Schritt 3/3: Empfehle passende Stimmen...")
-                top_3_voices = get_voice_recommendations(summary, gemini_api_key)
+                # Hole verfügbare Stimmen von ElevenLabs
+                available_voices = get_available_voices(elevenlabs_api_key)
+                voices_info = "\n".join([f"{name}" for name in available_voices.keys()]) if available_voices and "Fehler" not in available_voices else "Adam, Antoni, Arnold, Bella, Domi, Elli, Josh, Rachel, Sam"
+                top_3_voices = get_voice_recommendations(summary, voices_info, gemini_api_key)
                 st.session_state.top_3_voices = top_3_voices
                 status.write("✅ Stimmen-Empfehlungen erstellt")
             
