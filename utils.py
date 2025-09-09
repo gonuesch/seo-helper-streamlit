@@ -117,9 +117,9 @@ def chunk_text(text: str, chunk_size: int = 8000) -> list[str]:
     return [c for c in chunks if c.strip()]
 
 @log_exceptions
-def chunk_text_by_paragraphs(text: str, max_chunk_size: int = 8000) -> list[str]:
+def chunk_text_by_paragraphs(text: str, max_chunk_size: int = 100000) -> list[str]:
     """
-    Teilt Text intelligent nach Absätzen auf, ideal für Gemini-Verarbeitung.
+    Teilt Text intelligent nach Absätzen auf, ideal für Gemini 2.5 Pro (1M Token Limit).
     Versucht Absätze zusammenzuhalten, solange sie unter der max_chunk_size bleiben.
     """
     if not isinstance(text, str):
