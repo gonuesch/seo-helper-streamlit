@@ -19,6 +19,72 @@ import random
 from utils import convert_tiff_to_png_bytes, read_text_from_docx, read_text_from_pdf, chunk_text, chunk_text_by_paragraphs, chunk_ssml_for_elevenlabs
 from api_calls import generate_seo_tags_cached, generate_accessibility_description_cached, generate_audio_from_text, get_available_voices, generate_text_summary, get_voice_recommendations, generate_ssml_chunk
 
+# --- SICHERHEITSKONFIGURATION FÜR TTS ---
+MAX_TTS_COST_USD = 10.0  # Maximal 10 USD pro TTS-Job (erhöht von 5.0)
+MAX_TTS_RUNTIME_MINUTES = 30  # Maximal 30 Minuten Laufzeit
+TTS_STATUS_CHECK_INTERVAL = 2  # Status alle 2 Sekunden prüfen
+MAX_TTS_RETRIES = 3  # Maximal 3 Wiederholungen bei Fehlern
+
+# ElevenLabs Preise (pro 1000 Zeichen)
+ELEVENLABS_PRICE_PER_1K_CHARS = 0.18  # $0.18 pro 1000 Zeichen
+
+# Berechnung der maximalen Seitenanzahl
+# Annahme: 250 Wörter/Seite × 5 Zeichen/Wort = 1250 Zeichen/Seite
+# SSML-Expansion: +25% = 1562.5 Zeichen/Seite
+# $10 ÷ $0.18 × 1000 Zeichen = 55.556 Zeichen
+# 55.556 ÷ 1562.5 = ~35.5 Seiten
+MAX_PAGES_FOR_TTS = 35  # Maximale Seitenanzahl für TTS
+
+def calculate_tts_cost(text_length_chars):
+    """Berechnet die Kosten für ElevenLabs TTS basierend auf Textlänge."""
+    return (text_length_chars / 1000) * ELEVENLABS_PRICE_PER_1K_CHARS
+
+def estimate_total_tts_cost(text_content):
+    """Schätzt die Gesamtkosten für einen TTS-Job."""
+    if not text_content:
+        return 0.0
+    
+    # Schätze SSML-Expansion (SSML ist meist 20-30% länger als Originaltext)
+    estimated_ssml_length = len(text_content) * 1.25
+    return calculate_tts_cost(estimated_ssml_length)
+
+def estimate_page_count(text_content):
+    """Schätzt die Seitenanzahl basierend auf Textlänge."""
+    if not text_content:
+        return 0
+    
+    # Annahme: 250 Wörter/Seite × 5 Zeichen/Wort = 1250 Zeichen/Seite
+    chars_per_page = 1250
+    return max(1, len(text_content) // chars_per_page)
+
+def check_tts_safety(start_time, current_cost=0.0, chunks_processed=0, total_chunks=0):
+    """
+    Prüft alle Sicherheitsbedingungen für den TTS-Job.
+    Gibt True zurück wenn Job sicher weiterlaufen kann, False wenn gestoppt werden muss.
+    """
+    try:
+        # 1. Zeit-Limit prüfen
+        runtime_minutes = (datetime.datetime.utcnow() - start_time).total_seconds() / 60
+        if runtime_minutes > MAX_TTS_RUNTIME_MINUTES:
+            st.error(f"🚨 SICHERHEIT: TTS-Job läuft seit {runtime_minutes:.1f} Minuten. Maximal {MAX_TTS_RUNTIME_MINUTES} Minuten erlaubt.")
+            return False
+        
+        # 2. Kosten-Limit prüfen
+        if current_cost > MAX_TTS_COST_USD:
+            st.error(f" SICHERHEIT: Kosten von ${current_cost:.2f} überschreiten Limit von ${MAX_TTS_COST_USD}")
+            return False
+        
+        # 3. Kill Switch prüfen (aus Session State)
+        if st.session_state.get("tts_kill_switch", False):
+            st.error(" KILL SWITCH: TTS-Job wurde manuell gestoppt")
+            return False
+        
+        return True
+        
+    except Exception as e:
+        st.error(f"⚠️ Fehler bei TTS-Sicherheitsprüfung: {e}")
+        return False
+
 # Richte den Google Cloud Pub/Sub Publisher ein
 publisher = pubsub_v1.PublisherClient()
 topic_path = publisher.topic_path("avid-infinity-458913-p3", "event-tracking-toolbox")
@@ -531,33 +597,33 @@ def run_accessibility_processing_and_logging(files_to_process, context):
                             })
                             continue
                 
-                logging.info("Generiere barrierefreie Beschreibung für Datei: %s", file_name)
-                short_desc, long_desc = generate_accessibility_description_cached(image_bytes_for_api, file_name, context, gemini_api_key)
-                
-                if short_desc and long_desc:
-                    logging.info("Barrierefreie Beschreibung erfolgreich generiert für: %s", file_name)
-                    results.append({
-                        "file_name": file_name,
-                        "short_desc": short_desc,
-                        "long_desc": long_desc,
-                        "image_bytes": original_image_bytes,
-                        "base_id": base_id,
-                        "status": "success"
-                    })
-                    processed_count += 1
-                    results_for_export.append({
-                        "Bildname": file_name, "Dateiname Produktion": "", "Alternativtext": short_desc,
-                        "Bildlegende": "", "Anmerkung": "", "Langbeschreibung": long_desc,
-                        "(Platzierung/Größe/Übersetzungstexte in der Abbildung/...)": ""
-                    })
-                else:
-                    logging.error("Barrierefreie Beschreibung fehlgeschlagen für: %s", file_name)
-                    results.append({
-                        "file_name": file_name,
-                        "error": f"❌ Fehler bei Erstellung der barrierefreien Beschreibung für '{file_name}'.",
-                        "status": "failed"
-                    })
-                    failed_count += 1
+                    logging.info("Generiere barrierefreie Beschreibung für Datei: %s", file_name)
+                    short_desc, long_desc = generate_accessibility_description_cached(image_bytes_for_api, file_name, context, gemini_api_key)
+                    
+                    if short_desc and long_desc:
+                        logging.info("Barrierefreie Beschreibung erfolgreich generiert für: %s", file_name)
+                        results.append({
+                            "file_name": file_name,
+                            "short_desc": short_desc,
+                            "long_desc": long_desc,
+                            "image_bytes": original_image_bytes,
+                            "base_id": base_id,
+                            "status": "success"
+                        })
+                        processed_count += 1
+                        results_for_export.append({
+                            "Bildname": file_name, "Dateiname Produktion": "", "Alternativtext": short_desc,
+                            "Bildlegende": "", "Anmerkung": "", "Langbeschreibung": long_desc,
+                            "(Platzierung/Größe/Übersetzungstexte in der Abbildung/...)": ""
+                        })
+                    else:
+                        logging.error("Barrierefreie Beschreibung fehlgeschlagen für: %s", file_name)
+                        results.append({
+                            "file_name": file_name,
+                            "error": f"❌ Fehler bei Erstellung der barrierefreien Beschreibung für '{file_name}'.",
+                            "status": "failed"
+                        })
+                        failed_count += 1
             except Exception as e:
                 logging.error("Unerwarteter Fehler bei barrierefreier Beschreibung für %s: %s", file_name, str(e))
                 results.append({
