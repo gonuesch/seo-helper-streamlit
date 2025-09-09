@@ -1292,28 +1292,49 @@ elif selected_tool == "Text-to-Speech":
                 st.success("✅ Ihr Dokument liegt innerhalb der Limits und kann verarbeitet werden!")
         
         if st.button("Text analysieren & Stimmen empfehlen", type="primary"):
+            logging.info(" TTS Button clicked - starting analysis process")
             st.session_state.uploaded_file_name = uploaded_file.name 
             st.session_state.text_content = text_content
             
             with st.status("Führe KI-Analyse aus...", expanded=True) as status:
-                status.write("Schritt 1/3: Erstelle Zusammenfassung des Textes...")
-                summary = generate_text_summary(text_content, gemini_api_key)
-                st.session_state.summary = summary
-                status.write("✅ Zusammenfassung erstellt")
-                
-                status.write("Schritt 2/3: Generiere KI-Regieanweisung...")
-                guideline = generate_ssml_chunk(summary, gemini_api_key)
-                st.session_state.guideline = guideline
-                status.write("✅ KI-Regieanweisung generiert")
-                
-                status.write("Schritt 3/3: Empfehle passende Stimmen...")
-                # Hole verfügbare Stimmen von ElevenLabs
-                available_voices = get_available_voices(elevenlabs_api_key)
-                voices_info = "\n".join([f"{name}" for name in available_voices.keys()]) if available_voices and "Fehler" not in available_voices else "Adam, Antoni, Arnold, Bella, Domi, Elli, Josh, Rachel, Sam"
-                top_3_voices = get_voice_recommendations(summary, voices_info, gemini_api_key)
-                st.session_state.top_3_voices = top_3_voices
-                status.write("✅ Stimmen-Empfehlungen erstellt")
+                try:
+                    status.write("Schritt 1/3: Erstelle Zusammenfassung des Textes...")
+                    logging.info(" Starting step 1/3: Text summary generation")
+                    summary = generate_text_summary(text_content, gemini_api_key)
+                    st.session_state.summary = summary
+                    status.write("✅ Zusammenfassung erstellt")
+                    logging.info("✅ Step 1/3 completed: Summary created")
+                    
+                    status.write("Schritt 2/3: Generiere KI-Regieanweisung...")
+                    logging.info(" Starting step 2/3: SSML guideline generation")
+                    guideline = generate_ssml_chunk(summary, gemini_api_key)
+                    st.session_state.guideline = guideline
+                    status.write("✅ KI-Regieanweisung generiert")
+                    logging.info("✅ Step 2/3 completed: SSML guideline created")
+                    
+                    status.write("Schritt 3/3: Empfehle passende Stimmen...")
+                    logging.info(" Starting step 3/3: Voice recommendations")
+                    
+                    # Hole verfügbare Stimmen von ElevenLabs
+                    logging.info(" Fetching available voices from ElevenLabs API")
+                    available_voices = get_available_voices(elevenlabs_api_key)
+                    logging.info(f"🎤 Retrieved {len(available_voices)} voices from API")
+                    
+                    voices_info = "\n".join([f"{name}" for name in available_voices.keys()]) if available_voices and "Fehler" not in available_voices else "Adam, Antoni, Arnold, Bella, Domi, Elli, Josh, Rachel, Sam"
+                    logging.info(f"🎤 Voices info prepared: {len(voices_info)} characters")
+                    
+                    logging.info("🤖 Calling get_voice_recommendations with 3 parameters")
+                    top_3_voices = get_voice_recommendations(summary, voices_info, gemini_api_key)
+                    st.session_state.top_3_voices = top_3_voices
+                    status.write("✅ Stimmen-Empfehlungen erstellt")
+                    logging.info("✅ Step 3/3 completed: Voice recommendations created")
+                    
+                except Exception as e:
+                    logging.error(f"❌ Error in TTS analysis process: {e}", exc_info=True)
+                    st.error(f"Fehler bei der Analyse: {e}")
+                    return
             
+            logging.info("🔄 Setting tts_step to 2 and calling st.rerun()")
             st.session_state.tts_step = 2
             st.rerun()
 
