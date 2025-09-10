@@ -1409,38 +1409,37 @@ elif selected_tool == "Text-to-Speech":
                     if not voice_id:
                         st.error("❌ Stimme-ID nicht gefunden!")
                         logging.error(f"❌ Voice ID not found for voice: {selected_voice}")
-                        return
-                    
-                    logging.info(f"🎤 Using voice ID: {voice_id}")
-                    
-                    # Generiere Audio für alle Chunks
-                    all_audio_chunks = []
-                    with st.spinner("🎵 Generiere Audio..."):
-                        for i, chunk in enumerate(ssml_chunks):
-                            logging.info(f"🎵 Generating audio for chunk {i+1}/{len(ssml_chunks)}")
-                            audio_chunk = generate_audio_from_text(chunk, voice_id, st.secrets["ELEVENLABS_API_KEY"])
-                            if audio_chunk:
-                                all_audio_chunks.append(audio_chunk)
-                                logging.info(f"✅ Chunk {i+1} audio generated successfully")
-                            else:
-                                logging.error(f"❌ Failed to generate audio for chunk {i+1}")
-                    
-                    if not all_audio_chunks:
-                        st.error("❌ Audio-Generierung fehlgeschlagen!")
-                        logging.error("❌ No audio chunks generated")
-                        return
-                    
-                    # Füge alle Audio-Chunks zusammen
-                    logging.info("🎵 Combining audio chunks")
-                    combined_audio = b"".join(all_audio_chunks)
-                    logging.info(f"✅ Combined audio size: {len(combined_audio)} bytes")
-                    
-                    # Speichere Audio im Session State
-                    st.session_state.audio_data = combined_audio
-                    st.session_state.audio_filename = f"tts_audio_{int(time.time())}.mp3"
-                    
-                    st.success("✅ Audio erfolgreich generiert!")
-                    logging.info("✅ Audio generation completed successfully")
+                        # Fehler aufgetreten, aber Prozess fortsetzen
+                    else:
+                        logging.info(f"🎤 Using voice ID: {voice_id}")
+                        
+                        # Generiere Audio für alle Chunks
+                        all_audio_chunks = []
+                        with st.spinner("🎵 Generiere Audio..."):
+                            for i, chunk in enumerate(ssml_chunks):
+                                logging.info(f"🎵 Generating audio for chunk {i+1}/{len(ssml_chunks)}")
+                                audio_chunk = generate_audio_from_text(chunk, voice_id, st.secrets["ELEVENLABS_API_KEY"])
+                                if audio_chunk:
+                                    all_audio_chunks.append(audio_chunk)
+                                    logging.info(f"✅ Chunk {i+1} audio generated successfully")
+                                else:
+                                    logging.error(f"❌ Failed to generate audio for chunk {i+1}")
+                        
+                        if not all_audio_chunks:
+                            st.error("❌ Audio-Generierung fehlgeschlagen!")
+                            logging.error("❌ No audio chunks generated")
+                        else:
+                            # Füge alle Audio-Chunks zusammen
+                            logging.info("🎵 Combining audio chunks")
+                            combined_audio = b"".join(all_audio_chunks)
+                            logging.info(f"✅ Combined audio size: {len(combined_audio)} bytes")
+                            
+                            # Speichere Audio im Session State
+                            st.session_state.audio_data = combined_audio
+                            st.session_state.audio_filename = f"tts_audio_{int(time.time())}.mp3"
+                            
+                            st.success("✅ Audio erfolgreich generiert!")
+                            logging.info("✅ Audio generation completed successfully")
                     
                 except Exception as e:
                     st.error(f"❌ Fehler bei Audio-Generierung: {str(e)}")
