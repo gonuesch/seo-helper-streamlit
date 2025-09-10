@@ -1372,18 +1372,24 @@ elif selected_tool == "Text-to-Speech":
                     st.rerun()
 
     elif st.session_state.tts_step == 3:
+        logging.info("🎵 TTS Step 3: Audio generation step reached")
         st.subheader("3. Audio generieren")
         
         if st.session_state.get("selected_voice_name") and st.session_state.get("text_content"):
             selected_voice = st.session_state.selected_voice_name
             text_content = st.session_state.text_content
             
+            logging.info(f"🎤 Selected voice: {selected_voice}")
+            logging.info(f"📄 Text content length: {len(text_content)} characters")
+            
             st.info(f"🎤 Generiere Audio mit Stimme: **{selected_voice}**")
             
             if st.button("🚀 Audio jetzt generieren", type="primary"):
+                logging.info("🚀 Audio generation button clicked")
                 with st.spinner("Generiere Audio..."):
                     try:
                         # Hole die Voice-ID für die ausgewählte Stimme
+                        logging.info(" Fetching available voices for voice ID lookup")
                         available_voices = get_available_voices(elevenlabs_api_key)
                         voice_id = None
                         
@@ -1392,11 +1398,15 @@ elif selected_tool == "Text-to-Speech":
                                 voice_id = data.get("voice_id")
                                 break
                         
+                        logging.info(f"🎤 Voice ID found: {voice_id}")
+                        
                         if voice_id:
                             # Generiere Audio
+                            logging.info("🎵 Starting audio generation with ElevenLabs API")
                             audio_bytes = generate_audio_from_text(text_content, elevenlabs_api_key, voice_id)
                             
                             if audio_bytes:
+                                logging.info(f"✅ Audio generated successfully: {len(audio_bytes)} bytes")
                                 st.session_state.tts_result = {"audio_bytes": audio_bytes, "voice_name": selected_voice}
                                 st.success("✅ Audio erfolgreich generiert!")
                                 
@@ -1411,13 +1421,17 @@ elif selected_tool == "Text-to-Speech":
                                     mime="audio/mp3"
                                 )
                             else:
+                                logging.error("❌ Audio generation returned None")
                                 st.error("❌ Fehler bei der Audio-Generierung")
                         else:
+                            logging.error(f"❌ Voice ID not found for voice: {selected_voice}")
                             st.error(f"❌ Voice-ID für '{selected_voice}' nicht gefunden")
                             
                     except Exception as e:
+                        logging.error(f"❌ Audio generation exception: {e}", exc_info=True)
                         st.error(f"❌ Fehler: {e}")
-                        logging.error(f"TTS Audio generation error: {e}", exc_info=True)
+        else:
+            logging.warning("⚠️ Missing selected_voice_name or text_content for audio generation")
 
 elif selected_tool == "Manuskript-Übersetzung":
     st.header("Manuskript-Übersetzung (Deutsch → Englisch)")
