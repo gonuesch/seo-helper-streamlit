@@ -1404,10 +1404,10 @@ elif selected_tool == "Text-to-Speech":
                     # Hole Stimme-ID
                     voice_id = None
                     if st.session_state.get("voices"):
-                        for voice in st.session_state.voices:
-                            if voice["name"] == selected_voice:
-                                voice_id = voice["voice_id"]
-                                break
+                        # voices ist ein Dictionary: {"Stimmenname": {"voice_id": "xyz", ...}}
+                        voice_data = st.session_state.voices.get(selected_voice)
+                        if voice_data:
+                            voice_id = voice_data.get("voice_id")
                     
                     if not voice_id:
                         st.error("❌ Stimme-ID nicht gefunden!")
