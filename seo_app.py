@@ -1320,6 +1320,9 @@ elif selected_tool == "Text-to-Speech":
                     available_voices = get_available_voices(elevenlabs_api_key)
                     logging.info(f"🎤 Retrieved {len(available_voices)} voices from API")
                     
+                    # Speichere Stimmen im Session State für spätere Verwendung
+                    st.session_state.voices = available_voices
+                    
                     voices_info = "\n".join([f"{name}" for name in available_voices.keys()]) if available_voices and "Fehler" not in available_voices else "Adam, Antoni, Arnold, Bella, Domi, Elli, Josh, Rachel, Sam"
                     logging.info(f"🎤 Voices info prepared: {len(voices_info)} characters")
                     
