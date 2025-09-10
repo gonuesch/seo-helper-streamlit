@@ -1332,7 +1332,7 @@ elif selected_tool == "Text-to-Speech":
                 except Exception as e:
                     logging.error(f"❌ Error in TTS analysis process: {e}", exc_info=True)
                     st.error(f"Fehler bei der Analyse: {e}")
-                    return
+                    # Fehler aufgetreten, aber Prozess fortsetzen
             
             logging.info("🔄 Setting tts_step to 2 and calling st.rerun()")
             st.session_state.tts_step = 2
