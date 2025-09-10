@@ -1338,6 +1338,87 @@ elif selected_tool == "Text-to-Speech":
             st.session_state.tts_step = 2
             st.rerun()
 
+    elif st.session_state.tts_step == 2:
+        st.subheader("2. Stimme auswählen")
+        
+        # Zeige die KI-Empfehlungen
+        if st.session_state.get("top_3_voices"):
+            guideline, recommendations = st.session_state.top_3_voices
+            
+            st.success("✅ KI-Analyse abgeschlossen!")
+            
+            # Zeige die Regieleitlinie
+            with st.expander("📋 KI-Regieleitlinie anzeigen"):
+                st.text(guideline)
+            
+            # Zeige die Top 3 Stimmen-Empfehlungen
+            st.subheader(" Empfohlene Stimmen:")
+            
+            for i, voice in enumerate(recommendations, 1):
+                st.write(f"**{i}. {voice}**")
+            
+            # Stimmenauswahl
+            selected_voice = st.selectbox(
+                "Wähle eine Stimme:",
+                recommendations,
+                key="voice_selection"
+            )
+            
+            if selected_voice:
+                st.session_state.selected_voice_name = selected_voice
+                
+                if st.button(" Audio generieren", type="primary"):
+                    st.session_state.tts_step = 3
+                    st.rerun()
+
+    elif st.session_state.tts_step == 3:
+        st.subheader("3. Audio generieren")
+        
+        if st.session_state.get("selected_voice_name") and st.session_state.get("text_content"):
+            selected_voice = st.session_state.selected_voice_name
+            text_content = st.session_state.text_content
+            
+            st.info(f"🎤 Generiere Audio mit Stimme: **{selected_voice}**")
+            
+            if st.button("🚀 Audio jetzt generieren", type="primary"):
+                with st.spinner("Generiere Audio..."):
+                    try:
+                        # Hole die Voice-ID für die ausgewählte Stimme
+                        available_voices = get_available_voices(elevenlabs_api_key)
+                        voice_id = None
+                        
+                        for name, data in available_voices.items():
+                            if name == selected_voice:
+                                voice_id = data.get("voice_id")
+                                break
+                        
+                        if voice_id:
+                            # Generiere Audio
+                            audio_bytes = generate_audio_from_text(text_content, elevenlabs_api_key, voice_id)
+                            
+                            if audio_bytes:
+                                st.session_state.tts_result = {"audio_bytes": audio_bytes, "voice_name": selected_voice}
+                                st.success("✅ Audio erfolgreich generiert!")
+                                
+                                # Audio Player anzeigen
+                                st.audio(audio_bytes, format="audio/mp3")
+                                
+                                # Download Button
+                                st.download_button(
+                                    label="💾 Audio herunterladen",
+                                    data=audio_bytes,
+                                    file_name=f"tts_audio_{selected_voice}.mp3",
+                                    mime="audio/mp3"
+                                )
+                            else:
+                                st.error("❌ Fehler bei der Audio-Generierung")
+                        else:
+                            st.error(f"❌ Voice-ID für '{selected_voice}' nicht gefunden")
+                            
+                    except Exception as e:
+                        st.error(f"❌ Fehler: {e}")
+                        logging.error(f"TTS Audio generation error: {e}", exc_info=True)
+
 elif selected_tool == "Manuskript-Übersetzung":
     st.header("Manuskript-Übersetzung (Deutsch → Englisch)")
     st.caption("Dieses Tool übersetzt deutsche Manuskripte im Hintergrund.")
