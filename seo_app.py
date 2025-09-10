@@ -1229,7 +1229,7 @@ elif selected_tool == "Text-to-Speech":
     
     st.caption(f"💡 **Empfehlung:** Dokumente mit maximal {MAX_PAGES_FOR_TTS} Seiten (ca. {MAX_PAGES_FOR_TTS * 1250:,} Zeichen) für optimale Ergebnisse. Größere Dokumente können aufgeteilt werden.")
 
-    if st.session_state.tts_step > 1:
+    if st.session_state.tts_step == 2:
         if st.button("Neue Analyse starten"):
             st.session_state.tts_step = 1
             st.session_state.guideline = None
