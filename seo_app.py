@@ -1367,71 +1367,97 @@ elif selected_tool == "Text-to-Speech":
             if selected_voice:
                 st.session_state.selected_voice_name = selected_voice
                 
-                if st.button(" Audio generieren", type="primary"):
+                if st.button(" SSML vorbereiten", type="primary"):
                     st.session_state.tts_step = 3
                     st.rerun()
 
     elif st.session_state.tts_step == 3:
-        logging.info("🎵 TTS Step 3: Audio generation step reached")
-        st.subheader("3. Audio generieren")
+        logging.info("📝 TTS Step 3: SSML preparation step reached")
+        st.subheader("3. SSML vorbereiten")
         
-        if st.session_state.get("selected_voice_name") and st.session_state.get("text_content"):
+        if st.session_state.get("selected_voice_name") and st.session_state.get("guideline"):
             selected_voice = st.session_state.selected_voice_name
-            text_content = st.session_state.text_content
+            ssml_guideline = st.session_state.get("guideline")
             
             logging.info(f"🎤 Selected voice: {selected_voice}")
-            logging.info(f"📄 Text content length: {len(text_content)} characters")
+            logging.info(f"📝 SSML guideline length: {len(ssml_guideline)} characters")
             
-            st.info(f"🎤 Generiere Audio mit Stimme: **{selected_voice}**")
+            st.info(f"🎤 Vorbereitung für Stimme: **{selected_voice}**")
+            
+            # Teile SSML in Chunks auf
+            logging.info("📝 Splitting SSML into chunks")
+            ssml_chunks = chunk_ssml_for_elevenlabs(ssml_guideline)
+            logging.info(f"📝 Created {len(ssml_chunks)} SSML chunks")
+            
+            st.success(f"✅ SSML in {len(ssml_chunks)} Chunks aufgeteilt")
+            
+            # Speichere Chunks im Session State
+            st.session_state.ssml_chunks = ssml_chunks
             
             if st.button("🚀 Audio jetzt generieren", type="primary"):
                 logging.info("🚀 Audio generation button clicked")
-                with st.spinner("Generiere Audio..."):
-                    try:
-                        # Hole die Voice-ID für die ausgewählte Stimme
-                        logging.info(" Fetching available voices for voice ID lookup")
-                        available_voices = get_available_voices(elevenlabs_api_key)
-                        voice_id = None
-                        
-                        for name, data in available_voices.items():
-                            if name == selected_voice:
-                                voice_id = data.get("voice_id")
+                
+                try:
+                    # Hole Stimme-ID
+                    voice_id = None
+                    if st.session_state.get("voices"):
+                        for voice in st.session_state.voices:
+                            if voice["name"] == selected_voice:
+                                voice_id = voice["voice_id"]
                                 break
-                        
-                        logging.info(f"🎤 Voice ID found: {voice_id}")
-                        
-                        if voice_id:
-                            # Generiere Audio
-                            logging.info("🎵 Starting audio generation with ElevenLabs API")
-                            audio_bytes = generate_audio_from_text(text_content, elevenlabs_api_key, voice_id)
-                            
-                            if audio_bytes:
-                                logging.info(f"✅ Audio generated successfully: {len(audio_bytes)} bytes")
-                                st.session_state.tts_result = {"audio_bytes": audio_bytes, "voice_name": selected_voice}
-                                st.success("✅ Audio erfolgreich generiert!")
-                                
-                                # Audio Player anzeigen
-                                st.audio(audio_bytes, format="audio/mp3")
-                                
-                                # Download Button
-                                st.download_button(
-                                    label="💾 Audio herunterladen",
-                                    data=audio_bytes,
-                                    file_name=f"tts_audio_{selected_voice}.mp3",
-                                    mime="audio/mp3"
-                                )
+                    
+                    if not voice_id:
+                        st.error("❌ Stimme-ID nicht gefunden!")
+                        logging.error(f"❌ Voice ID not found for voice: {selected_voice}")
+                        return
+                    
+                    logging.info(f"🎤 Using voice ID: {voice_id}")
+                    
+                    # Generiere Audio für alle Chunks
+                    all_audio_chunks = []
+                    with st.spinner("🎵 Generiere Audio..."):
+                        for i, chunk in enumerate(ssml_chunks):
+                            logging.info(f"🎵 Generating audio for chunk {i+1}/{len(ssml_chunks)}")
+                            audio_chunk = generate_audio_from_text(chunk, voice_id, st.secrets["ELEVENLABS_API_KEY"])
+                            if audio_chunk:
+                                all_audio_chunks.append(audio_chunk)
+                                logging.info(f"✅ Chunk {i+1} audio generated successfully")
                             else:
-                                logging.error("❌ Audio generation returned None")
-                                st.error("❌ Fehler bei der Audio-Generierung")
-                        else:
-                            logging.error(f"❌ Voice ID not found for voice: {selected_voice}")
-                            st.error(f"❌ Voice-ID für '{selected_voice}' nicht gefunden")
-                            
-                    except Exception as e:
-                        logging.error(f"❌ Audio generation exception: {e}", exc_info=True)
-                        st.error(f"❌ Fehler: {e}")
-        else:
-            logging.warning("⚠️ Missing selected_voice_name or text_content for audio generation")
+                                logging.error(f"❌ Failed to generate audio for chunk {i+1}")
+                    
+                    if not all_audio_chunks:
+                        st.error("❌ Audio-Generierung fehlgeschlagen!")
+                        logging.error("❌ No audio chunks generated")
+                        return
+                    
+                    # Füge alle Audio-Chunks zusammen
+                    logging.info("🎵 Combining audio chunks")
+                    combined_audio = b"".join(all_audio_chunks)
+                    logging.info(f"✅ Combined audio size: {len(combined_audio)} bytes")
+                    
+                    # Speichere Audio im Session State
+                    st.session_state.audio_data = combined_audio
+                    st.session_state.audio_filename = f"tts_audio_{int(time.time())}.mp3"
+                    
+                    st.success("✅ Audio erfolgreich generiert!")
+                    logging.info("✅ Audio generation completed successfully")
+                    
+                except Exception as e:
+                    st.error(f"❌ Fehler bei Audio-Generierung: {str(e)}")
+                    logging.error(f"❌ Audio generation error: {str(e)}")
+        
+        # Audio Player und Download
+        if st.session_state.get("audio_data"):
+            st.audio(st.session_state.audio_data, format="audio/mpeg")
+            
+            # Download Button
+            audio_filename = st.session_state.get("audio_filename", "tts_audio.mp3")
+            st.download_button(
+                label="📥 Audio herunterladen",
+                data=st.session_state.audio_data,
+                file_name=audio_filename,
+                mime="audio/mpeg"
+            )
 
 elif selected_tool == "Manuskript-Übersetzung":
     st.header("Manuskript-Übersetzung (Deutsch → Englisch)")
