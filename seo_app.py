@@ -19,6 +19,10 @@ import re
 import requests
 from google.cloud import texttospeech
 
+# Richte ein einfaches Logging ein
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Importiere Funktionen aus deinen Modulen
 from utils import convert_tiff_to_png_bytes, read_text_from_docx, read_text_from_pdf, chunk_text, chunk_text_by_paragraphs
 from api_calls import (
