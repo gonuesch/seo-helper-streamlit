@@ -1421,7 +1421,7 @@ elif selected_tool == "Text-to-Speech":
                         with st.spinner("🎵 Generiere Audio..."):
                             for i, chunk in enumerate(ssml_chunks):
                                 logging.info(f"🎵 Generating audio for chunk {i+1}/{len(ssml_chunks)}")
-                                audio_chunk = generate_audio_from_text(chunk, voice_id, st.secrets["ELEVENLABS_API_KEY"])
+                                audio_chunk = generate_audio_from_text(chunk, voice_id, elevenlabs_api_key)
                                 if audio_chunk:
                                     all_audio_chunks.append(audio_chunk)
                                     logging.info(f"✅ Chunk {i+1} audio generated successfully")
