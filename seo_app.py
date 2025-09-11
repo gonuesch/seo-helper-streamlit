@@ -44,8 +44,8 @@ MAX_TTS_RETRIES = 3  # Maximal 3 Wiederholungen bei Fehlern
 MAX_PAGES_FOR_TTS = 35  # Maximale Seitenanzahl für TTS
 
 def calculate_tts_cost(text_length_chars):
-    """Berechnet die Kosten für ElevenLabs TTS basierend auf Textlänge."""
-    return (text_length_chars / 1000) * ELEVENLABS_PRICE_PER_1K_CHARS
+    """Berechnet die Kosten für Google TTS basierend auf Textlänge."""
+    return (text_length_chars / 1000000) * GOOGLE_TTS_PRICE_PER_1M_CHARS
 
 def estimate_total_tts_cost(text_content):
     """Schätzt die Gesamtkosten für einen TTS-Job."""
@@ -757,7 +757,7 @@ if 'click_counter' not in st.session_state:
 
 # API-Schlüssel direkt aus st.secrets laden
 gemini_api_key = st.secrets.get("gemini_api_key")
-elevenlabs_api_key = st.secrets.get("elevenlabs_api_key")
+#elevenlabs_api_key = st.secrets.get("elevenlabs_api_key")
 
 # Prüfe, ob die API-Schlüssel vorhanden sind.
 missing_keys = []
@@ -1851,8 +1851,8 @@ ELEVENLABS_PRICE_PER_1K_CHARS = 0.18  # $0.18 pro 1000 Zeichen
 MAX_PAGES_FOR_TTS = 35  # Maximale Seitenanzahl für TTS
 
 def calculate_tts_cost(text_length_chars):
-    """Berechnet die Kosten für ElevenLabs TTS basierend auf Textlänge."""
-    return (text_length_chars / 1000) * ELEVENLABS_PRICE_PER_1K_CHARS
+    """Berechnet die Kosten für Google TTS basierend auf Textlänge."""
+    return (text_length_chars / 1000000) * GOOGLE_TTS_PRICE_PER_1M_CHARS
 
 def estimate_total_tts_cost(text_content):
     """Schätzt die Gesamtkosten für einen TTS-Job."""
@@ -2032,3 +2032,6 @@ def generate_audio_google(text, voice_name="en-US-Wavenet-D"):
     )
     
     return response.audio_content
+
+# Google TTS Preise (pro 1 Million Zeichen)
+GOOGLE_TTS_PRICE_PER_1M_CHARS = 4.0  # $4 pro 1 Million Zeichen
