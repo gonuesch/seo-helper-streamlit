@@ -18,6 +18,7 @@ from typing import Tuple, Dict
 import re
 import requests
 from google.cloud import texttospeech
+import os
 
 # Richte ein einfaches Logging ein
 logging.basicConfig(level=logging.INFO)
@@ -130,6 +131,11 @@ def get_google_credentials():
         logger.warning(f"⚠️ Fehler beim Laden der Google Cloud Credentials: {e}")
         return None
 
+# Entferne die problematische Umgebungsvariable
+if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
+    del os.environ['GOOGLE_APPLICATION_CREDENTIALS']
+    logger.info("🗑️ GOOGLE_APPLICATION_CREDENTIALS Umgebungsvariable entfernt")
+
 # Lade Credentials
 google_credentials = get_google_credentials()
 
@@ -138,8 +144,9 @@ if google_credentials:
     publisher = pubsub_v1.PublisherClient(credentials=google_credentials)
     logger.info("✅ Pub/Sub Client mit expliziten Credentials initialisiert")
 else:
-    publisher = pubsub_v1.PublisherClient()  # Fallback zu Default Credentials
-    logger.info("✅ Pub/Sub Client mit Default Credentials initialisiert")
+    # Verwende Cloud Run Default Service Account
+    publisher = pubsub_v1.PublisherClient()
+    logger.info("✅ Pub/Sub Client mit Cloud Run Default Service Account initialisiert")
 
 topic_path = publisher.topic_path("avid-infinity-458913-p3", "event-tracking-toolbox")
 
