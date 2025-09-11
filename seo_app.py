@@ -757,14 +757,13 @@ if 'click_counter' not in st.session_state:
 
 # API-Schlüssel direkt aus st.secrets laden
 gemini_api_key = st.secrets.get("gemini_api_key")
-#elevenlabs_api_key = st.secrets.get("elevenlabs_api_key")
+
 
 # Prüfe, ob die API-Schlüssel vorhanden sind.
 missing_keys = []
 if not gemini_api_key:
     missing_keys.append("gemini-api-key")
-if not elevenlabs_api_key:
-    missing_keys.append("elevenlabs-api-key")
+
 
 if missing_keys:
     st.error(f"🚨 Folgende API-Schlüssel sind nicht konfiguriert: {', '.join(missing_keys)}")
