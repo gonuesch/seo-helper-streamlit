@@ -7,7 +7,6 @@ pandas==2.1.4
 pyarrow==14.0.1
 openpyxl
 google-generativeai
-elevenlabs
 python-docx
 PyMuPDF==1.23.8
 Authlib
@@ -19,3 +18,4 @@ google-cloud-pubsub
 google-cloud-storage
 google-cloud-firestore
 google-cloud-aiplatform
+google-cloud-texttospeech

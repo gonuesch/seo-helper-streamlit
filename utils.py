@@ -154,9 +154,9 @@ def chunk_text_by_paragraphs(text: str, max_chunk_size: int = 100000) -> list[st
     return chunks
 
 @log_exceptions
-def chunk_ssml_for_elevenlabs(ssml_text: str, max_chunk_size: int = 40000) -> list[str]:
+def chunk_ssml_for_google_tts(ssml_text: str, max_chunk_size: int = 5000) -> list[str]:
     """
-    Teilt SSML-Text für ElevenLabs API auf (40000 Zeichen Limit).
+    Teilt SSML-Text für Google TTS API auf (5000 Zeichen Limit).
     Versucht SSML-Tags intakt zu halten.
     """
     if not isinstance(ssml_text, str):

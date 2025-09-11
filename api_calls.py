@@ -6,13 +6,14 @@ from io import BytesIO
 from typing import Union, Tuple, Dict 
 import google.generativeai as genai
 from google.api_core.exceptions import ResourceExhausted
-from elevenlabs.client import ElevenLabs
 import logging
 import re
 import requests
 import json
 import vertexai
 from vertexai.generative_models import GenerativeModel, Part
+from google.cloud import texttospeech
+import os
 
 # Importiere die Prompt-Vorlagen aus der prompts.py Datei
 from prompts import ACCESSIBILITY_PROMPT_TEMPLATE, SEO_PROMPT, SUMMARY_PROMPT, GUIDELINE_PROMPT_WITH_MATCHING, SSML_PROMPT, TRANSLATION_GUIDE_PROMPT, TRANSLATE_CHUNK_PROMPT
@@ -205,89 +206,6 @@ def generate_accessibility_description_cached(image_bytes_for_api, file_name_for
         logger.error(f"Error during accessibility description generation for {file_name_for_log}: {e}", exc_info=True)
         st.error(f"Ein unerwarteter Fehler ist bei der Generierung der Barrierefreiheits-Beschreibung für '{file_name_for_log}' aufgetreten.")
         return None, None
-
-@st.cache_data(ttl=3600)
-@log_exceptions
-def get_available_voices(api_key: str) -> Dict[str, Dict[str, str]]:
-    """
-    Ruft die verfügbaren Stimmen von der ElevenLabs API ab.
-    Gibt ein Dictionary zurück: 
-    {'Stimmenname': {'voice_id': 'xyz', 'preview_url': 'http://...'}}
-    """
-    try:
-        client = ElevenLabs(api_key=api_key, timeout=60.0)
-        voices = client.voices.get_all()
-        # Erstelle ein verschachteltes Dictionary mit allen relevanten Infos
-        return {
-            voice.name: {
-                "voice_id": voice.voice_id,
-                "preview_url": voice.preview_url
-            }
-            for voice in voices.voices if voice.preview_url
-        }
-    except Exception as e:
-        logger.error(f"Fehler beim Abrufen der ElevenLabs-Stimmen: {e}", exc_info=True)
-        # Fallback zu kostenlosen Stimmen bei API-Fehlern
-        FREE_VOICES = {
-            "Adam": "pNInz6obpgDQGcFmaJgB",
-            "Antoni": "ErXwobaYiN019PkySvjV", 
-            "Arnold": "VR6AewLTigWG4xSOukaG",
-            "Bella": "EXAVITQu4vr4xnSDxMaL",
-            "Domi": "AZnzlk1XvdvUeBnXmlld",
-            "Elli": "MF3mGyEYCl7XYWbV9V6O",
-            "Josh": "TxGEqnHWrfWFTfGW9XjX",
-            "Rachel": "21m00Tcm4TlvDq8ikWAM",
-            "Sam": "yoZ06aMxZJJ28mfd3POQ"
-        }
-        return {
-            name: {
-                "voice_id": voice_id,
-                "preview_url": f"https://storage.googleapis.com/eleven-public-prod/{voice_id}.mp3"
-            }
-            for name, voice_id in FREE_VOICES.items()
-        }
-
-
-@st.cache_data
-@log_exceptions
-def generate_audio_from_text(text: str, api_key: str, voice_id: str) -> Union[bytes, None]:
-    """
-    Generiert Audio aus Text mit der ElevenLabs API und gibt die Audio-Bytes zurück.
-    Akzeptiert jetzt eine dynamische voice_id.
-    """
-    if not all([text, text.strip(), api_key, voice_id]):
-        logger.warning("Kein Text, API-Schlüssel oder Voice-ID für die Audio-Generierung vorhanden.")
-        return None
-    
-    try:
-        # HIER DEN TIMEOUT HINZUFÜGEN
-        client = ElevenLabs(api_key=api_key, timeout=300.0) # Timeout auf 300s (5 Minuten) setzen
-        
-        audio_generator = client.text_to_speech.convert(
-            voice_id=voice_id,
-            text=text,
-            model_id="eleven_turbo_v2",  # ← Änderung zu Turbo!
-        )
-
-        logger.info(f"Sammle Audio-Chunks von der ElevenLabs API für Stimme {voice_id}...")
-        audio_chunks = [chunk for chunk in audio_generator]
-
-        if not audio_chunks:
-            logger.error("ElevenLabs API hat keine Audio-Daten zurückgegeben.")
-            return None
-
-        full_audio_bytes = b"".join(audio_chunks)
-
-        if full_audio_bytes:
-            logger.info("Audio-Bytes erfolgreich zusammengefügt.")
-            return full_audio_bytes
-        else:
-            logger.error("Zusammenfügen der Audio-Chunks ergab keine Daten.")
-            return None
-
-    except Exception as e:
-        logger.error(f"Fehler bei der Audio-Generierung durch ElevenLabs: {e}", exc_info=True)
-        return None
 
 
 @log_exceptions
@@ -549,3 +467,90 @@ def create_formatted_docx(translated_text: str, output_filename: str) -> bytes:
     except Exception as e:
         logger.error(f"Fehler beim Erstellen des DOCX-Dokuments: {e}", exc_info=True)
         raise e
+
+@st.cache_data(ttl=3600)
+@log_exceptions
+def get_google_tts_voices() -> Dict[str, Dict[str, str]]:
+    """
+    Ruft die verfügbaren Google TTS Stimmen ab.
+    Gibt ein Dictionary zurück: 
+    {'Stimmenname': {'voice_id': 'xyz', 'language': 'en-US', 'gender': 'MALE/FEMALE'}}
+    """
+    try:
+        client = texttospeech.TextToSpeechClient()
+        voices = client.list_voices()
+        
+        voice_dict = {}
+        for voice in voices.voices:
+            # Filtere nur englische Stimmen für bessere Qualität
+            if voice.language_codes[0].startswith('en-'):
+                voice_name = f"{voice.name} ({voice.language_codes[0]})"
+                voice_dict[voice_name] = {
+                    "voice_id": voice.name,
+                    "language": voice.language_codes[0],
+                    "gender": voice.ssml_gender.name
+                }
+        
+        return voice_dict
+    except Exception as e:
+        logger.error(f"Fehler beim Abrufen der Google TTS Stimmen: {e}")
+        # Fallback zu beliebten Stimmen
+        return {
+            "en-US-Wavenet-D (en-US)": {"voice_id": "en-US-Wavenet-D", "language": "en-US", "gender": "MALE"},
+            "en-US-Wavenet-F (en-US)": {"voice_id": "en-US-Wavenet-F", "language": "en-US", "gender": "FEMALE"},
+            "en-US-Standard-D (en-US)": {"voice_id": "en-US-Standard-D", "language": "en-US", "gender": "MALE"},
+            "en-US-Standard-F (en-US)": {"voice_id": "en-US-Standard-F", "language": "en-US", "gender": "FEMALE"}
+        }
+
+@log_exceptions
+def generate_audio_google_tts(text: str, voice_id: str) -> bytes:
+    """
+    Generiert Audio mit Google Cloud Text-to-Speech API.
+    
+    Args:
+        text: Der zu synthetisierende Text
+        voice_id: Die Voice-ID (z.B. 'en-US-Wavenet-D')
+    
+    Returns:
+        bytes: Audio-Daten im MP3-Format
+    """
+    try:
+        # Setze die Umgebungsvariable für die Authentifizierung
+        if 'GOOGLE_APPLICATION_CREDENTIALS' not in os.environ:
+            # Fallback: Lade den Service Account Key aus dem Secret Manager
+            from google.cloud import secretmanager
+            client = secretmanager.SecretManagerServiceClient()
+            project_id = "avid-infinity-458913-p3"
+            secret_name = "google-tts-service-account"
+            name = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
+            response = client.access_secret_version(request={"name": name})
+            service_account_key = response.payload.data.decode("UTF-8")
+            
+            # Temporärer Key für diese Session
+            import tempfile
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                f.write(service_account_key)
+                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = f.name
+        
+        client = texttospeech.TextToSpeechClient()
+        
+        synthesis_input = texttospeech.SynthesisInput(text=text)
+        voice = texttospeech.VoiceSelectionParams(
+            language_code=voice_id.split('-')[0] + '-' + voice_id.split('-')[1],  # z.B. 'en-US'
+            name=voice_id
+        )
+        audio_config = texttospeech.AudioConfig(
+            audio_encoding=texttospeech.AudioEncoding.MP3
+        )
+        
+        response = client.synthesize_speech(
+            input=synthesis_input,
+            voice=voice,
+            audio_config=audio_config
+        )
+        
+        return response.audio_content
+        
+    except Exception as e:
+        logger.error(f"Fehler bei der Google TTS Audio-Generierung: {e}")
+        return None

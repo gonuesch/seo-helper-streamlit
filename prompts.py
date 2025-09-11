@@ -73,7 +73,7 @@ Basierend auf der folgenden Text-Zusammenfassung, erstelle eine prägnante, kons
 2.  Wähle die DREI passendsten Stimmen aus.
 3.  Der Name, den du zurückgibst, muss **EXAKT UND ZEICHENGENAU** mit einem Namen aus der Liste übereinstimmen.
 
-**Verfügbare ElevenLabs-Stimmen (können Beschreibungen enthalten oder auch nicht):**
+**Verfügbare Google TTS-Stimmen (können Beschreibungen enthalten oder auch nicht):**
 ---
 {voices_with_descriptions}
 ---
@@ -100,7 +100,7 @@ Deine Aufgabe ist es, den folgenden Text-Abschnitt mit SSML-Tags anzureichern, u
 1.  Der Originaltext darf **auf keinen Fall verändert, umformuliert oder korrigiert** werden. Füge ausschließlich SSML-Tags hinzu.
 2.  Halte dich strikt an die vorgegebene **Regieleitlinie**.
 3.  Verwende passende SSML-Tags wie `<break time="...s"/>` für Pausen und `<emphasis level="...">` für Betonungen.
-4.  Das Ergebnis muss valides SSML sein, das von der ElevenLabs API verarbeitet werden kann.
+4.  Das Ergebnis muss valides SSML sein, das von der Google TTS API verarbeitet werden kann.
 
 **Regieleitlinie:**
 ---

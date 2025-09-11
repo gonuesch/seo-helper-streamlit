@@ -10,7 +10,9 @@ steps:
       mkdir -p .streamlit
       # Erstelle die secrets.toml nur mit API-Schlüsseln
       echo 'gemini_api_key = "'$(gcloud secrets versions access latest --secret=gemini-api-key)'"' > .streamlit/secrets.toml
-      echo 'elevenlabs_api_key = "'$(gcloud secrets versions access latest --secret=elevenlabs-api-key)'"' >> .streamlit/secrets.toml
+      # Google TTS Service Account Key
+      gcloud secrets versions access latest --secret=google-tts-service-account > /tmp/google-tts-key.json
+      export GOOGLE_APPLICATION_CREDENTIALS=/tmp/google-tts-key.json
 
 # Step #1: Docker-Container bauen
 - name: 'gcr.io/cloud-builders/docker'
@@ -35,6 +37,8 @@ steps:
     - 'managed'
     - '--allow-unauthenticated'
     - '--session-affinity'
+    - '--set-env-vars'
+    - 'GOOGLE_APPLICATION_CREDENTIALS=/tmp/google-tts-key.json'
 
 options:
   logging: CLOUD_LOGGING_ONLY

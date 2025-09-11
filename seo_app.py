@@ -17,19 +17,24 @@ import random
 from typing import Tuple, Dict
 import re
 import requests
+from google.cloud import texttospeech
 
 # Importiere Funktionen aus deinen Modulen
-from utils import convert_tiff_to_png_bytes, read_text_from_docx, read_text_from_pdf, chunk_text, chunk_text_by_paragraphs, chunk_ssml_for_elevenlabs
-from api_calls import generate_seo_tags_cached, generate_accessibility_description_cached, generate_audio_from_text, get_available_voices, generate_text_summary, get_voice_recommendations, generate_ssml_chunk, log_exceptions
+from utils import convert_tiff_to_png_bytes, read_text_from_docx, read_text_from_pdf, chunk_text, chunk_text_by_paragraphs
+from api_calls import (
+    generate_seo_tags_cached, 
+    generate_accessibility_description_cached,
+    generate_text_summary,
+    generate_ssml_chunk,
+    get_google_tts_voices,
+    generate_audio_google_tts
+)
 
 # --- SICHERHEITSKONFIGURATION FÜR TTS ---
 MAX_TTS_COST_USD = 10.0  # Maximal 10 USD pro TTS-Job (erhöht von 5.0)
 MAX_TTS_RUNTIME_MINUTES = 30  # Maximal 30 Minuten Laufzeit
 TTS_STATUS_CHECK_INTERVAL = 2  # Status alle 2 Sekunden prüfen
 MAX_TTS_RETRIES = 3  # Maximal 3 Wiederholungen bei Fehlern
-
-# ElevenLabs Preise (pro 1000 Zeichen)
-ELEVENLABS_PRICE_PER_1K_CHARS = 0.18  # $0.18 pro 1000 Zeichen
 
 # Berechnung der maximalen Seitenanzahl
 # Annahme: 250 Wörter/Seite × 5 Zeichen/Wort = 1250 Zeichen/Seite
@@ -803,7 +808,13 @@ with st.sidebar:
     elif selected_tool == "Barrierefreie Bildbeschreibung":
         st.markdown(f"Erzeuge **Bildbeschreibungen** mit Gemini.\n\n**Unterstützte Formate:** `{supported_formats_images}`\n\n**Download möglich:** Die Ergebnisse können als Excel-Datei heruntergeladen werden.\n\nBei Fragen -> Gordon")
     elif selected_tool == "Text-to-Speech":
-        st.markdown("Wandle Text aus **Word-Dokumenten** oder **PDFs** in gesprochene Sprache um.\n\n**Unterstützte Formate:** `.docx`, `.pdf`\n\n**API:** ElevenLabs\n\nBei Fragen -> Gordon")
+        st.markdown("""
+        ** Unterstützte Formate:** `.docx`, `.pdf`
+        
+        **🎤 TTS:** Google Cloud Text-to-Speech
+        
+        Bei Fragen -> Gordon
+        """)
     elif selected_tool == "Manuskript-Übersetzung":
         st.markdown("Übersetze **deutsche Manuskripte** ins Englische im Hintergrund.\n\n**Unterstützte Formate:** `.docx`, `.pdf`\n\n**Features:** Asynchrone Verarbeitung, Job-Tracking\n\nBei Fragen -> Gordon")
 
@@ -1230,17 +1241,47 @@ elif selected_tool == "Text-to-Speech":
     st.caption(f"💡 **Empfehlung:** Dokumente mit maximal {MAX_PAGES_FOR_TTS} Seiten (ca. {MAX_PAGES_FOR_TTS * 1250:,} Zeichen) für optimale Ergebnisse. Größere Dokumente können aufgeteilt werden.")
 
     if st.session_state.tts_step == 2:
-        if st.button("Neue Analyse starten"):
-            st.session_state.tts_step = 1
-            st.session_state.guideline = None
-            st.session_state.top_3_voices = []
-            st.session_state.text_content = None
-            st.session_state.summary = None
-            st.session_state.selected_voice_name = ""
-            st.session_state.uploaded_file_name = None
-            st.rerun()
+        st.subheader("2. Stimme auswählen")
+        
+        # Zeige die KI-Empfehlungen
+        if st.session_state.get("top_3_voices"):
+            guideline, recommendations = st.session_state.top_3_voices
+            
+            st.success("✅ KI-Analyse abgeschlossen!")
+            
+            # Zeige die Regieleitlinie
+            with st.expander("📋 KI-Regieleitlinie anzeigen"):
+                st.text(guideline)
+            
+            # Zeige die Top 3 Stimmen-Empfehlungen
+            st.subheader("🎤 Empfohlene Stimmen:")
+            
+            for i, voice in enumerate(recommendations, 1):
+                st.write(f"**{i}. {voice}**")
+            
+            # Google TTS Voice Auswahl
+            google_voices = get_google_tts_voices()
+            if google_voices:
+                voice_names = list(google_voices.keys())
+                selected_voice = st.selectbox(
+                    "🎤 Google TTS Stimme wählen:",
+                    voice_names,
+                    key="voice_selection"
+                )
+                # Speichere Google Voices im Session State
+                st.session_state.google_voices = google_voices
+            else:
+                st.error("❌ Keine Google TTS-Stimmen verfügbar")
+                selected_voice = None
+            
+            if selected_voice:
+                st.session_state.selected_voice_name = selected_voice
+                
+                if st.button("📝 SSML vorbereiten", type="primary"):
+                    st.session_state.tts_step = 3
+                    st.rerun()
 
-    if st.session_state.tts_step < 3:
+    elif st.session_state.tts_step < 3:
         st.subheader("1. Dokument hochladen")
         uploaded_file = st.file_uploader(
             label="Lade dein Dokument hoch (.docx oder .pdf)",
@@ -1315,9 +1356,9 @@ elif selected_tool == "Text-to-Speech":
                     status.write("Schritt 3/3: Empfehle passende Stimmen...")
                     logging.info(" Starting step 3/3: Voice recommendations")
                     
-                    # Hole verfügbare Stimmen von ElevenLabs
-                    logging.info(" Fetching available voices from ElevenLabs API")
-                    available_voices = get_available_voices(elevenlabs_api_key)
+                    # Hole verfügbare Stimmen von Google TTS
+                    logging.info(" Fetching available voices from Google TTS API")
+                    available_voices = get_google_tts_voices()
                     logging.info(f"🎤 Retrieved {len(available_voices)} voices from API")
                     
                     # Speichere Stimmen im Session State für spätere Verwendung
@@ -1355,22 +1396,30 @@ elif selected_tool == "Text-to-Speech":
                 st.text(guideline)
             
             # Zeige die Top 3 Stimmen-Empfehlungen
-            st.subheader(" Empfohlene Stimmen:")
+            st.subheader("🎤 Empfohlene Stimmen:")
             
             for i, voice in enumerate(recommendations, 1):
                 st.write(f"**{i}. {voice}**")
             
-            # Stimmenauswahl
-            selected_voice = st.selectbox(
-                "Wähle eine Stimme:",
-                recommendations,
-                key="voice_selection"
-            )
+            # Google TTS Voice Auswahl
+            google_voices = get_google_tts_voices()
+            if google_voices:
+                voice_names = list(google_voices.keys())
+                selected_voice = st.selectbox(
+                    "🎤 Google TTS Stimme wählen:",
+                    voice_names,
+                    key="voice_selection"
+                )
+                # Speichere Google Voices im Session State
+                st.session_state.google_voices = google_voices
+            else:
+                st.error("❌ Keine Google TTS-Stimmen verfügbar")
+                selected_voice = None
             
             if selected_voice:
                 st.session_state.selected_voice_name = selected_voice
                 
-                if st.button(" SSML vorbereiten", type="primary"):
+                if st.button("📝 SSML vorbereiten", type="primary"):
                     st.session_state.tts_step = 3
                     st.rerun()
 
@@ -1389,7 +1438,7 @@ elif selected_tool == "Text-to-Speech":
             
             # Teile SSML in Chunks auf
             logging.info("📝 Splitting SSML into chunks")
-            ssml_chunks = chunk_ssml_for_elevenlabs(ssml_guideline)
+            ssml_chunks = chunk_ssml_for_google_tts(ssml_guideline)
             logging.info(f"📝 Created {len(ssml_chunks)} SSML chunks")
             
             st.success(f"✅ SSML in {len(ssml_chunks)} Chunks aufgeteilt")
@@ -1401,27 +1450,25 @@ elif selected_tool == "Text-to-Speech":
                 logging.info("🚀 Audio generation button clicked")
                 
                 try:
-                    # Hole Stimme-ID
+                    # Hole Stimme-ID für Google TTS
                     voice_id = None
-                    if st.session_state.get("voices"):
-                        # voices ist ein Dictionary: {"Stimmenname": {"voice_id": "xyz", ...}}
-                        voice_data = st.session_state.voices.get(selected_voice)
+                    if st.session_state.get("google_voices"):
+                        voice_data = st.session_state.google_voices.get(selected_voice)
                         if voice_data:
                             voice_id = voice_data.get("voice_id")
                     
                     if not voice_id:
                         st.error("❌ Stimme-ID nicht gefunden!")
                         logging.error(f"❌ Voice ID not found for voice: {selected_voice}")
-                        # Fehler aufgetreten, aber Prozess fortsetzen
                     else:
-                        logging.info(f"🎤 Using voice ID: {voice_id}")
+                        logging.info(f"🎤 Using Google TTS voice ID: {voice_id}")
                         
                         # Generiere Audio für alle Chunks
                         all_audio_chunks = []
-                        with st.spinner("🎵 Generiere Audio..."):
+                        with st.spinner("🎵 Generiere Audio mit Google TTS..."):
                             for i, chunk in enumerate(ssml_chunks):
                                 logging.info(f"🎵 Generating audio for chunk {i+1}/{len(ssml_chunks)}")
-                                audio_chunk = generate_audio_from_text(chunk, elevenlabs_api_key, voice_id)
+                                audio_chunk = generate_audio_google_tts(chunk, voice_id)
                                 if audio_chunk:
                                     all_audio_chunks.append(audio_chunk)
                                     logging.info(f"✅ Chunk {i+1} audio generated successfully")
@@ -1924,26 +1971,21 @@ def get_fallback_voices():
 
 @log_exceptions
 def get_voice_recommendations(_summary: str, _voices_info: str = None, gemini_api_key: str = None) -> Tuple[str, list]:
-    """Erstellt eine Regieleitlinie und extrahiert die Top 3 Stimmen."""
+    """Erstellt eine Regieleitlinie und extrahiert die Top 3 Stimmen für Google TTS."""
     try:
         if gemini_api_key:
             genai.configure(api_key=gemini_api_key)
             
-        # Falls keine Stimmen übergeben wurden, automatisch abrufen
+        # Hole Google TTS Stimmen
         if not _voices_info or not _voices_info.strip():
-            # Versuche ElevenLabs API Key aus Streamlit Secrets zu holen
             try:
-                elevenlabs_api_key = st.secrets.get("elevenlabs_api_key")
-                if elevenlabs_api_key:
-                    available_voices = get_available_voices(elevenlabs_api_key)
-                    if available_voices and "Fehler" not in available_voices:
-                        _voices_info = "\n".join([f"{name}" for name in available_voices.keys()])
-                    else:
-                        _voices_info = "Adam, Antoni, Arnold, Bella, Domi, Elli, Josh, Rachel, Sam"
+                available_voices = get_google_tts_voices()
+                if available_voices:
+                    _voices_info = "\n".join([f"{name}" for name in available_voices.keys()])
                 else:
-                    _voices_info = "Adam, Antoni, Arnold, Bella, Domi, Elli, Josh, Rachel, Sam"
+                    _voices_info = "en-US-Wavenet-D, en-US-Wavenet-F, en-US-Standard-D, en-US-Standard-F"
             except:
-                _voices_info = "Adam, Antoni, Arnold, Bella, Domi, Elli, Josh, Rachel, Sam"
+                _voices_info = "en-US-Wavenet-D, en-US-Wavenet-F, en-US-Standard-D, en-US-Standard-F"
 
         full_prompt = GUIDELINE_PROMPT_WITH_MATCHING.format(
             summary=_summary, 
@@ -1970,3 +2012,23 @@ def get_voice_recommendations(_summary: str, _voices_info: str = None, gemini_ap
     except Exception as e:
         logger.error(f"Fehler bei der Regie-Erstellung: {e}", exc_info=True)
         return f"Fehler bei der Regie-Erstellung: {e}", []
+
+def generate_audio_google(text, voice_name="en-US-Wavenet-D"):
+    client = texttospeech.TextToSpeechClient()
+    
+    synthesis_input = texttospeech.SynthesisInput(text=text)
+    voice = texttospeech.VoiceSelectionParams(
+        language_code="en-US",
+        name=voice_name
+    )
+    audio_config = texttospeech.AudioConfig(
+        audio_encoding=texttospeech.AudioEncoding.MP3
+    )
+    
+    response = client.synthesize_speech(
+        input=synthesis_input,
+        voice=voice,
+        audio_config=audio_config
+    )
+    
+    return response.audio_content
