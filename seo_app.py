@@ -108,26 +108,21 @@ def get_google_credentials():
     try:
         from google.cloud import secretmanager
         from google.oauth2 import service_account
+        import json
         
-        # Hole den Private Key aus dem Secret Manager
+        # Hole die komplette Service Account JSON aus dem Secret Manager
         client = secretmanager.SecretManagerServiceClient()
         project_id = "avid-infinity-458913-p3"
         secret_name = "google-tts-service-account"
         name = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
         response = client.access_secret_version(request={"name": name})
-        private_key = response.payload.data.decode("UTF-8")
+        service_account_json = response.payload.data.decode("UTF-8")
         
-        # Bereinige den Private Key (entferne Anführungszeichen falls vorhanden)
-        private_key = private_key.strip().strip('"').strip("'")
+        # Parse die JSON-Datei
+        service_account_info = json.loads(service_account_json)
         
-        # Erstelle Credentials-Objekt mit Private Key
-        credentials = service_account.Credentials.from_service_account_info({
-            "type": "service_account",
-            "project_id": project_id,
-            "private_key": private_key,
-            "client_email": f"seo-helper-tts-service@{project_id}.iam.gserviceaccount.com",
-            "token_uri": "https://oauth2.googleapis.com/token"
-        })
+        # Erstelle Credentials-Objekt direkt aus der JSON
+        credentials = service_account.Credentials.from_service_account_info(service_account_info)
         
         logger.info("✅ Google Cloud Credentials aus Secret Manager geladen")
         return credentials
@@ -1326,7 +1321,7 @@ elif selected_tool == "Text-to-Speech":
                 selected_voice = st.selectbox(
                     "🎤 Google TTS Stimme wählen:",
                     voice_names,
-                    key="voice_selection"
+                    key="voice_selection_1"
                 )
                 # Speichere Google Voices im Session State
                 st.session_state.google_voices = google_voices
@@ -1468,7 +1463,7 @@ elif selected_tool == "Text-to-Speech":
                 selected_voice = st.selectbox(
                     "🎤 Google TTS Stimme wählen:",
                     voice_names,
-                    key="voice_selection"
+                    key="voice_selection_2"
                 )
                 # Speichere Google Voices im Session State
                 st.session_state.google_voices = google_voices
