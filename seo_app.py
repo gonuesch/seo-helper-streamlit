@@ -1857,37 +1857,70 @@ def check_tts_safety(start_time, current_cost=0.0, chunks_processed=0, total_chu
 @log_exceptions
 def get_available_voices(api_key: str) -> Dict[str, Dict[str, str]]:
     """
-    Ruft die verfügbaren Stimmen von der ElevenLabs API ab.
-    Filtert nur kostenlose Stimmen für Free-Tier-Accounts.
+    Ruft die verfügbaren Stimmen von der ElevenLabs v2 API ab.
     Gibt ein Dictionary zurück: 
     {'Stimmenname': {'voice_id': 'xyz', 'preview_url': 'http://...'}}
     """
-    # Liste der kostenlosen ElevenLabs-Stimmen
-    FREE_VOICES = {
-        "Adam": "pNInz6obpgDQGcFmaJgB",  # American Male
-        "Antoni": "ErXwobaYiN019PkySvjV",  # American Male
-        "Arnold": "VR6AewLTigWG4xSOukaG",  # American Male
-        "Bella": "EXAVITQu4vr4xnSDxMaL",  # American Female
-        "Domi": "AZnzlk1XvdvUeBnXmlld",  # American Female
-        "Elli": "MF3mGyEYCl7XYWbV9V6O",  # American Female
-        "Josh": "TxGEqnHWrfWFTfGW9XjX",  # American Male
-        "Rachel": "21m00Tcm4TlvDq8ikWAM",  # American Female
-        "Sam": "yoZ06aMxZJJ28mfd3POQ"   # American Male
-    }
-    
     try:
-        # Für kostenlose Accounts verwenden wir nur die vordefinierten kostenlosen Stimmen
-        return {
-            name: {
-                "voice_id": voice_id,
-                "preview_url": f"https://storage.googleapis.com/eleven-public-prod/{voice_id}.mp3",
-                "description": f"Kostenlose ElevenLabs-Stimme: {name}"
-            }
-            for name, voice_id in FREE_VOICES.items()
+        headers = {
+            "xi-api-key": api_key
         }
+        
+        # Verwende die neue v2 API mit Filter für Standard-Stimmen
+        params = {
+            "voice_type": "default",
+            "page_size": 100
+        }
+        
+        response = requests.get(
+            "https://api.elevenlabs.io/v2/voices",
+            headers=headers,
+            params=params,
+            timeout=60.0
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            voices = data.get("voices", [])
+            
+            return {
+                voice["name"]: {
+                    "voice_id": voice["voice_id"],
+                    "preview_url": voice.get("preview_url", ""),
+                    "description": voice.get("description", "")
+                }
+                for voice in voices
+            }
+        else:
+            logger.error(f"ElevenLabs API Fehler: {response.status_code} - {response.text}")
+            # Fallback zu kostenlosen Stimmen bei API-Fehlern
+            return get_fallback_voices()
+            
     except Exception as e:
         logger.error(f"Fehler beim Abrufen der ElevenLabs-Stimmen: {e}", exc_info=True)
-        return {"Fehler": {"voice_id": "", "preview_url": ""}}
+        return get_fallback_voices()
+
+def get_fallback_voices():
+    """Fallback zu kostenlosen Stimmen bei API-Fehlern"""
+    FREE_VOICES = {
+        "Adam": "pNInz6obpgDQGcFmaJgB",
+        "Antoni": "ErXwobaYiN019PkySvjV", 
+        "Arnold": "VR6AewLTigWG4xSOukaG",
+        "Bella": "EXAVITQu4vr4xnSDxMaL",
+        "Domi": "AZnzlk1XvdvUeBnXmlld",
+        "Elli": "MF3mGyEYCl7XYWbV9V6O",
+        "Josh": "TxGEqnHWrfWFTfGW9XjX",
+        "Rachel": "21m00Tcm4TlvDq8ikWAM",
+        "Sam": "yoZ06aMxZJJ28mfd3POQ"
+    }
+    return {
+        name: {
+            "voice_id": voice_id,
+            "preview_url": f"https://storage.googleapis.com/eleven-public-prod/{voice_id}.mp3",
+            "description": f"Kostenlose ElevenLabs-Stimme: {name}"
+        }
+        for name, voice_id in FREE_VOICES.items()
+    }
 
 @log_exceptions
 def get_voice_recommendations(_summary: str, _voices_info: str = None, gemini_api_key: str = None) -> Tuple[str, list]:
