@@ -1839,9 +1839,6 @@ MAX_TTS_RUNTIME_MINUTES = 30  # Maximal 30 Minuten Laufzeit
 TTS_STATUS_CHECK_INTERVAL = 2  # Status alle 2 Sekunden prüfen
 MAX_TTS_RETRIES = 3  # Maximal 3 Wiederholungen bei Fehlern
 
-# ElevenLabs Preise (pro 1000 Zeichen)
-ELEVENLABS_PRICE_PER_1K_CHARS = 0.18  # $0.18 pro 1000 Zeichen
-
 # Berechnung der maximalen Seitenanzahl
 # Annahme: 250 Wörter/Seite × 5 Zeichen/Wort = 1250 Zeichen/Seite
 # SSML-Expansion: +25% = 1562.5 Zeichen/Seite
