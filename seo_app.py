@@ -36,6 +36,9 @@ MAX_TTS_RUNTIME_MINUTES = 30  # Maximal 30 Minuten Laufzeit
 TTS_STATUS_CHECK_INTERVAL = 2  # Status alle 2 Sekunden prüfen
 MAX_TTS_RETRIES = 3  # Maximal 3 Wiederholungen bei Fehlern
 
+# Google TTS Preise (pro 1 Million Zeichen)
+GOOGLE_TTS_PRICE_PER_1M_CHARS = 4.0  # $4 pro 1 Million Zeichen
+
 # Berechnung der maximalen Seitenanzahl
 # Annahme: 250 Wörter/Seite × 5 Zeichen/Wort = 1250 Zeichen/Seite
 # SSML-Expansion: +25% = 1562.5 Zeichen/Seite
@@ -93,8 +96,47 @@ def check_tts_safety(start_time, current_cost=0.0, chunks_processed=0, total_chu
         st.error(f"⚠️ Fehler bei TTS-Sicherheitsprüfung: {e}")
         return False
 
+# Google Cloud Credentials Setup
+def get_google_credentials():
+    """Lädt Google Cloud Credentials aus dem Secret Manager."""
+    try:
+        from google.cloud import secretmanager
+        from google.oauth2 import service_account
+        
+        # Hole den Private Key aus dem Secret Manager
+        client = secretmanager.SecretManagerServiceClient()
+        project_id = "avid-infinity-458913-p3"
+        secret_name = "google-tts-service-account"
+        name = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
+        response = client.access_secret_version(request={"name": name})
+        private_key = response.payload.data.decode("UTF-8")
+        
+        # Erstelle Credentials-Objekt mit Private Key
+        credentials = service_account.Credentials.from_service_account_info({
+            "type": "service_account",
+            "project_id": project_id,
+            "private_key": private_key,
+            "client_email": f"seo-helper-tts-service@{project_id}.iam.gserviceaccount.com",
+            "token_uri": "https://oauth2.googleapis.com/token"
+        })
+        
+        logger.info("✅ Google Cloud Credentials aus Secret Manager geladen")
+        return credentials
+    except Exception as e:
+        logger.warning(f"⚠️ Fehler beim Laden der Google Cloud Credentials: {e}")
+        return None
+
+# Lade Credentials
+google_credentials = get_google_credentials()
+
 # Richte den Google Cloud Pub/Sub Publisher ein
-publisher = pubsub_v1.PublisherClient()
+if google_credentials:
+    publisher = pubsub_v1.PublisherClient(credentials=google_credentials)
+    logger.info("✅ Pub/Sub Client mit expliziten Credentials initialisiert")
+else:
+    publisher = pubsub_v1.PublisherClient()  # Fallback zu Default Credentials
+    logger.info("✅ Pub/Sub Client mit Default Credentials initialisiert")
+
 topic_path = publisher.topic_path("avid-infinity-458913-p3", "event-tracking-toolbox")
 
 # Google Cloud Clients für asynchrone Übersetzung initialisieren
@@ -103,10 +145,14 @@ BUCKET_NAME = "manuskripte-upload-avid-infinity"
 FIRESTORE_DB_ID = "hbu-toolbox-firestone"
 PUB_SUB_TOPIC = "start-translation"
 
-storage_client = storage.Client(project=PROJECT_ID)
-firestore_client = firestore.Client(project=PROJECT_ID, database=FIRESTORE_DB_ID)
-pubsub_publisher = pubsub_v1.PublisherClient()
-translation_topic_path = pubsub_publisher.topic_path(PROJECT_ID, PUB_SUB_TOPIC)
+if google_credentials:
+    storage_client = storage.Client(project=PROJECT_ID, credentials=google_credentials)
+    firestore_client = firestore.Client(project=PROJECT_ID, database=FIRESTORE_DB_ID, credentials=google_credentials)
+    logger.info("✅ Storage und Firestore Clients mit expliziten Credentials initialisiert")
+else:
+    storage_client = storage.Client(project=PROJECT_ID)
+    firestore_client = firestore.Client(project=PROJECT_ID, database=FIRESTORE_DB_ID)
+    logger.info("✅ Storage und Firestore Clients mit Default Credentials initialisiert")
 
 # Pub/Sub Event Tracking Funktion
 def send_event_to_pubsub(event_data):
@@ -1896,74 +1942,7 @@ def check_tts_safety(start_time, current_cost=0.0, chunks_processed=0, total_chu
         st.error(f"⚠️ Fehler bei TTS-Sicherheitsprüfung: {e}")
         return False
 
-@st.cache_data(ttl=3600)
-@log_exceptions
-def get_available_voices(api_key: str) -> Dict[str, Dict[str, str]]:
-    """
-    Ruft die verfügbaren Stimmen von der ElevenLabs v2 API ab.
-    Gibt ein Dictionary zurück: 
-    {'Stimmenname': {'voice_id': 'xyz', 'preview_url': 'http://...'}}
-    """
-    try:
-        headers = {
-            "xi-api-key": api_key
-        }
-        
-        # Verwende die neue v2 API mit Filter für Standard-Stimmen
-        params = {
-            "voice_type": "default",
-            "page_size": 100
-        }
-        
-        response = requests.get(
-            "https://api.elevenlabs.io/v2/voices",
-            headers=headers,
-            params=params,
-            timeout=60.0
-        )
-        
-        if response.status_code == 200:
-            data = response.json()
-            voices = data.get("voices", [])
-            
-            return {
-                voice["name"]: {
-                    "voice_id": voice["voice_id"],
-                    "preview_url": voice.get("preview_url", ""),
-                    "description": voice.get("description", "")
-                }
-                for voice in voices
-            }
-        else:
-            logger.error(f"ElevenLabs API Fehler: {response.status_code} - {response.text}")
-            # Fallback zu kostenlosen Stimmen bei API-Fehlern
-            return get_fallback_voices()
-            
-    except Exception as e:
-        logger.error(f"Fehler beim Abrufen der ElevenLabs-Stimmen: {e}", exc_info=True)
-        return get_fallback_voices()
 
-def get_fallback_voices():
-    """Fallback zu kostenlosen Stimmen bei API-Fehlern"""
-    FREE_VOICES = {
-        "Adam": "pNInz6obpgDQGcFmaJgB",
-        "Antoni": "ErXwobaYiN019PkySvjV", 
-        "Arnold": "VR6AewLTigWG4xSOukaG",
-        "Bella": "EXAVITQu4vr4xnSDxMaL",
-        "Domi": "AZnzlk1XvdvUeBnXmlld",
-        "Elli": "MF3mGyEYCl7XYWbV9V6O",
-        "Josh": "TxGEqnHWrfWFTfGW9XjX",
-        "Rachel": "21m00Tcm4TlvDq8ikWAM",
-        "Sam": "yoZ06aMxZJJ28mfd3POQ"
-    }
-    return {
-        name: {
-            "voice_id": voice_id,
-            "preview_url": f"https://storage.googleapis.com/eleven-public-prod/{voice_id}.mp3",
-            "description": f"Kostenlose ElevenLabs-Stimme: {name}"
-        }
-        for name, voice_id in FREE_VOICES.items()
-    }
 
 @log_exceptions
 def get_voice_recommendations(_summary: str, _voices_info: str = None, gemini_api_key: str = None) -> Tuple[str, list]:
@@ -2009,25 +1988,4 @@ def get_voice_recommendations(_summary: str, _voices_info: str = None, gemini_ap
         logger.error(f"Fehler bei der Regie-Erstellung: {e}", exc_info=True)
         return f"Fehler bei der Regie-Erstellung: {e}", []
 
-def generate_audio_google(text, voice_name="en-US-Wavenet-D"):
-    client = texttospeech.TextToSpeechClient()
-    
-    synthesis_input = texttospeech.SynthesisInput(text=text)
-    voice = texttospeech.VoiceSelectionParams(
-        language_code="en-US",
-        name=voice_name
-    )
-    audio_config = texttospeech.AudioConfig(
-        audio_encoding=texttospeech.AudioEncoding.MP3
-    )
-    
-    response = client.synthesize_speech(
-        input=synthesis_input,
-        voice=voice,
-        audio_config=audio_config
-    )
-    
-    return response.audio_content
 
-# Google TTS Preise (pro 1 Million Zeichen)
-GOOGLE_TTS_PRICE_PER_1M_CHARS = 4.0  # $4 pro 1 Million Zeichen
