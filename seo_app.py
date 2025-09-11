@@ -1857,44 +1857,34 @@ def check_tts_safety(start_time, current_cost=0.0, chunks_processed=0, total_chu
 @log_exceptions
 def get_available_voices(api_key: str) -> Dict[str, Dict[str, str]]:
     """
-    Ruft die verfügbaren Stimmen von der ElevenLabs v2 API ab.
+    Ruft die verfügbaren Stimmen von der ElevenLabs API ab.
+    Filtert nur kostenlose Stimmen für Free-Tier-Accounts.
     Gibt ein Dictionary zurück: 
     {'Stimmenname': {'voice_id': 'xyz', 'preview_url': 'http://...'}}
     """
+    # Liste der kostenlosen ElevenLabs-Stimmen
+    FREE_VOICES = {
+        "Adam": "pNInz6obpgDQGcFmaJgB",  # American Male
+        "Antoni": "ErXwobaYiN019PkySvjV",  # American Male
+        "Arnold": "VR6AewLTigWG4xSOukaG",  # American Male
+        "Bella": "EXAVITQu4vr4xnSDxMaL",  # American Female
+        "Domi": "AZnzlk1XvdvUeBnXmlld",  # American Female
+        "Elli": "MF3mGyEYCl7XYWbV9V6O",  # American Female
+        "Josh": "TxGEqnHWrfWFTfGW9XjX",  # American Male
+        "Rachel": "21m00Tcm4TlvDq8ikWAM",  # American Female
+        "Sam": "yoZ06aMxZJJ28mfd3POQ"   # American Male
+    }
+    
     try:
-        headers = {
-            "xi-api-key": api_key
-        }
-        
-        # Verwende die neue v2 API mit Filter für Standard-Stimmen
-        params = {
-            "voice_type": "default",
-            "page_size": 100
-        }
-        
-        response = requests.get(
-            "https://api.elevenlabs.io/v2/voices",
-            headers=headers,
-            params=params,
-            timeout=60.0
-        )
-        
-        if response.status_code == 200:
-            data = response.json()
-            voices = data.get("voices", [])
-            
-            return {
-                voice["name"]: {
-                    "voice_id": voice["voice_id"],
-                    "preview_url": voice.get("preview_url", ""),
-                    "description": voice.get("description", "")
-                }
-                for voice in voices
+        # Für kostenlose Accounts verwenden wir nur die vordefinierten kostenlosen Stimmen
+        return {
+            name: {
+                "voice_id": voice_id,
+                "preview_url": f"https://storage.googleapis.com/eleven-public-prod/{voice_id}.mp3",
+                "description": f"Kostenlose ElevenLabs-Stimme: {name}"
             }
-        else:
-            logger.error(f"ElevenLabs API Fehler: {response.status_code} - {response.text}")
-            return {"Fehler": {"voice_id": "", "preview_url": ""}}
-            
+            for name, voice_id in FREE_VOICES.items()
+        }
     except Exception as e:
         logger.error(f"Fehler beim Abrufen der ElevenLabs-Stimmen: {e}", exc_info=True)
         return {"Fehler": {"voice_id": "", "preview_url": ""}}

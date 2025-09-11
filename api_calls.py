@@ -211,19 +211,31 @@ def generate_accessibility_description_cached(image_bytes_for_api, file_name_for
 def get_available_voices(api_key: str) -> Dict[str, Dict[str, str]]:
     """
     Ruft die verfügbaren Stimmen von der ElevenLabs API ab.
+    Filtert nur kostenlose Stimmen für Free-Tier-Accounts.
     Gibt ein Dictionary zurück: 
     {'Stimmenname': {'voice_id': 'xyz', 'preview_url': 'http://...'}}
     """
+    # Liste der kostenlosen ElevenLabs-Stimmen
+    FREE_VOICES = {
+        "Adam": "pNInz6obpgDQGcFmaJgB",  # American Male
+        "Antoni": "ErXwobaYiN019PkySvjV",  # American Male
+        "Arnold": "VR6AewLTigWG4xSOukaG",  # American Male
+        "Bella": "EXAVITQu4vr4xnSDxMaL",  # American Female
+        "Domi": "AZnzlk1XvdvUeBnXmlld",  # American Female
+        "Elli": "MF3mGyEYCl7XYWbV9V6O",  # American Female
+        "Josh": "TxGEqnHWrfWFTfGW9XjX",  # American Male
+        "Rachel": "21m00Tcm4TlvDq8ikWAM",  # American Female
+        "Sam": "yoZ06aMxZJJ28mfd3POQ"   # American Male
+    }
+    
     try:
-        client = ElevenLabs(api_key=api_key, timeout=60.0)
-        voices = client.voices.get_all()
-        # Erstelle ein verschachteltes Dictionary mit allen relevanten Infos
+        # Für kostenlose Accounts verwenden wir nur die vordefinierten kostenlosen Stimmen
         return {
-            voice.name: {
-                "voice_id": voice.voice_id,
-                "preview_url": voice.preview_url
+            name: {
+                "voice_id": voice_id,
+                "preview_url": f"https://storage.googleapis.com/eleven-public-prod/{voice_id}.mp3"
             }
-            for voice in voices.voices if voice.preview_url
+            for name, voice_id in FREE_VOICES.items()
         }
     except Exception as e:
         logger.error(f"Fehler beim Abrufen der ElevenLabs-Stimmen: {e}", exc_info=True)
