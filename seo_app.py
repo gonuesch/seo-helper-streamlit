@@ -32,7 +32,8 @@ from api_calls import (
     generate_text_summary,
     generate_ssml_chunk,
     get_google_tts_voices,
-    generate_audio_google_tts
+    generate_audio_google_tts,
+    get_voice_recommendations
 )
 
 # --- SICHERHEITSKONFIGURATION FÜR TTS ---
@@ -115,6 +116,9 @@ def get_google_credentials():
         name = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
         response = client.access_secret_version(request={"name": name})
         private_key = response.payload.data.decode("UTF-8")
+        
+        # Bereinige den Private Key (entferne Anführungszeichen falls vorhanden)
+        private_key = private_key.strip().strip('"').strip("'")
         
         # Erstelle Credentials-Objekt mit Private Key
         credentials = service_account.Credentials.from_service_account_info({
