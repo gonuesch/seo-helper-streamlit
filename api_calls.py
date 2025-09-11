@@ -477,7 +477,27 @@ def get_google_tts_voices() -> Dict[str, Dict[str, str]]:
     {'Stimmenname': {'voice_id': 'xyz', 'language': 'en-US', 'gender': 'MALE/FEMALE'}}
     """
     try:
-        client = texttospeech.TextToSpeechClient()
+        # Lade den Service Account Key aus dem Secret Manager
+        from google.cloud import secretmanager
+        from google.oauth2 import service_account
+        import json
+        
+        # Hole den Service Account Key aus dem Secret Manager
+        client = secretmanager.SecretManagerServiceClient()
+        project_id = "avid-infinity-458913-p3"
+        secret_name = "google-tts-service-account"
+        name = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
+        response = client.access_secret_version(request={"name": name})
+        service_account_key = response.payload.data.decode("UTF-8")
+        
+        # Parse den Service Account Key
+        credentials_info = json.loads(service_account_key)
+        
+        # Erstelle Credentials-Objekt
+        credentials = service_account.Credentials.from_service_account_info(credentials_info)
+        
+        # Erstelle TTS Client mit expliziten Credentials
+        client = texttospeech.TextToSpeechClient(credentials=credentials)
         voices = client.list_voices()
         
         voice_dict = {}
@@ -515,24 +535,27 @@ def generate_audio_google_tts(text: str, voice_id: str) -> bytes:
         bytes: Audio-Daten im MP3-Format
     """
     try:
-        # Setze die Umgebungsvariable für die Authentifizierung
-        if 'GOOGLE_APPLICATION_CREDENTIALS' not in os.environ:
-            # Fallback: Lade den Service Account Key aus dem Secret Manager
-            from google.cloud import secretmanager
-            client = secretmanager.SecretManagerServiceClient()
-            project_id = "avid-infinity-458913-p3"
-            secret_name = "google-tts-service-account"
-            name = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
-            response = client.access_secret_version(request={"name": name})
-            service_account_key = response.payload.data.decode("UTF-8")
-            
-            # Temporärer Key für diese Session
-            import tempfile
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-                f.write(service_account_key)
-                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = f.name
+        # Lade den Service Account Key aus dem Secret Manager
+        from google.cloud import secretmanager
+        from google.oauth2 import service_account
+        import json
         
-        client = texttospeech.TextToSpeechClient()
+        # Hole den Service Account Key aus dem Secret Manager
+        client = secretmanager.SecretManagerServiceClient()
+        project_id = "avid-infinity-458913-p3"
+        secret_name = "google-tts-service-account"
+        name = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
+        response = client.access_secret_version(request={"name": name})
+        service_account_key = response.payload.data.decode("UTF-8")
+        
+        # Parse den Service Account Key
+        credentials_info = json.loads(service_account_key)
+        
+        # Erstelle Credentials-Objekt
+        credentials = service_account.Credentials.from_service_account_info(credentials_info)
+        
+        # Erstelle TTS Client mit expliziten Credentials
+        client = texttospeech.TextToSpeechClient(credentials=credentials)
         
         synthesis_input = texttospeech.SynthesisInput(text=text)
         voice = texttospeech.VoiceSelectionParams(
