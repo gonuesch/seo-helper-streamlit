@@ -1308,33 +1308,10 @@ elif selected_tool == "Text-to-Speech":
             with st.expander("📋 KI-Regieleitlinie anzeigen"):
                 st.text(guideline)
             
-            # Zeige die Top 3 Stimmen-Empfehlungen
-            st.subheader("🎤 Empfohlene Stimmen:")
-            
-            for i, voice in enumerate(recommendations, 1):
-                st.write(f"**{i}. {voice}**")
-            
-            # Google TTS Voice Auswahl
-            google_voices = get_google_tts_voices()
-            if google_voices:
-                voice_names = list(google_voices.keys())
-                selected_voice = st.selectbox(
-                    "🎤 Stimme für Audio-Generierung wählen:",
-                    voice_names,
-                    key="voice_selection_2"
-                )
-                # Speichere Google Voices im Session State
-                st.session_state.google_voices = google_voices
-            else:
-                st.error("❌ Keine Google TTS-Stimmen verfügbar")
-                selected_voice = None
-            
-            if selected_voice:
-                st.session_state.selected_voice_name = selected_voice
-                
-                if st.button("📝 SSML vorbereiten", type="primary"):
-                    st.session_state.tts_step = 3
-                    st.rerun()
+            # Button außerhalb des Expanders
+            if st.button("📝 SSML vorbereiten", type="primary"):
+                st.session_state.tts_step = 3
+                st.rerun()
 
     elif st.session_state.tts_step < 3:
         st.subheader("1. Dokument hochladen")
