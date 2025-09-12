@@ -1319,9 +1319,9 @@ elif selected_tool == "Text-to-Speech":
             if google_voices:
                 voice_names = list(google_voices.keys())
                 selected_voice = st.selectbox(
-                    "🎤 Google TTS Stimme wählen:",
+                    "🎤 Stimme für Audio-Generierung wählen:",
                     voice_names,
-                    key="voice_selection_1"
+                    key="voice_selection_2"
                 )
                 # Speichere Google Voices im Session State
                 st.session_state.google_voices = google_voices
@@ -1461,7 +1461,7 @@ elif selected_tool == "Text-to-Speech":
             if google_voices:
                 voice_names = list(google_voices.keys())
                 selected_voice = st.selectbox(
-                    "🎤 Google TTS Stimme wählen:",
+                    "🎤 Stimme für Audio-Generierung wählen:",
                     voice_names,
                     key="voice_selection_2"
                 )
