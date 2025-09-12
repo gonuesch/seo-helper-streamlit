@@ -210,7 +210,7 @@ def generate_accessibility_description_cached(image_bytes_for_api, file_name_for
 
 
 @log_exceptions
-def generate_translation_guide(manuscript_bytes: bytes, job_id: str, firestore_client=None, gemini_api_key: str = None) -> dict:
+def generate_translation_guide(manuscript_bytes: bytes, job_id: str, gemini_api_key: str = None) -> dict:
     try:
         vertexai.init(project="avid-infinity-458913-p3")
         model_for_caching = GenerativeModel("gemini-2.5-pro") # Updated from 1.5-pro-001
@@ -239,8 +239,7 @@ def generate_translation_guide(manuscript_bytes: bytes, job_id: str, firestore_c
         )
         
         # Store cache name in Firestore
-        if firestore_client is None:
-            firestore_client = firestore.Client(project="avid-infinity-458913-p3", database="hbu-toolbox-firestone")
+        firestore_client = firestore.Client(project="avid-infinity-458913-p3", database="hbu-toolbox-firestone")
         firestore_client.collection("translation_jobs").document(job_id).update({
             "cached_content_name": cache.name
         })
@@ -308,8 +307,7 @@ def generate_translation_guide(manuscript_bytes: bytes, job_id: str, firestore_c
         print(f"❌ Validierungsfehler: {e}")
         # Update Firestore with error status
         try:
-            if firestore_client is None:
-                firestore_client = firestore.Client(project="avid-infinity-458913-p3", database="hbu-toolbox-firestone")
+            firestore_client = firestore.Client(project="avid-infinity-458913-p3", database="hbu-toolbox-firestone")
             firestore_client.collection("translation_jobs").document(job_id).update({
                 "status": "analysis_failed",
                 "error_message": str(e),
@@ -323,8 +321,7 @@ def generate_translation_guide(manuscript_bytes: bytes, job_id: str, firestore_c
         print(f"❌ Unerwarteter Fehler: {e}")
         # Update Firestore with error status
         try:
-            if firestore_client is None:
-                firestore_client = firestore.Client(project="avid-infinity-458913-p3", database="hbu-toolbox-firestone")
+            firestore_client = firestore.Client(project="avid-infinity-458913-p3", database="hbu-toolbox-firestone")
             firestore_client.collection("translation_jobs").document(job_id).update({
                 "status": "analysis_failed",
                 "error_message": str(e),
