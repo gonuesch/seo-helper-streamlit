@@ -136,7 +136,7 @@ if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
     logger.info("🗑️ GOOGLE_APPLICATION_CREDENTIALS Umgebungsvariable entfernt")
 
 # Lade Credentials
-tts_credentials = get_tts_credentials()
+# TTS credentials will be loaded when needed in TTS functions
 
 # Richte den Google Cloud Pub/Sub Publisher ein
 # Verwende immer Cloud Run Default Service Account für Pub/Sub
