@@ -164,6 +164,12 @@ else:
     firestore_client = firestore.Client(project=PROJECT_ID, database=FIRESTORE_DB_ID)
     logger.info("✅ Storage und Firestore Clients mit Default Credentials initialisiert")
 
+# Pub/Sub Publisher für Translation Jobs
+pubsub_publisher = publisher  # Verwende den bereits initialisierten Publisher
+translation_topic_path = publisher.topic_path(PROJECT_ID, PUB_SUB_TOPIC)
+logger.info("✅ Translation Pub/Sub Publisher und Topic Path initialisiert")
+
+
 # Pub/Sub Event Tracking Funktion
 def send_event_to_pubsub(event_data):
     """Sendet ein Event an Google Cloud Pub/Sub."""
