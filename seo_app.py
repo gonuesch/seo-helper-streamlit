@@ -1308,8 +1308,8 @@ elif selected_tool == "Text-to-Speech":
             with st.expander("📋 KI-Regieleitlinie anzeigen"):
                 st.text(guideline)
             
-            # Button außerhalb des Expanders
-            if st.button("📝 SSML vorbereiten", type="primary"):
+            # Erster Button (Zeile 1312) - Key hinzufügen
+            if st.button("🎤 SSML vorbereiten", type="primary", key="ssml_button_1"):
                 st.session_state.tts_step = 3
                 st.rerun()
 
@@ -1451,7 +1451,8 @@ elif selected_tool == "Text-to-Speech":
             if selected_voice:
                 st.session_state.selected_voice_name = selected_voice
                 
-                if st.button("📝 SSML vorbereiten", type="primary"):
+                # Zweiter Button (Zeile 1454) - Key hinzufügen  
+                if st.button("🎤 SSML vorbereiten", type="primary", key="ssml_button_2"):
                     st.session_state.tts_step = 3
                     st.rerun()
 
