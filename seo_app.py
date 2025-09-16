@@ -1367,22 +1367,15 @@ elif selected_tool == "Text-to-Speech":
             
             with st.status("Führe KI-Analyse aus...", expanded=True) as status:
                 try:
-                    status.write("Schritt 1/3: Erstelle Zusammenfassung des Textes...")
-                    logging.info(" Starting step 1/3: Text summary generation")
+                    status.write("Schritt 1/2: Erstelle Zusammenfassung des Textes...")
+                    logging.info(" Starting step 1/2: Text summary generation")
                     summary = generate_text_summary(text_content, gemini_api_key)
                     st.session_state.summary = summary
                     status.write("✅ Zusammenfassung erstellt")
-                    logging.info("✅ Step 1/3 completed: Summary created")
+                    logging.info("✅ Step 1/2 completed: Summary created")
                     
-                    status.write("Schritt 2/3: Generiere KI-Regieanweisung...")
-                    logging.info(" Starting step 2/3: SSML guideline generation")
-                    guideline = generate_ssml_chunk(summary, gemini_api_key)
-                    st.session_state.guideline = guideline
-                    status.write("✅ KI-Regieanweisung generiert")
-                    logging.info("✅ Step 2/3 completed: SSML guideline created")
-                    
-                    status.write("Schritt 3/3: Empfehle passende Stimmen...")
-                    logging.info(" Starting step 3/3: Voice recommendations")
+                    status.write("Schritt 2/2: Empfehle passende Stimmen & generiere Regieanweisung...")
+                    logging.info(" Starting step 2/2: Voice recommendations")
                     
                     # Hole verfügbare Stimmen von Google TTS
                     logging.info(" Fetching available voices from Google TTS API")
@@ -1398,8 +1391,13 @@ elif selected_tool == "Text-to-Speech":
                     logging.info("🤖 Calling get_voice_recommendations with 3 parameters")
                     top_3_voices = get_voice_recommendations(summary, voices_info, gemini_api_key)
                     st.session_state.top_3_voices = top_3_voices
+                    
+                    # Extrahiere und speichere die Regieanweisung explizit
+                    if top_3_voices and isinstance(top_3_voices, tuple) and len(top_3_voices) > 0:
+                        st.session_state.guideline = top_3_voices[0]
+
                     status.write("✅ Stimmen-Empfehlungen erstellt")
-                    logging.info("✅ Step 3/3 completed: Voice recommendations created")
+                    logging.info("✅ Step 2/2 completed: Voice recommendations created")
                     
                 except Exception as e:
                     logging.error(f"❌ Error in TTS analysis process: {e}", exc_info=True)
@@ -1454,27 +1452,39 @@ elif selected_tool == "Text-to-Speech":
 
     elif st.session_state.tts_step == 3:
         logging.info("📝 TTS Step 3: SSML preparation step reached")
-        st.subheader("3. SSML vorbereiten")
+        st.subheader("3. SSML vorbereiten und Audio generieren")
         
-        if st.session_state.get("selected_voice_name") and st.session_state.get("guideline"):
+        if st.session_state.get("selected_voice_name") and st.session_state.get("guideline") and st.session_state.get("text_content"):
             selected_voice = st.session_state.selected_voice_name
             ssml_guideline = st.session_state.get("guideline")
-            
+            text_content = st.session_state.get("text_content")
+
             logging.info(f"🎤 Selected voice: {selected_voice}")
             logging.info(f"📝 SSML guideline length: {len(ssml_guideline)} characters")
             
             st.info(f"🎤 Vorbereitung für Stimme: **{selected_voice}**")
             
-            # Teile SSML in Chunks auf
-            logging.info("📝 Splitting SSML into chunks")
-            ssml_chunks = chunk_ssml_for_google_tts(ssml_guideline)
-            logging.info(f"📝 Created {len(ssml_chunks)} SSML chunks")
-            
-            st.success(f"✅ SSML in {len(ssml_chunks)} Chunks aufgeteilt")
-            
-            # Speichere Chunks im Session State
-            st.session_state.ssml_chunks = ssml_chunks
-            
+            # Generiere SSML aus dem Originaltext
+            with st.spinner("Generiere SSML aus Text..."):
+                logging.info("📝 Splitting text into chunks")
+                # paragraphs in diesem Fall als Chunks verwendet
+                text_chunks = chunk_text_by_paragraphs(text_content, 4500) 
+                logging.info(f"📝 Created {len(text_chunks)} text chunks")
+
+                ssml_chunks = []
+                progress_bar = st.progress(0, text=f"Erstelle SSML Chunk 1/{len(text_chunks)}")
+                for i, chunk in enumerate(text_chunks):
+                    logging.info(f"📝 Generating SSML for chunk {i+1}/{len(text_chunks)}")
+                    # Hier wird für jeden Text-Chunk SSML generiert
+                    ssml_chunk = generate_ssml_chunk(ssml_guideline, chunk, gemini_api_key)
+                    if ssml_chunk:
+                        ssml_chunks.append(ssml_chunk)
+                    progress_bar.progress((i + 1) / len(text_chunks), text=f"Erstelle SSML Chunk {i+1}/{len(text_chunks)}")
+                
+                logging.info(f"📝 Created {len(ssml_chunks)} SSML chunks")
+                st.session_state.ssml_chunks = ssml_chunks
+                st.success(f"✅ SSML in {len(ssml_chunks)} Chunks aufgeteilt und generiert.")
+
             if st.button("🚀 Audio jetzt generieren", type="primary"):
                 logging.info("🚀 Audio generation button clicked")
                 
