@@ -25,7 +25,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Importiere Funktionen aus deinen Modulen
-from utils import convert_tiff_to_png_bytes, read_text_from_docx, read_text_from_pdf, chunk_text, chunk_text_by_paragraphs, log_exceptions
+from utils import convert_tiff_to_png_bytes, read_text_from_docx, read_text_from_pdf, chunk_text, chunk_text_by_paragraphs, chunk_ssml_for_google_tts, log_exceptions
 from api_calls import (
     generate_seo_tags_cached, 
     generate_accessibility_description_cached,
@@ -811,12 +811,6 @@ if 'click_counter' not in st.session_state:
 
 # API-Schlüssel direkt aus st.secrets laden
 gemini_api_key = st.secrets.get("gemini_api_key")
-
-
-# Prüfe, ob die API-Schlüssel vorhanden sind.
-missing_keys = []
-if not gemini_api_key:
-    missing_keys.append("gemini-api-key")
 
 
 if missing_keys:
