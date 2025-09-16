@@ -524,13 +524,14 @@ def get_google_tts_voices() -> Dict[str, Dict[str, str]]:
         }
 
 @log_exceptions
-def generate_audio_google_tts(text: str, voice_id: str) -> bytes:
+def generate_audio_google_tts(text: str, voice_id: str, language_code: str) -> bytes:
     """
     Generiert Audio mit Google Cloud Text-to-Speech API.
     
     Args:
         text: Der zu synthetisierende Text
         voice_id: Die Voice-ID (z.B. 'en-US-Wavenet-D')
+        language_code: Der BCP-47 Sprachcode (z.B. 'en-US')
     
     Returns:
         bytes: Audio-Daten im MP3-Format
@@ -560,7 +561,7 @@ def generate_audio_google_tts(text: str, voice_id: str) -> bytes:
         
         synthesis_input = texttospeech.SynthesisInput(text=text)
         voice = texttospeech.VoiceSelectionParams(
-            language_code=voice_id.split('-')[0] + '-' + voice_id.split('-')[1],  # z.B. 'en-US'
+            language_code=language_code,
             name=voice_id
         )
         audio_config = texttospeech.AudioConfig(

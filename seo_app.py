@@ -1481,14 +1481,16 @@ elif selected_tool == "Text-to-Speech":
                 try:
                     # Hole Stimme-ID für Google TTS
                     voice_id = None
+                    language_code = None
                     if st.session_state.get("google_voices"):
                         voice_data = st.session_state.google_voices.get(selected_voice)
                         if voice_data:
                             voice_id = voice_data.get("voice_id")
+                            language_code = voice_data.get("language")
                     
-                    if not voice_id:
-                        st.error("❌ Stimme-ID nicht gefunden!")
-                        logging.error(f"❌ Voice ID not found for voice: {selected_voice}")
+                    if not voice_id or not language_code:
+                        st.error("❌ Stimme-ID oder Sprachcode nicht gefunden!")
+                        logging.error(f"❌ Voice ID or language code not found for voice: {selected_voice}")
                     else:
                         logging.info(f"🎤 Using Google TTS voice ID: {voice_id}")
                         
@@ -1497,7 +1499,7 @@ elif selected_tool == "Text-to-Speech":
                         with st.spinner("🎵 Generiere Audio mit Google TTS..."):
                             for i, chunk in enumerate(ssml_chunks):
                                 logging.info(f"🎵 Generating audio for chunk {i+1}/{len(ssml_chunks)}")
-                                audio_chunk = generate_audio_google_tts(chunk, voice_id)
+                                audio_chunk = generate_audio_google_tts(chunk, voice_id, language_code)
                                 if audio_chunk:
                                     all_audio_chunks.append(audio_chunk)
                                     logging.info(f"✅ Chunk {i+1} audio generated successfully")
