@@ -505,8 +505,8 @@ def get_google_tts_voices() -> Dict[str, Dict[str, str]]:
         for voice in voices.voices:
             # Filtere nur englische Stimmen für bessere Qualität
             if voice.language_codes[0].startswith('en-'):
-                # Schließe Studio-Stimmen aus, da sie andere API-Limits haben
-                if "-Studio-" in voice.name:
+                # Schließe Studio- und Chirp-Stimmen aus, da sie andere API-Limits/Anforderungen haben
+                if "-Studio-" in voice.name or "-Chirp-" in voice.name:
                     continue
                 voice_name = f"{voice.name} ({voice.language_codes[0]})"
                 voice_dict[voice_name] = {
@@ -563,9 +563,14 @@ def generate_audio_google_tts(ssml: str, voice_id: str, language_code: str) -> b
         client = texttospeech.TextToSpeechClient(credentials=credentials)
         
         synthesis_input = texttospeech.SynthesisInput(ssml=ssml)
+        
+        # Prüfe, ob es sich um eine Chirp-Stimme handelt und füge ggf. das Modell hinzu
+        model = "chirp" if "chirp" in voice_id.lower() else None
+        
         voice = texttospeech.VoiceSelectionParams(
             language_code=language_code,
-            name=voice_id
+            name=voice_id,
+            model=model
         )
         audio_config = texttospeech.AudioConfig(
             audio_encoding=texttospeech.AudioEncoding.MP3
