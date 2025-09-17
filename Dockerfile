@@ -5,7 +5,6 @@ WORKDIR /app
 # Erst die Anforderungen kopieren, um das Caching von Docker-Layern zu optimieren
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-RUN pip show google-cloud-texttospeech
 
 # Dann den Rest des App-Codes kopieren
 COPY . .

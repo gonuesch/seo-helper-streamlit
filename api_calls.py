@@ -12,7 +12,6 @@ import requests
 import json
 import vertexai
 from vertexai.generative_models import GenerativeModel, Part
-from google.cloud import texttospeech
 from google.cloud import firestore
 import os
 
@@ -473,63 +472,52 @@ def create_formatted_docx(translated_text: str, output_filename: str) -> bytes:
 @log_exceptions
 def get_google_tts_voices() -> Dict[str, Dict[str, str]]:
     """
-    Ruft die verfügbaren Google TTS Stimmen ab.
-    Gibt ein Dictionary zurück: 
+    Ruft die verfügbaren Google TTS Stimmen über Vertex AI ab.
+    Gibt ein Dictionary zurück:
     {'Stimmenname': {'voice_id': 'xyz', 'language': 'en-US', 'gender': 'MALE/FEMALE'}}
     """
     try:
-        # Lade die komplette Service Account JSON aus dem Secret Manager
-        from google.cloud import secretmanager
-        from google.oauth2 import service_account
-        import json
+        vertexai.init(project="avid-infinity-458913-p3")
+        model = GenerativeModel("text-to-speech")
         
-        # Hole die komplette Service Account JSON aus dem Secret Manager
-        client = secretmanager.SecretManagerServiceClient()
-        project_id = "avid-infinity-458913-p3"
-        secret_name = "google-tts-service-account"
-        name = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
-        response = client.access_secret_version(request={"name": name})
-        service_account_json = response.payload.data.decode("UTF-8")
+        # NOTE: Vertex AI does not have a simple 'list_voices' API like the classic TTS API.
+        # The models are the "voices". We will use a predefined list of high-quality voices
+        # known to be available through the Vertex AI text-to-speech model.
         
-        # Parse die JSON-Datei
-        service_account_info = json.loads(service_account_json)
-        
-        # Erstelle Credentials-Objekt direkt aus der JSON
-        credentials = service_account.Credentials.from_service_account_info(service_account_info)
-        
-        # Erstelle TTS Client mit expliziten Credentials
-        client = texttospeech.TextToSpeechClient(credentials=credentials)
-        voices = client.list_voices()
-        
+        # Predefined list of high-quality, known voices for Vertex AI TTS
+        known_voices = {
+            "en-US-Studio-O": {"gender": "FEMALE"},
+            "en-US-Studio-M": {"gender": "MALE"},
+            "en-US-Wavenet-D": {"gender": "MALE"},
+            "en-US-Wavenet-F": {"gender": "FEMALE"},
+            "en-GB-Wavenet-A": {"gender": "FEMALE"},
+            "en-GB-Wavenet-B": {"gender": "MALE"},
+            "en-AU-Wavenet-C": {"gender": "FEMALE"},
+            "en-AU-Wavenet-D": {"gender": "MALE"},
+        }
+
         voice_dict = {}
-        for voice in voices.voices:
-            # Filtere nur englische Stimmen für bessere Qualität
-            if voice.language_codes[0].startswith('en-'):
-                # Schließe Studio-Stimmen aus, da sie andere API-Limits haben
-                if "-Studio-" in voice.name:
-                    continue
-                voice_name = f"{voice.name} ({voice.language_codes[0]})"
-                voice_dict[voice_name] = {
-                    "voice_id": voice.name,
-                    "language": voice.language_codes[0],
-                    "gender": voice.ssml_gender.name
-                }
-        
+        for voice_id, details in known_voices.items():
+            language_code = "-".join(voice_id.split("-")[:2])
+            voice_name = f"{voice_id} ({language_code})"
+            voice_dict[voice_name] = {
+                "voice_id": voice_id,
+                "language": language_code,
+                "gender": details["gender"]
+            }
         return voice_dict
+        
     except Exception as e:
-        logger.error(f"Fehler beim Abrufen der Google TTS Stimmen: {e}")
-        # Fallback zu beliebten Stimmen
+        logger.error(f"Fehler beim Abrufen der Vertex AI TTS Stimmen: {e}")
         return {
             "en-US-Wavenet-D (en-US)": {"voice_id": "en-US-Wavenet-D", "language": "en-US", "gender": "MALE"},
-            "en-US-Wavenet-F (en-US)": {"voice_id": "en-US-Wavenet-F", "language": "en-US", "gender": "FEMALE"},
-            "en-US-Standard-D (en-US)": {"voice_id": "en-US-Standard-D", "language": "en-US", "gender": "MALE"},
-            "en-US-Standard-F (en-US)": {"voice_id": "en-US-Standard-F", "language": "en-US", "gender": "FEMALE"}
+            "en-US-Wavenet-F (en-US)": {"voice_id": "en-US-Wavenet-F", "language": "en-US", "gender": "FEMALE"}
         }
 
 @log_exceptions
 def generate_audio_google_tts(ssml: str, voice_id: str, language_code: str) -> bytes:
     """
-    Generiert Audio mit Google Cloud Text-to-Speech API.
+    Generiert Audio mit der Vertex AI Text-to-Speech API.
     
     Args:
         ssml: Der zu synthetisierende SSML-formatierte Text
@@ -540,50 +528,28 @@ def generate_audio_google_tts(ssml: str, voice_id: str, language_code: str) -> b
         bytes: Audio-Daten im MP3-Format
     """
     try:
-        # Lade die komplette Service Account JSON aus dem Secret Manager
-        from google.cloud import secretmanager
-        from google.oauth2 import service_account
-        import json
+        vertexai.init(project="avid-infinity-458913-p3")
         
-        # Hole die komplette Service Account JSON aus dem Secret Manager
-        client = secretmanager.SecretManagerServiceClient()
-        project_id = "avid-infinity-458913-p3"
-        secret_name = "google-tts-service-account"
-        name = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
-        response = client.access_secret_version(request={"name": name})
-        service_account_json = response.payload.data.decode("UTF-8")
-        
-        # Parse die JSON-Datei
-        service_account_info = json.loads(service_account_json)
-        
-        # Erstelle Credentials-Objekt direkt aus der JSON
-        credentials = service_account.Credentials.from_service_account_info(service_account_info)
-        
-        # Erstelle TTS Client mit expliziten Credentials
-        client = texttospeech.TextToSpeechClient(credentials=credentials)
-        
-        synthesis_input = texttospeech.SynthesisInput(ssml=ssml)
-        
-        # Prüfe, ob es sich um eine Chirp-Stimme handelt und füge ggf. das Modell hinzu
-        model = "chirp" if "chirp" in voice_id.lower() else None
+        # The new model name for Vertex AI TTS
+        model = GenerativeModel("text-to-speech")
 
-        voice = texttospeech.VoiceSelectionParams(
-            language_code=language_code,
-            name=voice_id,
-            model=model
-        )
-        audio_config = texttospeech.AudioConfig(
-            audio_encoding=texttospeech.AudioEncoding.MP3
-        )
-        
-        response = client.synthesize_speech(
-            input=synthesis_input,
-            voice=voice,
-            audio_config=audio_config
+        response = model.generate_content(
+            f"""<speak>{ssml}</speak>""",
+            generation_config={
+                "speaking_rate": 1.0,
+                "pitch": 0.0,
+                "voice_name": voice_id,
+            },
         )
         
-        return response.audio_content
-        
+        # The audio content is in the first part of the response
+        if response.candidates and response.candidates[0].content.parts:
+            audio_bytes = response.candidates[0].content.parts[0].data
+            return audio_bytes
+        else:
+            logger.error("Keine Audio-Daten in der Vertex AI Antwort gefunden.")
+            return None
+
     except Exception as e:
-        logger.error(f"Fehler bei der Google TTS Audio-Generierung: {e}")
+        logger.error(f"Fehler bei der Vertex AI TTS Audio-Generierung: {e}")
         return None
