@@ -12,7 +12,7 @@ import requests
 import json
 import vertexai
 from vertexai.generative_models import GenerativeModel, Part
-from google.cloud import texttospeech
+from google.cloud import texttospeech_v1beta1 as texttospeech
 from google.cloud import firestore
 import os
 
@@ -566,7 +566,7 @@ def generate_audio_google_tts(ssml: str, voice_id: str, language_code: str) -> b
         
         # Prüfe, ob es sich um eine Chirp-Stimme handelt und füge ggf. das Modell hinzu
         model = "chirp" if "chirp" in voice_id.lower() else None
-        
+
         voice = texttospeech.VoiceSelectionParams(
             language_code=language_code,
             name=voice_id,
