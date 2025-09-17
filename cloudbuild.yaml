@@ -13,7 +13,7 @@ steps:
 
 # Step #1: Docker-Container bauen
 - name: 'gcr.io/cloud-builders/docker'
-  args: ['build', '-t', 'europe-west1-docker.pkg.dev/$PROJECT_ID/seo-helper-repo/seo-helper-image:$COMMIT_SHA', '.']
+  args: ['build', '--no-cache', '-t', 'europe-west1-docker.pkg.dev/$PROJECT_ID/seo-helper-repo/seo-helper-image:$COMMIT_SHA', '.']
 
 # Step #2: Container in die Artifact Registry pushen
 - name: 'gcr.io/cloud-builders/docker'
