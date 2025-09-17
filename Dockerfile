@@ -1,8 +1,13 @@
 # Dockerfile (Finale, korrigierte Version)
 FROM python:3.11-slim
 WORKDIR /app
-COPY . /app
+
+# Erst die Anforderungen kopieren, um das Caching von Docker-Layern zu optimieren
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Dann den Rest des App-Codes kopieren
+COPY . .
 
 # Wir verwenden wieder die Shell-Form und übergeben den Port explizit,
 # da dies in der Cloud Run-Umgebung erforderlich ist.
