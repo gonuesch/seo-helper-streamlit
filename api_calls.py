@@ -14,6 +14,10 @@ import vertexai
 from vertexai.generative_models import GenerativeModel, Part
 from google.cloud import firestore
 import os
+import base64
+from google.cloud import aiplatform
+from google.protobuf import json_format
+from google.protobuf.struct_pb2 import Value
 
 # Importiere die Prompt-Vorlagen aus der prompts.py Datei
 from prompts import ACCESSIBILITY_PROMPT_TEMPLATE, SEO_PROMPT, SUMMARY_PROMPT, GUIDELINE_PROMPT_WITH_MATCHING, SSML_PROMPT, TRANSLATION_GUIDE_PROMPT, TRANSLATE_CHUNK_PROMPT
@@ -517,7 +521,7 @@ def get_google_tts_voices() -> Dict[str, Dict[str, str]]:
 @log_exceptions
 def generate_audio_google_tts(ssml: str, voice_id: str, language_code: str) -> bytes:
     """
-    Generiert Audio mit der Vertex AI Text-to-Speech API.
+    Generiert Audio mit der Vertex AI Text-to-Speech API über den Prediction Service Endpoint.
     
     Args:
         ssml: Der zu synthetisierende SSML-formatierte Text
@@ -528,27 +532,37 @@ def generate_audio_google_tts(ssml: str, voice_id: str, language_code: str) -> b
         bytes: Audio-Daten im MP3-Format
     """
     try:
-        vertexai.init(project="avid-infinity-458913-p3")
+        project_id = "avid-infinity-458913-p3"
+        location = "europe-west1"
+        api_endpoint = f"{location}-aiplatform.googleapis.com"
         
-        # The new model name for Vertex AI TTS
-        model = GenerativeModel("text-to-speech")
+        # 1. Client initialisieren
+        client_options = {"api_endpoint": api_endpoint}
+        client = aiplatform.gapic.PredictionServiceClient(client_options=client_options)
 
-        response = model.generate_content(
-            f"""<speak>{ssml}</speak>""",
-            generation_config={
-                "speaking_rate": 1.0,
-                "pitch": 0.0,
-                "voice_name": voice_id,
-            },
+        # 2. SSML-Payload (Instanz) erstellen
+        instance_dict = {
+            "input": {"ssml": f"<speak>{ssml}</speak>"},
+            "voice": {"languageCode": language_code, "name": voice_id},
+            "audioConfig": {"audioEncoding": "MP3"},
+        }
+        instance = json_format.ParseDict(instance_dict, Value())
+        instances = [instance]
+
+        # 3. Den Endpunkt des Modells definieren
+        endpoint = (
+            f"projects/{project_id}/locations/{location}"
+            "/publishers/google/models/texttospeech"
         )
+
+        # 4. Die Anfrage an den Endpunkt senden
+        response = client.predict(endpoint=endpoint, instances=instances)
         
-        # The audio content is in the first part of the response
-        if response.candidates and response.candidates[0].content.parts:
-            audio_bytes = response.candidates[0].content.parts[0].data
-            return audio_bytes
-        else:
-            logger.error("Keine Audio-Daten in der Vertex AI Antwort gefunden.")
-            return None
+        # 5. Die Antwort verarbeiten
+        audio_content_base64 = response.predictions[0]["audioContent"]
+        audio_content_bytes = base64.b64decode(audio_content_base64)
+        
+        return audio_content_bytes
 
     except Exception as e:
         logger.error(f"Fehler bei der Vertex AI TTS Audio-Generierung: {e}")
