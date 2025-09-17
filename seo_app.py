@@ -17,7 +17,6 @@ import random
 from typing import Tuple, Dict
 import re
 import requests
-from google.cloud import texttospeech
 import os
 
 # Richte ein einfaches Logging ein
