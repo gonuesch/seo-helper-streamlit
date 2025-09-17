@@ -12,7 +12,7 @@ import requests
 import json
 import vertexai
 from vertexai.generative_models import GenerativeModel, Part
-from google.cloud import texttospeech_v1beta1 as texttospeech
+from google.cloud.texttospeech import v1beta1
 from google.cloud import firestore
 import os
 
@@ -498,7 +498,7 @@ def get_google_tts_voices() -> Dict[str, Dict[str, str]]:
         credentials = service_account.Credentials.from_service_account_info(service_account_info)
         
         # Erstelle TTS Client mit expliziten Credentials
-        client = texttospeech.TextToSpeechClient(credentials=credentials)
+        client = v1beta1.TextToSpeechClient(credentials=credentials)
         voices = client.list_voices()
         
         voice_dict = {}
@@ -560,20 +560,20 @@ def generate_audio_google_tts(ssml: str, voice_id: str, language_code: str) -> b
         credentials = service_account.Credentials.from_service_account_info(service_account_info)
         
         # Erstelle TTS Client mit expliziten Credentials
-        client = texttospeech.TextToSpeechClient(credentials=credentials)
+        client = v1beta1.TextToSpeechClient(credentials=credentials)
         
-        synthesis_input = texttospeech.SynthesisInput(ssml=ssml)
+        synthesis_input = v1beta1.SynthesisInput(ssml=ssml)
         
         # Prüfe, ob es sich um eine Chirp-Stimme handelt und füge ggf. das Modell hinzu
         model = "chirp" if "chirp" in voice_id.lower() else None
 
-        voice = texttospeech.VoiceSelectionParams(
+        voice = v1beta1.VoiceSelectionParams(
             language_code=language_code,
             name=voice_id,
             model=model
         )
-        audio_config = texttospeech.AudioConfig(
-            audio_encoding=texttospeech.AudioEncoding.MP3
+        audio_config = v1beta1.AudioConfig(
+            audio_encoding=v1beta1.AudioEncoding.MP3
         )
         
         response = client.synthesize_speech(
