@@ -1507,14 +1507,26 @@ elif selected_tool == "Text-to-Speech":
                         # Generiere Audio für alle Chunks
                         all_audio_chunks = []
                         with st.spinner("🎵 Generiere Audio mit Google TTS..."):
-                            for i, chunk in enumerate(ssml_chunks):
-                                logging.info(f"🎵 Generating audio for chunk {i+1}/{len(ssml_chunks)}")
-                                audio_chunk = generate_audio_google_tts(chunk, voice_id, language_code)
-                                if audio_chunk:
-                                    all_audio_chunks.append(audio_chunk)
-                                    logging.info(f"✅ Chunk {i+1} audio generated successfully")
-                                else:
-                                    logging.error(f"❌ Failed to generate audio for chunk {i+1}")
+                            final_ssml_chunks_to_process = []
+                            logging.info("Splitting SSML into smaller chunks for Google TTS API.")
+                            for ssml_chunk in ssml_chunks:
+                                # Use the utility function to split large SSML chunks
+                                final_ssml_chunks_to_process.extend(chunk_ssml_for_google_tts(ssml_chunk))
+                            
+                            total_final_chunks = len(final_ssml_chunks_to_process)
+                            logging.info(f"Total small SSML chunks to process: {total_final_chunks}")
+                            
+                            if total_final_chunks > 0:
+                                progress_bar_audio = st.progress(0, text=f"Generiere Audio Chunk 1/{total_final_chunks}")
+                                for i, final_chunk in enumerate(final_ssml_chunks_to_process):
+                                    logging.info(f"🎵 Generating audio for final chunk {i+1}/{total_final_chunks}")
+                                    audio_chunk = generate_audio_google_tts(final_chunk, voice_id, language_code)
+                                    if audio_chunk:
+                                        all_audio_chunks.append(audio_chunk)
+                                        logging.info(f"✅ Final chunk {i+1} audio generated successfully")
+                                    else:
+                                        logging.error(f"❌ Failed to generate audio for final chunk {i+1}")
+                                    progress_bar_audio.progress((i + 1) / total_final_chunks, text=f"Generiere Audio Chunk {i+1}/{total_final_chunks}")
                         
                         if not all_audio_chunks:
                             st.error("❌ Audio-Generierung fehlgeschlagen!")
