@@ -533,7 +533,8 @@ def generate_audio_google_tts(ssml: str, voice_id: str, language_code: str) -> b
     """
     try:
         project_id = "avid-infinity-458913-p3"
-        location = "europe-west1"
+        # Hardcode the location to us-central1 where the model is available
+        location = "us-central1"
         api_endpoint = f"{location}-aiplatform.googleapis.com"
         
         # 1. Client initialisieren
