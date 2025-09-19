@@ -34,3 +34,4 @@ translation_analyzer.py
 translation_analyzer_requirements.txt# Temporäre JSON-Bereinigungsdateien
 fix_json_cleaning.py
 improved_json_cleaning.py
+TTS_PROCESS.md
