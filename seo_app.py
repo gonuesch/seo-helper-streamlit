@@ -1,5 +1,14 @@
 # seo_app.py - Finale, bereinigte Version für IAP-Authentifizierung
 
+import asyncio
+
+# Behebt den "RuntimeError: no running event loop" in bestimmten Umgebungen
+try:
+    loop = asyncio.get_running_loop()
+except RuntimeError:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
 import streamlit as st
 from pathlib import Path
 import pandas as pd
