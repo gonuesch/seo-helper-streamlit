@@ -512,7 +512,7 @@ def generate_long_audio_gcs(ssml_content: str, voice_name: str, language_code: s
     and returns the audio data as bytes.
     """
     try:
-        from google.cloud import texttospeech_v1 as texttospeech
+        from google.cloud import texttospeech
         from google.cloud import storage
         
         client_options = {"api_endpoint": "europe-west4-texttospeech.googleapis.com"}
@@ -531,14 +531,15 @@ def generate_long_audio_gcs(ssml_content: str, voice_name: str, language_code: s
         )
         
         output_blob_name = f"output-{uuid.uuid4()}.mp3"
-        gcs_destination = texttospeech.GcsDestination(uri=f"gs://{gcs_output_bucket}/{output_blob_name}")
+        output_gcs_uri = f"gs://{gcs_output_bucket}/{output_blob_name}"
 
         request = texttospeech.SynthesizeLongAudioRequest(
             parent=f"projects/{project_id}/locations/europe-west4",
             input=synthesis_input,
             voice=voice,
             audio_config=audio_config,
-            output_gcs_destination=gcs_destination
+            # The output is a simple string URI, not a GcsDestination object.
+            output_gcs_uri=output_gcs_uri
         )
 
         operation = client.synthesize_long_audio(request=request)
