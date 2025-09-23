@@ -10,6 +10,7 @@ import logging
 import re
 import requests
 import json
+import uuid
 import vertexai
 from vertexai.generative_models import GenerativeModel, Part
 from google.cloud import firestore
@@ -511,9 +512,22 @@ def generate_long_audio_gcs(input_gcs_uri: str, voice_name: str, language_code: 
     """
     try:
         from google.cloud import texttospeech
+        from google.cloud import storage
+        
+        # 1. Download the SSML content from the input GCS URI
+        storage_client = storage.Client()
+        match = re.match(r"gs://([^/]+)/(.+)", input_gcs_uri)
+        if not match:
+            raise ValueError(f"Invalid GCS URI: {input_gcs_uri}")
+        bucket_name, blob_name = match.groups()
+        bucket = storage_client.bucket(bucket_name)
+        blob = bucket.blob(blob_name)
+        ssml_content = blob.download_as_text()
+
         client = texttospeech.TextToSpeechClient()
 
-        synthesis_input = texttospeech.SynthesisInput(gcs_uri=input_gcs_uri)
+        # 2. Provide the SSML content directly to the SynthesisInput
+        synthesis_input = texttospeech.SynthesisInput(ssml=ssml_content)
 
         voice = texttospeech.VoiceSelectionParams(
             language_code=language_code,
@@ -542,9 +556,7 @@ def generate_long_audio_gcs(input_gcs_uri: str, voice_name: str, language_code: 
 
         output_blob_name = output_gcs_uri.replace(f"gs://{gcs_output_bucket}/", "")
         
-        # utils.py is not available here, so we need to implement the download here
-        from google.cloud import storage
-        storage_client = storage.Client()
+        # Download the result from GCS
         bucket = storage_client.bucket(gcs_output_bucket)
         blob = bucket.blob(output_blob_name)
         audio_bytes = blob.download_as_bytes()
