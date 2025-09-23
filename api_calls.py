@@ -511,23 +511,14 @@ def generate_long_audio_gcs(input_gcs_uri: str, voice_name: str, language_code: 
     Synthesizes long audio from an SSML file in GCS and returns the audio data as bytes.
     """
     try:
-        from google.cloud import texttospeech
+        # Use the dedicated client for long audio synthesis
+        from google.cloud import texttospeech_v1 as texttospeech
         from google.cloud import storage
         
-        # 1. Download the SSML content from the input GCS URI
-        storage_client = storage.Client()
-        match = re.match(r"gs://([^/]+)/(.+)", input_gcs_uri)
-        if not match:
-            raise ValueError(f"Invalid GCS URI: {input_gcs_uri}")
-        bucket_name, blob_name = match.groups()
-        bucket = storage_client.bucket(bucket_name)
-        blob = bucket.blob(blob_name)
-        ssml_content = blob.download_as_text()
+        client = texttospeech.TextToSpeechLongAudioSynthesizeClient()
 
-        client = texttospeech.TextToSpeechClient()
-
-        # 2. Provide the SSML content directly to the SynthesisInput
-        synthesis_input = texttospeech.SynthesisInput(ssml=ssml_content)
+        # The long audio API takes the GCS URI directly as input
+        synthesis_input = texttospeech.SynthesisInput(gcs_uri=input_gcs_uri)
 
         voice = texttospeech.VoiceSelectionParams(
             language_code=language_code,
@@ -557,6 +548,7 @@ def generate_long_audio_gcs(input_gcs_uri: str, voice_name: str, language_code: 
         output_blob_name = output_gcs_uri.replace(f"gs://{gcs_output_bucket}/", "")
         
         # Download the result from GCS
+        storage_client = storage.Client()
         bucket = storage_client.bucket(gcs_output_bucket)
         blob = bucket.blob(output_blob_name)
         audio_bytes = blob.download_as_bytes()
