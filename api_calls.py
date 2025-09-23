@@ -504,3 +504,54 @@ def get_google_tts_voices() -> Dict[str, Dict[str, str]]:
         return {
             "de-DE-Wavenet-F (FEMALE)": {"voice_id": "de-DE-Wavenet-F", "language": "de-DE", "gender": "FEMALE"}
         }
+
+def generate_long_audio_gcs(input_gcs_uri: str, voice_name: str, language_code: str, project_id: str, gcs_output_bucket: str) -> bytes:
+    """
+    Synthesizes long audio from an SSML file in GCS and returns the audio data as bytes.
+    """
+    try:
+        from google.cloud import texttospeech
+        client = texttospeech.TextToSpeechClient()
+
+        synthesis_input = texttospeech.SynthesisInput(gcs_uri=input_gcs_uri)
+
+        voice = texttospeech.VoiceSelectionParams(
+            language_code=language_code,
+            name=voice_name
+        )
+
+        audio_config = texttospeech.AudioConfig(
+            audio_encoding=texttospeech.AudioEncoding.MP3
+        )
+        
+        output_gcs_uri = f"gs://{gcs_output_bucket}/output-{uuid.uuid4()}.mp3"
+
+        request = texttospeech.SynthesizeLongAudioRequest(
+            parent=f"projects/{project_id}/locations/global",
+            input=synthesis_input,
+            voice=voice,
+            audio_config=audio_config,
+            output_gcs_uri=output_gcs_uri
+        )
+
+        operation = client.synthesize_long_audio(request=request)
+        st.info(f"Asynchroner TTS-Job gestartet. Warten auf Abschluss...")
+        
+        result = operation.result(timeout=900)
+        st.success("Asynchroner TTS-Job erfolgreich abgeschlossen.")
+
+        output_blob_name = output_gcs_uri.replace(f"gs://{gcs_output_bucket}/", "")
+        
+        # utils.py is not available here, so we need to implement the download here
+        from google.cloud import storage
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(gcs_output_bucket)
+        blob = bucket.blob(output_blob_name)
+        audio_bytes = blob.download_as_bytes()
+        
+        return audio_bytes
+
+    except Exception as e:
+        logging.error(f"Error in generate_long_audio_gcs: {e}", exc_info=True)
+        st.error(f"Fehler bei der langen Audiosynthese: {e}")
+        return None

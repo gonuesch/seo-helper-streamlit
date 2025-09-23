@@ -41,7 +41,8 @@ from api_calls import (
     generate_text_summary,
     generate_ssml_chunk,
     get_google_tts_voices,
-    get_voice_recommendations
+    get_voice_recommendations,
+    generate_long_audio_gcs
 )
 
 # --- SICHERHEITSKONFIGURATION FÜR TTS ---
@@ -1528,7 +1529,9 @@ elif selected_tool == "Text-to-Speech":
                                 audio_bytes = generate_long_audio_gcs(
                                     input_gcs_uri, 
                                     voice_id, 
-                                    language_code
+                                    language_code,
+                                    PROJECT_ID,
+                                    GCS_TTS_OUTPUT_BUCKET
                                 )
                                 
                                 if audio_bytes:
