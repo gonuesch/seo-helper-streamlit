@@ -22,6 +22,7 @@ import uuid
 import time
 import datetime
 from google.cloud import storage, firestore, pubsub_v1
+from google.cloud import texttospeech
 import random
 from typing import Tuple, Dict
 import re
@@ -33,14 +34,13 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Importiere Funktionen aus deinen Modulen
-from utils import convert_tiff_to_png_bytes, read_text_from_docx, read_text_from_pdf, chunk_text, chunk_text_by_paragraphs, chunk_ssml_for_google_tts, log_exceptions
+from utils import convert_tiff_to_png_bytes, read_text_from_docx, read_text_from_pdf, chunk_text, chunk_text_by_paragraphs, log_exceptions, upload_to_gcs, download_from_gcs
 from api_calls import (
     generate_seo_tags_cached, 
     generate_accessibility_description_cached,
     generate_text_summary,
     generate_ssml_chunk,
     get_google_tts_voices,
-    generate_audio_google_tts,
     get_voice_recommendations
 )
 
@@ -158,6 +158,10 @@ PROJECT_ID = "avid-infinity-458913-p3"
 BUCKET_NAME = "manuskripte-upload-avid-infinity"
 FIRESTORE_DB_ID = "hbu-toolbox-firestone"
 PUB_SUB_TOPIC = "start-translation"
+
+# GCS Buckets für Text-to-Speech
+GCS_TTS_INPUT_BUCKET = "tts-input-bucket-hbu-toolbox" # Bucket für SSML-Dateien
+GCS_TTS_OUTPUT_BUCKET = "tts-output-bucket-hbu-toolbox" # Bucket für MP3-Dateien
 
 # Verwende immer Cloud Run Default Service Account für Storage und Firestore
 storage_client = storage.Client(project=PROJECT_ID)
@@ -1504,49 +1508,41 @@ elif selected_tool == "Text-to-Speech":
                             st.error("❌ Keine SSML-Daten gefunden. Bitte gehen Sie einen Schritt zurück.")
                             logging.error("❌ No SSML chunks found in session state for audio generation.")
                         else:
-                            # Generiere Audio für alle Chunks
-                            all_audio_chunks = []
-                            with st.spinner("🎵 Generiere Audio mit Google TTS..."):
-                                final_ssml_chunks_to_process = []
-                                logging.info("Splitting SSML into smaller chunks for Google TTS API.")
-                                for ssml_chunk in ssml_chunks:
-                                    # Use the utility function to split large SSML chunks
-                                    final_ssml_chunks_to_process.extend(chunk_ssml_for_google_tts(ssml_chunk))
+                            # [REFACTOR] New long audio synthesis process
+                            with st.spinner("🎵 Generiere Audio mit Google TTS Long Audio API..."):
+                                # 1. Combine all SSML chunks into one string
+                                full_ssml_content = "".join(ssml_chunks)
                                 
-                                total_final_chunks = len(final_ssml_chunks_to_process)
-                                logging.info(f"Total small SSML chunks to process: {total_final_chunks}")
+                                # 2. Save to a temporary local file
+                                with open("temp_ssml_input.xml", "w", encoding="utf-8") as f:
+                                    f.write(full_ssml_content)
                                 
-                                if total_final_chunks > 0:
-                                    progress_bar_audio = st.progress(0, text=f"Generiere Audio Chunk 1/{total_final_chunks}")
-                                    for i, final_chunk in enumerate(final_ssml_chunks_to_process):
-                                        logging.info(f"🎵 Generating audio for final chunk {i+1}/{total_final_chunks}")
-                                        audio_chunk = generate_audio_google_tts(final_chunk, voice_id, language_code)
-                                        if audio_chunk:
-                                            all_audio_chunks.append(audio_chunk)
-                                            logging.info(f"✅ Final chunk {i+1} audio generated successfully")
-                                        else:
-                                            logging.error(f"❌ Failed to generate audio for final chunk {i+1}")
-                                        progress_bar_audio.progress((i + 1) / total_final_chunks, text=f"Generiere Audio Chunk {i+1}/{total_final_chunks}")
-                            
-                            if not all_audio_chunks:
-                                st.error("❌ Audio-Generierung fehlgeschlagen!")
-                                logging.error("❌ No audio chunks generated")
-                            else:
-                                # Füge alle Audio-Chunks zusammen
-                                logging.info("🎵 Combining audio chunks")
-                                combined_audio = b"".join(all_audio_chunks)
-                                logging.info(f"✅ Combined audio size: {len(combined_audio)} bytes")
+                                # 3. Upload to GCS
+                                input_gcs_uri = upload_to_gcs(
+                                    GCS_TTS_INPUT_BUCKET,
+                                    "temp_ssml_input.xml",
+                                    f"input-{uuid.uuid4()}.xml"
+                                )
                                 
-                                # Speichere Audio im Session State
-                                st.session_state.audio_data = combined_audio
-                                st.session_state.audio_filename = f"tts_audio_{int(time.time())}.mp3"
+                                # 4. Call the long audio synthesis function
+                                audio_bytes = generate_long_audio_gcs(
+                                    input_gcs_uri, 
+                                    voice_id, 
+                                    language_code
+                                )
                                 
-                                st.success("✅ Audio erfolgreich generiert!")
-                                logging.info("✅ Audio generation completed successfully")
-                    
+                                if audio_bytes:
+                                    st.session_state.audio_data = audio_bytes
+                                    st.session_state.audio_filename = f"tts_audio_{int(time.time())}.mp3"
+                                    st.success("✅ Audio erfolgreich generiert!")
+                                    logging.info("✅ Audio generation completed successfully")
+                                else:
+                                    st.error("❌ Audio-Generierung fehlgeschlagen!")
+                                    logging.error("❌ Audio generation failed.")
+
                 except Exception as e:
                     st.error(f"❌ Fehler bei Audio-Generierung: {str(e)}")
-                    logging.error(f"❌ Audio generation error: {str(e)}")
+                    logging.error(f"❌ Audio generation error: {str(e)}", exc_info=True)
         
         # Audio Player und Download
         if st.session_state.get("audio_data"):
@@ -1995,5 +1991,52 @@ def get_voice_recommendations(_summary: str, _voices_info: str = None, gemini_ap
     except Exception as e:
         logger.error(f"Fehler bei der Regie-Erstellung: {e}", exc_info=True)
         return f"Fehler bei der Regie-Erstellung: {e}", []
+
+def generate_long_audio_gcs(input_gcs_uri: str, voice_name: str, language_code: str) -> bytes:
+    """
+    Synthesizes long audio from an SSML file in GCS and returns the audio data as bytes.
+    """
+    try:
+        client = texttospeech.TextToSpeechClient()
+
+        # Configure the synthesis request
+        synthesis_input = texttospeech.SynthesisInput(gcs_uri=input_gcs_uri)
+
+        voice = texttospeech.VoiceSelectionParams(
+            language_code=language_code,
+            name=voice_name
+        )
+
+        audio_config = texttospeech.AudioConfig(
+            audio_encoding=texttospeech.AudioEncoding.MP3
+        )
+        
+        output_gcs_uri = f"gs://{GCS_TTS_OUTPUT_BUCKET}/output-{uuid.uuid4()}.mp3"
+
+        request = texttospeech.SynthesizeLongAudioRequest(
+            input=synthesis_input,
+            voice=voice,
+            audio_config=audio_config,
+            output_gcs_uri=output_gcs_uri
+        )
+
+        # Start the long-running operation
+        operation = client.synthesize_long_audio(request=request)
+        st.info(f"Asynchroner TTS-Job gestartet. Warten auf Abschluss...")
+        
+        # Wait for the operation to complete
+        result = operation.result(timeout=900) # 15 minutes timeout
+        st.success("Asynchroner TTS-Job erfolgreich abgeschlossen.")
+
+        # Download the result from GCS
+        output_blob_name = output_gcs_uri.replace(f"gs://{GCS_TTS_OUTPUT_BUCKET}/", "")
+        audio_bytes = download_from_gcs(GCS_TTS_OUTPUT_BUCKET, output_blob_name)
+        
+        return audio_bytes
+
+    except Exception as e:
+        logging.error(f"Error in generate_long_audio_gcs: {e}", exc_info=True)
+        st.error(f"Fehler bei der langen Audiosynthese: {e}")
+        return None
 
 

@@ -14,10 +14,6 @@ import vertexai
 from vertexai.generative_models import GenerativeModel, Part
 from google.cloud import firestore
 import os
-import base64
-from google.cloud import aiplatform
-from google.protobuf import json_format
-from google.protobuf.struct_pb2 import Value
 
 # Importiere die Prompt-Vorlagen aus der prompts.py Datei
 from prompts import ACCESSIBILITY_PROMPT_TEMPLATE, SEO_PROMPT, SUMMARY_PROMPT, GUIDELINE_PROMPT_WITH_MATCHING, SSML_PROMPT, TRANSLATION_GUIDE_PROMPT, TRANSLATE_CHUNK_PROMPT
@@ -476,100 +472,35 @@ def create_formatted_docx(translated_text: str, output_filename: str) -> bytes:
 @log_exceptions
 def get_google_tts_voices() -> Dict[str, Dict[str, str]]:
     """
-    Ruft die verfügbaren Google TTS Stimmen über Vertex AI ab.
+    Ruft die verfügbaren deutschen Google TTS Stimmen ab (WaveNet & Studio).
     Gibt ein Dictionary zurück:
-    {'Stimmenname': {'voice_id': 'xyz', 'language': 'en-US', 'gender': 'MALE/FEMALE'}}
+    {'Stimmenname': {'voice_id': 'xyz', 'language': 'de-DE', 'gender': 'MALE/FEMALE'}}
     """
     try:
-        vertexai.init(project="avid-infinity-458913-p3")
-        model = GenerativeModel("text-to-speech")
-        
-        # NOTE: Vertex AI does not have a simple 'list_voices' API like the classic TTS API.
-        # The models are the "voices". We will use a predefined list of high-quality voices
-        # known to be available through the Vertex AI text-to-speech model.
-        
-        # Predefined list of high-quality, known voices for Vertex AI TTS
-        known_voices = {
-            "en-US-Studio-O": {"gender": "FEMALE"},
-            "en-US-Studio-M": {"gender": "MALE"},
-            "en-US-Wavenet-D": {"gender": "MALE"},
-            "en-US-Wavenet-F": {"gender": "FEMALE"},
-            "en-GB-Wavenet-A": {"gender": "FEMALE"},
-            "en-GB-Wavenet-B": {"gender": "MALE"},
-            "en-AU-Wavenet-C": {"gender": "FEMALE"},
-            "en-AU-Wavenet-D": {"gender": "MALE"},
-        }
+        from google.cloud import texttospeech
 
+        client = texttospeech.TextToSpeechClient()
+        response = client.list_voices(language_code="de-DE")
+        
         voice_dict = {}
-        for voice_id, details in known_voices.items():
-            language_code = "-".join(voice_id.split("-")[:2])
-            voice_name = f"{voice_id} ({language_code})"
-            voice_dict[voice_name] = {
-                "voice_id": voice_id,
-                "language": language_code,
-                "gender": details["gender"]
-            }
-        return voice_dict
+        for voice in response.voices:
+            # Filtere für hochwertige Stimmen (WaveNet oder die neueren Studio-Stimmen)
+            if "Wavenet" in voice.name or "Studio" in voice.name:
+                gender = texttospeech.SsmlVoiceGender(voice.ssml_gender).name
+                voice_name = f"{voice.name} ({gender})"
+                voice_dict[voice_name] = {
+                    "voice_id": voice.name,
+                    "language": "de-DE",
+                    "gender": gender
+                }
+        
+        # Sortiere das Dictionary alphabetisch nach dem Anzeigenamen
+        sorted_voice_dict = dict(sorted(voice_dict.items()))
+        return sorted_voice_dict
         
     except Exception as e:
-        logger.error(f"Fehler beim Abrufen der Vertex AI TTS Stimmen: {e}")
+        logger.error(f"Fehler beim Abrufen der Google TTS Stimmen: {e}", exc_info=True)
+        # Fallback auf eine bekannte gute Stimme
         return {
-            "en-US-Wavenet-D (en-US)": {"voice_id": "en-US-Wavenet-D", "language": "en-US", "gender": "MALE"},
-            "en-US-Wavenet-F (en-US)": {"voice_id": "en-US-Wavenet-F", "language": "en-US", "gender": "FEMALE"}
+            "de-DE-Wavenet-F (FEMALE)": {"voice_id": "de-DE-Wavenet-F", "language": "de-DE", "gender": "FEMALE"}
         }
-
-@log_exceptions
-def generate_audio_google_tts(ssml: str, voice_id: str, language_code: str) -> bytes:
-    """
-    Generiert Audio mit der Vertex AI Text-to-Speech API über den Prediction Service Endpoint.
-    
-    Args:
-        ssml: Der zu synthetisierende SSML-formatierte Text
-        voice_id: Die Voice-ID (z.B. 'en-US-Wavenet-D')
-        language_code: Der BCP-47 Sprachcode (z.B. 'en-US')
-    
-    Returns:
-        bytes: Audio-Daten im MP3-Format
-    """
-    try:
-        project_id = "avid-infinity-458913-p3"
-        # Hardcode the location to us-central1 where the model is available
-        location = "us-central1"
-        api_endpoint = f"{location}-aiplatform.googleapis.com"
-        
-        # 1. Client initialisieren
-        client_options = {"api_endpoint": api_endpoint}
-        client = aiplatform.gapic.PredictionServiceClient(client_options=client_options)
-
-        # 2. SSML-Payload (Instanz) erstellen
-        instance_dict = {
-            "input": {"ssml": f"<speak>{ssml}</speak>"},
-            "voice": {"languageCode": language_code, "name": voice_id},
-            "audioConfig": {"audioEncoding": "MP3"},
-        }
-        instance = json_format.ParseDict(instance_dict, Value())
-        instances = [instance]
-
-        # 3. Den Endpunkt des Modells definieren
-        # Dies ist der feste Pfad zum vortrainierten TTS-Modell auf Vertex AI.
-        endpoint = (
-            f"projects/{project_id}/locations/{location}"
-            "/publishers/google/models/texttospeech-1"
-        )
-
-        # 4. Die Anfrage an den Endpunkt senden
-        try:
-            response = client.predict(endpoint=endpoint, instances=instances)
-        except Exception as e:
-            logger.error(f"Fehler bei der Vertex AI TTS Audio-Generierung: {e}")
-            return None
-        
-        # 5. Die Antwort verarbeiten
-        audio_content_base64 = response.predictions[0]["audioContent"]
-        audio_content_bytes = base64.b64decode(audio_content_base64)
-        
-        return audio_content_bytes
-
-    except Exception as e:
-        logger.error(f"Fehler bei der Vertex AI TTS Audio-Generierung: {e}")
-        return None

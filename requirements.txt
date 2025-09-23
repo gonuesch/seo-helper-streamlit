@@ -18,3 +18,4 @@ google-cloud-pubsub
 google-cloud-storage
 google-cloud-firestore
 google-cloud-aiplatform
+google-cloud-texttospeech

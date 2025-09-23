@@ -11,6 +11,31 @@ import os
 import threading
 import logging
 import functools
+from google.cloud import storage
+
+# --- GCS Helper Functions ---
+
+@log_exceptions
+def upload_to_gcs(bucket_name: str, source_file_name: str, destination_blob_name: str):
+    """Uploads a file to the bucket."""
+    storage_client = storage.Client()
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(destination_blob_name)
+
+    blob.upload_from_filename(source_file_name)
+
+    logging.info(f"File {source_file_name} uploaded to {destination_blob_name}.")
+    return f"gs://{bucket_name}/{destination_blob_name}"
+
+@log_exceptions
+def download_from_gcs(bucket_name: str, source_blob_name: str) -> bytes:
+    """Downloads a file from the bucket and returns its content as bytes."""
+    storage_client = storage.Client()
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(source_blob_name)
+    
+    return blob.download_as_bytes()
+
 
 def log_exceptions(func):
     """
@@ -146,68 +171,6 @@ def chunk_text_by_paragraphs(text: str, max_chunk_size: int = 100000) -> list[st
                 current_chunk += "\n\n" + paragraph
             else:
                 current_chunk = paragraph
-    
-    # Füge den letzten Chunk hinzu
-    if current_chunk.strip():
-        chunks.append(current_chunk.strip())
-    
-    return chunks
-
-@log_exceptions
-def chunk_ssml_for_google_tts(ssml_text: str, max_chunk_size: int = 5000) -> list[str]:
-    """
-    Teilt SSML-Text für Google TTS API auf (5000 Zeichen Limit).
-    Versucht SSML-Tags intakt zu halten.
-    """
-    if not isinstance(ssml_text, str):
-        return []
-    
-    if len(ssml_text) <= max_chunk_size:
-        return [ssml_text]
-    
-    chunks = []
-    current_chunk = ""
-    
-    # Teile SSML in Sätze auf (nach </speak> oder </s> Tags)
-    sentences = []
-    remaining_text = ssml_text
-    
-    while remaining_text:
-        # Suche nach </speak> oder </s> Tags
-        speak_end = remaining_text.find('</speak>')
-        s_end = remaining_text.find('</s>')
-        
-        if speak_end == -1 and s_end == -1:
-            # Keine Tags mehr gefunden, füge Rest hinzu
-            if remaining_text.strip():
-                sentences.append(remaining_text.strip())
-            break
-        
-        # Finde das nächste Ende-Tag
-        if speak_end == -1:
-            next_end = s_end + 4  # </s> ist 4 Zeichen lang
-        elif s_end == -1:
-            next_end = speak_end + 8  # </speak> ist 8 Zeichen lang
-        else:
-            next_end = min(speak_end + 8, s_end + 4)
-        
-        # Füge Satz hinzu
-        sentence = remaining_text[:next_end].strip()
-        if sentence:
-            sentences.append(sentence)
-        
-        remaining_text = remaining_text[next_end:]
-    
-    # Gruppiere Sätze zu Chunks
-    for sentence in sentences:
-        if current_chunk and len(current_chunk) + len(sentence) + 1 > max_chunk_size:
-            chunks.append(current_chunk.strip())
-            current_chunk = sentence
-        else:
-            if current_chunk:
-                current_chunk += sentence
-            else:
-                current_chunk = sentence
     
     # Füge den letzten Chunk hinzu
     if current_chunk.strip():
