@@ -518,24 +518,24 @@ def generate_long_audio_gcs(input_gcs_uri: str, voice_name: str, language_code: 
         client_options = {"api_endpoint": "europe-west4-texttospeech.googleapis.com"}
         client = texttospeech.TextToSpeechLongAudioSynthesizeClient(client_options=client_options)
 
-        # Input is specified via a GcsSource object from the 'types' submodule
-        gcs_source = texttospeech.types.GcsSource(uri=input_gcs_uri)
-        synthesis_input = texttospeech.types.SynthesisInput(gcs_source=gcs_source)
+        # The request objects are available directly on the texttospeech module
+        gcs_source = texttospeech.GcsSource(uri=input_gcs_uri)
+        synthesis_input = texttospeech.SynthesisInput(gcs_source=gcs_source)
 
-        voice = texttospeech.types.VoiceSelectionParams(
+        voice = texttospeech.VoiceSelectionParams(
             language_code=language_code,
             name=voice_name
         )
 
-        audio_config = texttospeech.types.AudioConfig(
+        audio_config = texttospeech.AudioConfig(
             audio_encoding=texttospeech.AudioEncoding.MP3
         )
         
         # Output is specified via a GcsDestination object
         output_blob_name = f"output-{uuid.uuid4()}.mp3"
-        gcs_destination = texttospeech.types.GcsDestination(uri=f"gs://{gcs_output_bucket}/{output_blob_name}")
+        gcs_destination = texttospeech.GcsDestination(uri=f"gs://{gcs_output_bucket}/{output_blob_name}")
 
-        request = texttospeech.types.SynthesizeLongAudioRequest(
+        request = texttospeech.SynthesizeLongAudioRequest(
             # The parent must specify a supported location
             parent=f"projects/{project_id}/locations/europe-west4",
             input=synthesis_input,
