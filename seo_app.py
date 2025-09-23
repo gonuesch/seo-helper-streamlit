@@ -1300,12 +1300,12 @@ elif selected_tool == "Text-to-Speech":
         st.metric("💰 Kostendeckel", f"${MAX_TTS_COST_USD}")
     
     with col2:
-        st.metric("📄 Max. Seiten", f"{MAX_PAGES_FOR_TTS}")
+        st.metric("📝 Max. Zeichen", "1,000,000")
     
     with col3:
         st.metric("⏱️ Zeitlimit", f"{MAX_TTS_RUNTIME_MINUTES} Min")
     
-    st.caption(f"💡 **Empfehlung:** Dokumente mit maximal {MAX_PAGES_FOR_TTS} Seiten (ca. {MAX_PAGES_FOR_TTS * 1250:,} Zeichen) für optimale Ergebnisse. Größere Dokumente können aufgeteilt werden.")
+    st.caption(f"💡 **Hinweis:** Die `synthesizeLongAudio` API unterstützt bis zu 1 Million Bytes an Input-Text (inklusive SSML-Markup).")
 
     # --- Step 1: Dokument hochladen ---
     if st.session_state.tts_step == 1:
