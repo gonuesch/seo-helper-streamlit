@@ -13,6 +13,23 @@ import logging
 import functools
 from google.cloud import storage
 
+def log_exceptions(func):
+    """
+    Ein Decorator, der automatisch alle Ausnahmen innerhalb einer Funktion
+    abfängt, sie loggt und dann weiter auslöst.
+    """
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            # Loggt die Ausnahme mit vollständigem Traceback
+            logging.exception("In Funktion '%s' ist ein Fehler aufgetreten", func.__name__)
+            # Löst die Ausnahme erneut aus, damit die aufrufende Funktion
+            # sie optional behandeln kann (z.B. mit st.error).
+            raise
+    return wrapper
+
 # --- GCS Helper Functions ---
 
 @log_exceptions
@@ -36,23 +53,6 @@ def download_from_gcs(bucket_name: str, source_blob_name: str) -> bytes:
     
     return blob.download_as_bytes()
 
-
-def log_exceptions(func):
-    """
-    Ein Decorator, der automatisch alle Ausnahmen innerhalb einer Funktion
-    abfängt, sie loggt und dann weiter auslöst.
-    """
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except Exception as e:
-            # Loggt die Ausnahme mit vollständigem Traceback
-            logging.exception("In Funktion '%s' ist ein Fehler aufgetreten", func.__name__)
-            # Löst die Ausnahme erneut aus, damit die aufrufende Funktion
-            # sie optional behandeln kann (z.B. mit st.error).
-            raise
-    return wrapper
 
 # --- LOGGING FUNKTION (unverändert) ---
 log_lock = threading.Lock()
