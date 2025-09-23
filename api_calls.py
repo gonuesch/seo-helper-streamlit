@@ -526,11 +526,12 @@ def generate_long_audio_gcs(ssml_content: str, voice_name: str, language_code: s
             name=voice_name
         )
 
+        # The Long Audio API currently only supports LINEAR16 (WAV) output.
         audio_config = texttospeech.AudioConfig(
-            audio_encoding=texttospeech.AudioEncoding.MP3
+            audio_encoding=texttospeech.AudioEncoding.LINEAR16
         )
         
-        output_blob_name = f"output-{uuid.uuid4()}.mp3"
+        output_blob_name = f"output-{uuid.uuid4()}.wav" # Output will be a WAV file
         output_gcs_uri = f"gs://{gcs_output_bucket}/{output_blob_name}"
 
         request = texttospeech.SynthesizeLongAudioRequest(

@@ -1512,7 +1512,7 @@ elif selected_tool == "Text-to-Speech":
                                 
                                 if audio_bytes:
                                     st.session_state.audio_data = audio_bytes
-                                    st.session_state.audio_filename = f"tts_audio_{int(time.time())}.mp3"
+                                    st.session_state.audio_filename = f"tts_audio_{int(time.time())}.wav"
                                     st.success("✅ Audio erfolgreich generiert!")
                                     logging.info("✅ Audio generation completed successfully")
                                 else:
@@ -1525,15 +1525,15 @@ elif selected_tool == "Text-to-Speech":
         
         # Audio Player und Download
         if st.session_state.get("audio_data"):
-            st.audio(st.session_state.audio_data, format="audio/mpeg")
+            st.audio(st.session_state.audio_data, format="audio/wav")
             
             # Download Button
-            audio_filename = st.session_state.get("audio_filename", "tts_audio.mp3")
+            audio_filename = st.session_state.get("audio_filename", "tts_audio.wav")
             st.download_button(
-                label="📥 Audio herunterladen",
+                label="📥 Audio herunterladen (.wav)",
                 data=st.session_state.audio_data,
                 file_name=audio_filename,
-                mime="audio/mpeg"
+                mime="audio/wav"
             )
 
 elif selected_tool == "Manuskript-Übersetzung":
