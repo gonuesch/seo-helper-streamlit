@@ -511,14 +511,15 @@ def generate_long_audio_gcs(input_gcs_uri: str, voice_name: str, language_code: 
     Synthesizes long audio from an SSML file in GCS and returns the audio data as bytes.
     """
     try:
-        # Use the dedicated client for long audio synthesis
         from google.cloud import texttospeech_v1 as texttospeech
         from google.cloud import storage
         
         client = texttospeech.TextToSpeechLongAudioSynthesizeClient()
 
-        # The long audio API takes the GCS URI directly as input
-        synthesis_input = texttospeech.SynthesisInput(gcs_uri=input_gcs_uri)
+        # Input is specified via a GcsSource object
+        gcs_source = texttospeech.GcsSource(uri=input_gcs_uri)
+        # The SynthesisInput object itself is now empty
+        synthesis_input = texttospeech.SynthesisInput(gcs_source=gcs_source)
 
         voice = texttospeech.VoiceSelectionParams(
             language_code=language_code,
@@ -529,14 +530,15 @@ def generate_long_audio_gcs(input_gcs_uri: str, voice_name: str, language_code: 
             audio_encoding=texttospeech.AudioEncoding.MP3
         )
         
-        output_gcs_uri = f"gs://{gcs_output_bucket}/output-{uuid.uuid4()}.mp3"
+        # Output is specified via a GcsDestination object
+        output_blob_name = f"output-{uuid.uuid4()}.mp3"
+        gcs_destination = texttospeech.GcsDestination(uri=f"gs://{gcs_output_bucket}/{output_blob_name}")
 
         request = texttospeech.SynthesizeLongAudioRequest(
-            parent=f"projects/{project_id}/locations/global",
             input=synthesis_input,
             voice=voice,
             audio_config=audio_config,
-            output_gcs_uri=output_gcs_uri
+            output_gcs_destination=gcs_destination
         )
 
         operation = client.synthesize_long_audio(request=request)
@@ -544,8 +546,6 @@ def generate_long_audio_gcs(input_gcs_uri: str, voice_name: str, language_code: 
         
         result = operation.result(timeout=900)
         st.success("Asynchroner TTS-Job erfolgreich abgeschlossen.")
-
-        output_blob_name = output_gcs_uri.replace(f"gs://{gcs_output_bucket}/", "")
         
         # Download the result from GCS
         storage_client = storage.Client()
