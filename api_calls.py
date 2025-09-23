@@ -506,21 +506,20 @@ def get_google_tts_voices() -> Dict[str, Dict[str, str]]:
             "de-DE-Wavenet-F (FEMALE)": {"voice_id": "de-DE-Wavenet-F", "language": "de-DE", "gender": "FEMALE"}
         }
 
-def generate_long_audio_gcs(input_gcs_uri: str, voice_name: str, language_code: str, project_id: str, gcs_output_bucket: str) -> bytes:
+def generate_long_audio_gcs(ssml_content: str, voice_name: str, language_code: str, project_id: str, gcs_output_bucket: str) -> bytes:
     """
-    Synthesizes long audio from an SSML file in GCS and returns the audio data as bytes.
+    Synthesizes long audio from an SSML string, writes the output to GCS,
+    and returns the audio data as bytes.
     """
     try:
         from google.cloud import texttospeech_v1 as texttospeech
         from google.cloud import storage
         
-        # Explicitly configure the client to use a supported regional endpoint
         client_options = {"api_endpoint": "europe-west4-texttospeech.googleapis.com"}
         client = texttospeech.TextToSpeechLongAudioSynthesizeClient(client_options=client_options)
 
-        # The request objects are available directly on the texttospeech module
-        gcs_source = texttospeech.GcsSource(uri=input_gcs_uri)
-        synthesis_input = texttospeech.SynthesisInput(gcs_source=gcs_source)
+        # The API takes the full SSML content directly in the input object.
+        synthesis_input = texttospeech.SynthesisInput(ssml=ssml_content)
 
         voice = texttospeech.VoiceSelectionParams(
             language_code=language_code,
@@ -531,12 +530,10 @@ def generate_long_audio_gcs(input_gcs_uri: str, voice_name: str, language_code: 
             audio_encoding=texttospeech.AudioEncoding.MP3
         )
         
-        # Output is specified via a GcsDestination object
         output_blob_name = f"output-{uuid.uuid4()}.mp3"
         gcs_destination = texttospeech.GcsDestination(uri=f"gs://{gcs_output_bucket}/{output_blob_name}")
 
         request = texttospeech.SynthesizeLongAudioRequest(
-            # The parent must specify a supported location
             parent=f"projects/{project_id}/locations/europe-west4",
             input=synthesis_input,
             voice=voice,
@@ -550,7 +547,6 @@ def generate_long_audio_gcs(input_gcs_uri: str, voice_name: str, language_code: 
         result = operation.result(timeout=900)
         st.success("Asynchroner TTS-Job erfolgreich abgeschlossen.")
         
-        # Download the result from GCS
         storage_client = storage.Client()
         bucket = storage_client.bucket(gcs_output_bucket)
         blob = bucket.blob(output_blob_name)

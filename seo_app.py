@@ -161,7 +161,6 @@ FIRESTORE_DB_ID = "hbu-toolbox-firestone"
 PUB_SUB_TOPIC = "start-translation"
 
 # GCS Buckets für Text-to-Speech
-GCS_TTS_INPUT_BUCKET = "tts-input-bucket-hbu-toolbox" # Bucket für SSML-Dateien
 GCS_TTS_OUTPUT_BUCKET = "tts-output-bucket-hbu-toolbox" # Bucket für MP3-Dateien
 
 # Verwende immer Cloud Run Default Service Account für Storage und Firestore
@@ -1511,23 +1510,12 @@ elif selected_tool == "Text-to-Speech":
                         else:
                             # [REFACTOR] New long audio synthesis process
                             with st.spinner("🎵 Generiere Audio mit Google TTS Long Audio API..."):
-                                # 1. Combine all SSML chunks into one string
+                                # 1. Combine all SSML chunks into one string for the API call
                                 full_ssml_content = "".join(ssml_chunks)
                                 
-                                # 2. Save to a temporary local file
-                                with open("temp_ssml_input.xml", "w", encoding="utf-8") as f:
-                                    f.write(full_ssml_content)
-                                
-                                # 3. Upload to GCS
-                                input_gcs_uri = upload_to_gcs(
-                                    GCS_TTS_INPUT_BUCKET,
-                                    "temp_ssml_input.xml",
-                                    f"input-{uuid.uuid4()}.xml"
-                                )
-                                
-                                # 4. Call the long audio synthesis function
+                                # 2. Call the long audio synthesis function with the full SSML content
                                 audio_bytes = generate_long_audio_gcs(
-                                    input_gcs_uri, 
+                                    full_ssml_content,
                                     voice_id, 
                                     language_code,
                                     PROJECT_ID,
