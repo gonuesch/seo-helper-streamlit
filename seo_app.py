@@ -61,6 +61,12 @@ GOOGLE_TTS_PRICE_PER_1M_CHARS = 4.0  # $4 pro 1 Million Zeichen
 # 55.556 ÷ 1562.5 = ~35.5 Seiten
 MAX_PAGES_FOR_TTS = 35  # Maximale Seitenanzahl für TTS
 
+# API Limit für Long Audio Synthesis (in Bytes)
+# Wir setzen ein konservatives Limit für den reinen Text, um SSML-Expansion zu berücksichtigen
+LONG_AUDIO_API_LIMIT_BYTES = 1_000_000
+SSML_EXPANSION_FACTOR = 1.25 # Annahme: 25% Längenzunahme durch SSML
+SAFE_CHAR_LIMIT_FOR_TTS = int(LONG_AUDIO_API_LIMIT_BYTES / SSML_EXPANSION_FACTOR)
+
 def calculate_tts_cost(text_length_chars):
     """Berechnet die Kosten für Google TTS basierend auf Textlänge."""
     return (text_length_chars / 1000000) * GOOGLE_TTS_PRICE_PER_1M_CHARS
@@ -1304,7 +1310,7 @@ elif selected_tool == "Text-to-Speech":
     with col3:
         st.metric("⏱️ Zeitlimit", f"{MAX_TTS_RUNTIME_MINUTES} Min")
     
-    st.caption(f"💡 **Hinweis:** Die `synthesizeLongAudio` API unterstützt bis zu 1 Million Bytes an Input-Text (inklusive SSML-Markup).")
+    st.caption(f"💡 **Hinweis:** Die `synthesizeLongAudio` API unterstützt bis zu {LONG_AUDIO_API_LIMIT_BYTES:,} Bytes an Input-Text (inklusive SSML-Markup).")
 
     # --- Step 1: Dokument hochladen ---
     if st.session_state.tts_step == 1:
@@ -1323,84 +1329,66 @@ elif selected_tool == "Text-to-Speech":
                 else:
                     text_content = read_text_from_docx(uploaded_file)
             
+            # --- Validierung des Dokuments ---
+            document_is_valid = True
             if not text_content or not text_content.strip() or text_content == "NO_TEXT_IN_PDF":
                 st.error("Das Dokument scheint keinen lesbaren Text zu enthalten.")
+                document_is_valid = False
+            elif len(text_content) > SAFE_CHAR_LIMIT_FOR_TTS:
+                st.error(f"❌ Dokument zu lang ({len(text_content):,} Zeichen)")
+                st.warning(f"Das Limit für diese Funktion liegt bei {SAFE_CHAR_LIMIT_FOR_TTS:,} Zeichen, um die API-Grenze von {LONG_AUDIO_API_LIMIT_BYTES:,} Bytes nicht zu überschreiten. Bitte kürzen Sie das Dokument oder teilen Sie es auf.")
+                document_is_valid = False
             else:
-                # Kosten- und Seitenanalyse anzeigen
-                estimated_cost = estimate_total_tts_cost(text_content)
-                estimated_pages = estimate_page_count(text_content)
-                
-                st.success("✅ Dokument erfolgreich gelesen!")
-                
-                # Kosten- und Seitenanalyse
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("📄 Geschätzte Seiten", estimated_pages)
-                with col2:
-                    st.metric("💰 Geschätzte Kosten", f"${estimated_cost:.2f}")
-                with col3:
-                    if estimated_pages <= MAX_PAGES_FOR_TTS and estimated_cost <= MAX_TTS_COST_USD:
-                        st.metric("✅ Status", "OK")
-                    else:
-                        st.metric("⚠️ Status", "Limit überschritten")
-                
-                # Warnung bei Überschreitung
-                if estimated_pages > MAX_PAGES_FOR_TTS or estimated_cost > MAX_TTS_COST_USD:
-                    st.warning(f"⚠️ **Achtung:** Ihr Dokument überschreitet die Limits!")
-                    if estimated_pages > MAX_PAGES_FOR_TTS:
-                        st.write(f"• **Seitenlimit:** {estimated_pages} Seiten > {MAX_PAGES_FOR_TTS} Seiten (maximal)")
-                    if estimated_cost > MAX_TTS_COST_USD:
-                        st.write(f"• **Kostenlimit:** ${estimated_cost:.2f} > ${MAX_TTS_COST_USD} (maximal)")
-                    st.write("**Empfehlung:** Teilen Sie das Dokument in kleinere Abschnitte auf oder kontaktieren Sie den Administrator.")
-                else:
-                    st.success("✅ Ihr Dokument liegt innerhalb der Limits und kann verarbeitet werden!")
-            
-            if st.button("Text analysieren & Stimmen empfehlen", type="primary"):
-                logging.info(" TTS Button clicked - starting analysis process")
-                st.session_state.uploaded_file_name = uploaded_file.name 
-                st.session_state.text_content = text_content
-                
-                with st.status("Führe KI-Analyse aus...", expanded=True) as status:
-                    try:
-                        status.write("Schritt 1/2: Erstelle Zusammenfassung des Textes...")
-                        logging.info(" Starting step 1/2: Text summary generation")
-                        summary = generate_text_summary(text_content, gemini_api_key)
-                        st.session_state.summary = summary
-                        status.write("✅ Zusammenfassung erstellt")
-                        logging.info("✅ Step 1/2 completed: Summary created")
-                        
-                        status.write("Schritt 2/2: Empfehle passende Stimmen & generiere Regieanweisung...")
-                        logging.info(" Starting step 2/2: Voice recommendations")
-                        
-                        # Hole verfügbare Stimmen von Google TTS
-                        logging.info(" Fetching available voices from Google TTS API")
-                        available_voices = get_google_tts_voices()
-                        logging.info(f"🎤 Retrieved {len(available_voices)} voices from API")
-                        
-                        # Speichere Stimmen im Session State für spätere Verwendung
-                        st.session_state.voices = available_voices
-                        
-                        voices_info = "\n".join([f"{name}" for name in available_voices.keys()]) if available_voices and "Fehler" not in available_voices else "Adam, Antoni, Arnold, Bella, Domi, Elli, Josh, Rachel, Sam"
-                        logging.info(f"🎤 Voices info prepared: {len(voices_info)} characters")
-                        
-                        logging.info("🤖 Calling get_voice_recommendations with 3 parameters")
-                        top_3_voices = get_voice_recommendations(summary, voices_info, gemini_api_key)
-                        st.session_state.top_3_voices = top_3_voices
-                        
-                        # Extrahiere und speichere die Regieanweisung explizit
-                        if top_3_voices and isinstance(top_3_voices, tuple) and len(top_3_voices) > 0:
-                            st.session_state.guideline = top_3_voices[0]
+                st.success(f"✅ Ihr Dokument hat eine passende Länge ({len(text_content):,} Zeichen) und kann verarbeitet werden.")
 
-                        status.write("✅ Stimmen-Empfehlungen erstellt")
-                        logging.info("✅ Step 2/2 completed: Voice recommendations created")
+            # Nur wenn das Dokument gültig ist, den Button anzeigen
+            if document_is_valid:
+                if st.button("Text analysieren & Stimmen empfehlen", type="primary"):
+                    logging.info(" TTS Button clicked - starting analysis process")
+                    st.session_state.uploaded_file_name = uploaded_file.name 
+                    st.session_state.text_content = text_content
+                    
+                    with st.status("Führe KI-Analyse aus...", expanded=True) as status:
+                        try:
+                            status.write("Schritt 1/2: Erstelle Zusammenfassung des Textes...")
+                            logging.info(" Starting step 1/2: Text summary generation")
+                            summary = generate_text_summary(text_content, gemini_api_key)
+                            st.session_state.summary = summary
+                            status.write("✅ Zusammenfassung erstellt")
+                            logging.info("✅ Step 1/2 completed: Summary created")
+                            
+                            status.write("Schritt 2/2: Empfehle passende Stimmen & generiere Regieanweisung...")
+                            logging.info(" Starting step 2/2: Voice recommendations")
+                            
+                            # Hole verfügbare Stimmen von Google TTS
+                            logging.info(" Fetching available voices from Google TTS API")
+                            available_voices = get_google_tts_voices()
+                            logging.info(f"🎤 Retrieved {len(available_voices)} voices from API")
+                            
+                            # Speichere Stimmen im Session State für spätere Verwendung
+                            st.session_state.voices = available_voices
+                            
+                            voices_info = "\n".join([f"{name}" for name in available_voices.keys()]) if available_voices and "Fehler" not in available_voices else "Adam, Antoni, Arnold, Bella, Domi, Elli, Josh, Rachel, Sam"
+                            logging.info(f"🎤 Voices info prepared: {len(voices_info)} characters")
+                            
+                            logging.info("🤖 Calling get_voice_recommendations with 3 parameters")
+                            top_3_voices = get_voice_recommendations(summary, voices_info, gemini_api_key)
+                            st.session_state.top_3_voices = top_3_voices
+                            
+                            # Extrahiere und speichere die Regieanweisung explizit
+                            if top_3_voices and isinstance(top_3_voices, tuple) and len(top_3_voices) > 0:
+                                st.session_state.guideline = top_3_voices[0]
+
+                            status.write("✅ Stimmen-Empfehlungen erstellt")
+                            logging.info("✅ Step 2/2 completed: Voice recommendations created")
+                            
+                        except Exception as e:
+                            logging.error(f"❌ Error in TTS analysis process: {e}", exc_info=True)
+                            st.error(f"Fehler bei der Analyse: {e}")
                         
-                    except Exception as e:
-                        logging.error(f"❌ Error in TTS analysis process: {e}", exc_info=True)
-                        st.error(f"Fehler bei der Analyse: {e}")
-                
-                logging.info("🔄 Setting tts_step to 2 and calling st.rerun()")
-                st.session_state.tts_step = 2
-                st.rerun()
+                        logging.info("🔄 Setting tts_step to 2 and calling st.rerun()")
+                        st.session_state.tts_step = 2
+                        st.rerun()
 
     # --- Step 2: Stimme auswählen ---
     if st.session_state.tts_step >= 2:
