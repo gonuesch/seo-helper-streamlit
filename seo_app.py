@@ -784,6 +784,8 @@ if 'uploaded_file_name' not in st.session_state:
     st.session_state.uploaded_file_name = None
 if 'tts_result' not in st.session_state:
     st.session_state.tts_result = None
+if 'ssml_generated' not in st.session_state:
+    st.session_state.ssml_generated = False
 
 # Für Übersetzungs-Tool
 if 'translation_job_id' not in st.session_state:
@@ -900,6 +902,7 @@ if selected_tool != st.session_state.get("last_selected_tool", ""):
     st.session_state.accessibility_export_data = None
     st.session_state.accessibility_summary = None
     st.session_state.tts_result = None
+    st.session_state.ssml_generated = False
     st.session_state.translation_job_id = None
     st.session_state.translation_job_status = None
     st.session_state.current_style_guide = None
@@ -1472,26 +1475,28 @@ elif selected_tool == "Text-to-Speech":
             
             st.info(f"🎤 Vorbereitung für Stimme: **{selected_voice}**")
             
-            # Generiere SSML aus dem Originaltext
-            with st.spinner("Generiere SSML aus Text..."):
-                logging.info("📝 Splitting text into chunks")
-                # paragraphs in diesem Fall als Chunks verwendet
-                text_chunks = chunk_text_by_paragraphs(text_content, 4500) 
-                logging.info(f"📝 Created {len(text_chunks)} text chunks")
+            # Generate SSML from the original text, only if not already done
+            if not st.session_state.get("ssml_generated", False):
+                with st.spinner("Generiere SSML aus Text..."):
+                    logging.info("📝 Splitting text into chunks")
+                    # paragraphs in diesem Fall als Chunks verwendet
+                    text_chunks = chunk_text_by_paragraphs(text_content, 4500) 
+                    logging.info(f"📝 Created {len(text_chunks)} text chunks")
 
-                ssml_chunks = []
-                progress_bar = st.progress(0, text=f"Erstelle SSML Chunk 1/{len(text_chunks)}")
-                for i, chunk in enumerate(text_chunks):
-                    logging.info(f"📝 Generating SSML for chunk {i+1}/{len(text_chunks)}")
-                    # Hier wird für jeden Text-Chunk SSML generiert
-                    ssml_chunk = generate_ssml_chunk(ssml_guideline, chunk, gemini_api_key)
-                    if ssml_chunk:
-                        ssml_chunks.append(ssml_chunk)
-                    progress_bar.progress((i + 1) / len(text_chunks), text=f"Erstelle SSML Chunk {i+1}/{len(text_chunks)}")
-                
-                logging.info(f"📝 Created {len(ssml_chunks)} SSML chunks")
-                st.session_state.ssml_chunks = ssml_chunks
-                st.success(f"✅ SSML in {len(ssml_chunks)} Chunks aufgeteilt und generiert.")
+                    ssml_chunks = []
+                    progress_bar = st.progress(0, text=f"Erstelle SSML Chunk 1/{len(text_chunks)}")
+                    for i, chunk in enumerate(text_chunks):
+                        logging.info(f"📝 Generating SSML for chunk {i+1}/{len(text_chunks)}")
+                        # Hier wird für jeden Text-Chunk SSML generiert
+                        ssml_chunk = generate_ssml_chunk(ssml_guideline, chunk, gemini_api_key)
+                        if ssml_chunk:
+                            ssml_chunks.append(ssml_chunk)
+                        progress_bar.progress((i + 1) / len(text_chunks), text=f"Erstelle SSML Chunk {i+1}/{len(text_chunks)}")
+                    
+                    logging.info(f"📝 Created {len(ssml_chunks)} SSML chunks")
+                    st.session_state.ssml_chunks = ssml_chunks
+                    st.session_state.ssml_generated = True  # Mark SSML as generated
+                    st.success(f"✅ SSML in {len(ssml_chunks)} Chunks aufgeteilt und generiert.")
 
             if st.button("🚀 Audio jetzt generieren", type="primary"):
                 logging.info("🚀 Audio generation button clicked")
@@ -1512,45 +1517,51 @@ elif selected_tool == "Text-to-Speech":
                     else:
                         logging.info(f"🎤 Using Google TTS voice ID: {voice_id}")
                         
-                        # Generiere Audio für alle Chunks
-                        all_audio_chunks = []
-                        with st.spinner("🎵 Generiere Audio mit Google TTS..."):
-                            final_ssml_chunks_to_process = []
-                            logging.info("Splitting SSML into smaller chunks for Google TTS API.")
-                            for ssml_chunk in ssml_chunks:
-                                # Use the utility function to split large SSML chunks
-                                final_ssml_chunks_to_process.extend(chunk_ssml_for_google_tts(ssml_chunk))
-                            
-                            total_final_chunks = len(final_ssml_chunks_to_process)
-                            logging.info(f"Total small SSML chunks to process: {total_final_chunks}")
-                            
-                            if total_final_chunks > 0:
-                                progress_bar_audio = st.progress(0, text=f"Generiere Audio Chunk 1/{total_final_chunks}")
-                                for i, final_chunk in enumerate(final_ssml_chunks_to_process):
-                                    logging.info(f"🎵 Generating audio for final chunk {i+1}/{total_final_chunks}")
-                                    audio_chunk = generate_audio_google_tts(final_chunk, voice_id, language_code)
-                                    if audio_chunk:
-                                        all_audio_chunks.append(audio_chunk)
-                                        logging.info(f"✅ Final chunk {i+1} audio generated successfully")
-                                    else:
-                                        logging.error(f"❌ Failed to generate audio for final chunk {i+1}")
-                                    progress_bar_audio.progress((i + 1) / total_final_chunks, text=f"Generiere Audio Chunk {i+1}/{total_final_chunks}")
-                        
-                        if not all_audio_chunks:
-                            st.error("❌ Audio-Generierung fehlgeschlagen!")
-                            logging.error("❌ No audio chunks generated")
+                        # Use the SSML chunks from session state
+                        ssml_chunks = st.session_state.get("ssml_chunks", [])
+                        if not ssml_chunks:
+                            st.error("❌ Keine SSML-Daten gefunden. Bitte gehen Sie einen Schritt zurück.")
+                            logging.error("❌ No SSML chunks found in session state for audio generation.")
                         else:
-                            # Füge alle Audio-Chunks zusammen
-                            logging.info("🎵 Combining audio chunks")
-                            combined_audio = b"".join(all_audio_chunks)
-                            logging.info(f"✅ Combined audio size: {len(combined_audio)} bytes")
+                            # Generiere Audio für alle Chunks
+                            all_audio_chunks = []
+                            with st.spinner("🎵 Generiere Audio mit Google TTS..."):
+                                final_ssml_chunks_to_process = []
+                                logging.info("Splitting SSML into smaller chunks for Google TTS API.")
+                                for ssml_chunk in ssml_chunks:
+                                    # Use the utility function to split large SSML chunks
+                                    final_ssml_chunks_to_process.extend(chunk_ssml_for_google_tts(ssml_chunk))
+                                
+                                total_final_chunks = len(final_ssml_chunks_to_process)
+                                logging.info(f"Total small SSML chunks to process: {total_final_chunks}")
+                                
+                                if total_final_chunks > 0:
+                                    progress_bar_audio = st.progress(0, text=f"Generiere Audio Chunk 1/{total_final_chunks}")
+                                    for i, final_chunk in enumerate(final_ssml_chunks_to_process):
+                                        logging.info(f"🎵 Generating audio for final chunk {i+1}/{total_final_chunks}")
+                                        audio_chunk = generate_audio_google_tts(final_chunk, voice_id, language_code)
+                                        if audio_chunk:
+                                            all_audio_chunks.append(audio_chunk)
+                                            logging.info(f"✅ Final chunk {i+1} audio generated successfully")
+                                        else:
+                                            logging.error(f"❌ Failed to generate audio for final chunk {i+1}")
+                                        progress_bar_audio.progress((i + 1) / total_final_chunks, text=f"Generiere Audio Chunk {i+1}/{total_final_chunks}")
                             
-                            # Speichere Audio im Session State
-                            st.session_state.audio_data = combined_audio
-                            st.session_state.audio_filename = f"tts_audio_{int(time.time())}.mp3"
-                            
-                            st.success("✅ Audio erfolgreich generiert!")
-                            logging.info("✅ Audio generation completed successfully")
+                            if not all_audio_chunks:
+                                st.error("❌ Audio-Generierung fehlgeschlagen!")
+                                logging.error("❌ No audio chunks generated")
+                            else:
+                                # Füge alle Audio-Chunks zusammen
+                                logging.info("🎵 Combining audio chunks")
+                                combined_audio = b"".join(all_audio_chunks)
+                                logging.info(f"✅ Combined audio size: {len(combined_audio)} bytes")
+                                
+                                # Speichere Audio im Session State
+                                st.session_state.audio_data = combined_audio
+                                st.session_state.audio_filename = f"tts_audio_{int(time.time())}.mp3"
+                                
+                                st.success("✅ Audio erfolgreich generiert!")
+                                logging.info("✅ Audio generation completed successfully")
                     
                 except Exception as e:
                     st.error(f"❌ Fehler bei Audio-Generierung: {str(e)}")
