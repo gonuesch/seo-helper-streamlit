@@ -514,27 +514,30 @@ def generate_long_audio_gcs(input_gcs_uri: str, voice_name: str, language_code: 
         from google.cloud import texttospeech_v1 as texttospeech
         from google.cloud import storage
         
-        client = texttospeech.TextToSpeechLongAudioSynthesizeClient()
+        # Explicitly configure the client to use a supported regional endpoint
+        client_options = {"api_endpoint": "europe-west4-texttospeech.googleapis.com"}
+        client = texttospeech.TextToSpeechLongAudioSynthesizeClient(client_options=client_options)
 
-        # Input is specified via a GcsSource object
-        gcs_source = texttospeech.GcsSource(uri=input_gcs_uri)
-        # The SynthesisInput object itself is now empty
-        synthesis_input = texttospeech.SynthesisInput(gcs_source=gcs_source)
+        # Input is specified via a GcsSource object from the 'types' submodule
+        gcs_source = texttospeech.types.GcsSource(uri=input_gcs_uri)
+        synthesis_input = texttospeech.types.SynthesisInput(gcs_source=gcs_source)
 
-        voice = texttospeech.VoiceSelectionParams(
+        voice = texttospeech.types.VoiceSelectionParams(
             language_code=language_code,
             name=voice_name
         )
 
-        audio_config = texttospeech.AudioConfig(
+        audio_config = texttospeech.types.AudioConfig(
             audio_encoding=texttospeech.AudioEncoding.MP3
         )
         
         # Output is specified via a GcsDestination object
         output_blob_name = f"output-{uuid.uuid4()}.mp3"
-        gcs_destination = texttospeech.GcsDestination(uri=f"gs://{gcs_output_bucket}/{output_blob_name}")
+        gcs_destination = texttospeech.types.GcsDestination(uri=f"gs://{gcs_output_bucket}/{output_blob_name}")
 
-        request = texttospeech.SynthesizeLongAudioRequest(
+        request = texttospeech.types.SynthesizeLongAudioRequest(
+            # The parent must specify a supported location
+            parent=f"projects/{project_id}/locations/europe-west4",
             input=synthesis_input,
             voice=voice,
             audio_config=audio_config,
