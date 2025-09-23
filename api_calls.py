@@ -551,13 +551,18 @@ def generate_audio_google_tts(ssml: str, voice_id: str, language_code: str) -> b
         instances = [instance]
 
         # 3. Den Endpunkt des Modells definieren
+        # Dies ist der feste Pfad zum vortrainierten TTS-Modell auf Vertex AI.
         endpoint = (
             f"projects/{project_id}/locations/{location}"
-            "/publishers/google/models/texttospeech"
+            "/publishers/google/models/texttospeech-1"
         )
 
         # 4. Die Anfrage an den Endpunkt senden
-        response = client.predict(endpoint=endpoint, instances=instances)
+        try:
+            response = client.predict(endpoint=endpoint, instances=instances)
+        except Exception as e:
+            logger.error(f"Fehler bei der Vertex AI TTS Audio-Generierung: {e}")
+            return None
         
         # 5. Die Antwort verarbeiten
         audio_content_base64 = response.predictions[0]["audioContent"]
