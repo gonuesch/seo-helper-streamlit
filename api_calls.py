@@ -508,71 +508,105 @@ def get_google_tts_voices() -> Dict[str, Dict[str, str]]:
 
 def generate_long_audio_gcs(ssml_content: str, voice_name: str, language_code: str, project_id: str, gcs_output_bucket: str) -> bytes:
     """
-    Synthesizes long audio from an SSML string, writes the output to GCS,
-    and returns the audio data as bytes.
+    Synthesizes audio from SSML content using standard TTS API (not Long Audio API).
+    Processes in chunks if needed and returns the audio data as bytes.
     """
     try:
         from google.cloud import texttospeech
-        from google.cloud import storage
-        from google.cloud import secretmanager
-        from google.oauth2 import service_account
-        import json
+        import io
+        from pydub import AudioSegment
         
-        # Initialize TTS client with default authentication (Cloud Run default service account)
-        # The TTS service will use its own authentication to write to GCS
-        # Using europe-west4 to match the EU bucket location
-        client_options = {"api_endpoint": "europe-west4-texttospeech.googleapis.com"}
-        client = texttospeech.TextToSpeechLongAudioSynthesizeClient(client_options=client_options)
-
-        # The API takes the full SSML content directly in the input object.
-        synthesis_input = texttospeech.SynthesisInput(ssml=ssml_content)
-
-        voice = texttospeech.VoiceSelectionParams(
-            language_code=language_code,
-            name=voice_name
-        )
-
-        # The Long Audio API currently only supports LINEAR16 (WAV) output.
-        audio_config = texttospeech.AudioConfig(
-            audio_encoding=texttospeech.AudioEncoding.LINEAR16
-        )
+        # Initialize standard TTS client (not Long Audio client)
+        client = texttospeech.TextToSpeechClient()
         
-        output_blob_name = f"output-{uuid.uuid4()}.wav" # Output will be a WAV file
-        output_gcs_uri = f"gs://{gcs_output_bucket}/{output_blob_name}"
-
-        request = texttospeech.SynthesizeLongAudioRequest(
-            parent=f"projects/{project_id}/locations/europe-west4",
-            input=synthesis_input,
-            voice=voice,
-            audio_config=audio_config,
-            # The output is a simple string URI, not a GcsDestination object.
-            output_gcs_uri=output_gcs_uri
-        )
-
-        operation = client.synthesize_long_audio(request=request)
-        st.info(f"Asynchroner TTS-Job gestartet. Warten auf Abschluss...")
+        # Check if SSML content is too long for standard API (limit is ~5000 characters)
+        max_chunk_size = 4500  # Leave some buffer
         
-        result = operation.result(timeout=900)
-        st.success("Asynchroner TTS-Job erfolgreich abgeschlossen.")
-        
-        # Load service account credentials from Secret Manager for reading the result
-        secret_client = secretmanager.SecretManagerServiceClient()
-        secret_name = "google-tts-service-account"
-        name = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
-        response = secret_client.access_secret_version(request={"name": name})
-        service_account_json = response.payload.data.decode("UTF-8")
-        service_account_info = json.loads(service_account_json)
-        credentials = service_account.Credentials.from_service_account_info(service_account_info)
-        
-        # Initialize Storage client with our service account credentials for reading
-        storage_client = storage.Client(credentials=credentials)
-        bucket = storage_client.bucket(gcs_output_bucket)
-        blob = bucket.blob(output_blob_name)
-        audio_bytes = blob.download_as_bytes()
-        
-        return audio_bytes
+        if len(ssml_content) <= max_chunk_size:
+            # Single request for shorter content
+            st.info("Generiere Audio mit Standard TTS API...")
+            
+            synthesis_input = texttospeech.SynthesisInput(ssml=ssml_content)
+            voice = texttospeech.VoiceSelectionParams(
+                language_code=language_code,
+                name=voice_name
+            )
+            audio_config = texttospeech.AudioConfig(
+                audio_encoding=texttospeech.AudioEncoding.LINEAR16
+            )
+            
+            response = client.synthesize_speech(
+                input=synthesis_input,
+                voice=voice,
+                audio_config=audio_config
+            )
+            
+            st.success("Audio erfolgreich generiert!")
+            return response.audio_content
+            
+        else:
+            # Split into chunks for longer content
+            st.info("Langer Text erkannt. Verarbeite in mehreren Chunks...")
+            
+            # Simple SSML-aware chunking (split on sentence boundaries)
+            chunks = []
+            current_chunk = ""
+            
+            # Split by sentences but preserve SSML tags
+            sentences = ssml_content.split('.')
+            
+            for sentence in sentences:
+                if len(current_chunk + sentence + '.') <= max_chunk_size:
+                    current_chunk += sentence + '.'
+                else:
+                    if current_chunk:
+                        chunks.append(current_chunk.strip())
+                    current_chunk = sentence + '.'
+            
+            if current_chunk:
+                chunks.append(current_chunk.strip())
+            
+            # Synthesize each chunk
+            audio_segments = []
+            progress_bar = st.progress(0, text=f"Verarbeite Chunk 1/{len(chunks)}")
+            
+            for i, chunk in enumerate(chunks):
+                synthesis_input = texttospeech.SynthesisInput(ssml=chunk)
+                voice = texttospeech.VoiceSelectionParams(
+                    language_code=language_code,
+                    name=voice_name
+                )
+                audio_config = texttospeech.AudioConfig(
+                    audio_encoding=texttospeech.AudioEncoding.LINEAR16
+                )
+                
+                response = client.synthesize_speech(
+                    input=synthesis_input,
+                    voice=voice,
+                    audio_config=audio_config
+                )
+                
+                # Convert to AudioSegment for combining
+                audio_segment = AudioSegment.from_wav(io.BytesIO(response.audio_content))
+                audio_segments.append(audio_segment)
+                
+                progress_bar.progress((i + 1) / len(chunks), text=f"Verarbeite Chunk {i+1}/{len(chunks)}")
+            
+            # Combine all audio segments
+            st.info("Kombiniere Audio-Segmente...")
+            combined_audio = audio_segments[0]
+            for segment in audio_segments[1:]:
+                combined_audio += segment
+            
+            # Export to bytes
+            output_buffer = io.BytesIO()
+            combined_audio.export(output_buffer, format="wav")
+            output_buffer.seek(0)
+            
+            st.success(f"Audio erfolgreich aus {len(chunks)} Chunks kombiniert!")
+            return output_buffer.getvalue()
 
     except Exception as e:
         logging.error(f"Error in generate_long_audio_gcs: {e}", exc_info=True)
-        st.error(f"Fehler bei der langen Audiosynthese: {e}")
+        st.error(f"Fehler bei der Audiosynthese: {e}")
         return None
