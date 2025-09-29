@@ -128,7 +128,7 @@ def get_google_credentials():
         # Hole die komplette Service Account JSON aus dem Secret Manager
         client = secretmanager.SecretManagerServiceClient()
         project_id = "avid-infinity-458913-p3"
-        secret_name = "google-tts-service-account"
+        secret_name = "seo-helper-tts-service"  # Updated to match correct service account
         name = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
         response = client.access_secret_version(request={"name": name})
         service_account_json = response.payload.data.decode("UTF-8")
