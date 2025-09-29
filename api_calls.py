@@ -518,21 +518,10 @@ def generate_long_audio_gcs(ssml_content: str, voice_name: str, language_code: s
         from google.oauth2 import service_account
         import json
         
-        # Load service account credentials from Secret Manager
-        secret_client = secretmanager.SecretManagerServiceClient()
-        secret_name = "google-tts-service-account"
-        name = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
-        response = secret_client.access_secret_version(request={"name": name})
-        service_account_json = response.payload.data.decode("UTF-8")
-        service_account_info = json.loads(service_account_json)
-        credentials = service_account.Credentials.from_service_account_info(service_account_info)
-        
-        # Initialize TTS client with credentials
+        # Initialize TTS client with default authentication (Cloud Run default service account)
+        # The TTS service will use its own authentication to write to GCS
         client_options = {"api_endpoint": "europe-west4-texttospeech.googleapis.com"}
-        client = texttospeech.TextToSpeechLongAudioSynthesizeClient(
-            client_options=client_options,
-            credentials=credentials
-        )
+        client = texttospeech.TextToSpeechLongAudioSynthesizeClient(client_options=client_options)
 
         # The API takes the full SSML content directly in the input object.
         synthesis_input = texttospeech.SynthesisInput(ssml=ssml_content)
@@ -565,7 +554,16 @@ def generate_long_audio_gcs(ssml_content: str, voice_name: str, language_code: s
         result = operation.result(timeout=900)
         st.success("Asynchroner TTS-Job erfolgreich abgeschlossen.")
         
-        # Initialize Storage client with credentials
+        # Load service account credentials from Secret Manager for reading the result
+        secret_client = secretmanager.SecretManagerServiceClient()
+        secret_name = "google-tts-service-account"
+        name = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
+        response = secret_client.access_secret_version(request={"name": name})
+        service_account_json = response.payload.data.decode("UTF-8")
+        service_account_info = json.loads(service_account_json)
+        credentials = service_account.Credentials.from_service_account_info(service_account_info)
+        
+        # Initialize Storage client with our service account credentials for reading
         storage_client = storage.Client(credentials=credentials)
         bucket = storage_client.bucket(gcs_output_bucket)
         blob = bucket.blob(output_blob_name)
