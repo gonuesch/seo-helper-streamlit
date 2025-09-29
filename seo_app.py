@@ -167,7 +167,7 @@ FIRESTORE_DB_ID = "hbu-toolbox-firestone"
 PUB_SUB_TOPIC = "start-translation"
 
 # GCS Buckets für Text-to-Speech
-GCS_TTS_OUTPUT_BUCKET = "tts-output-bucket-hbu-toolbox" # Bucket für MP3-Dateien
+GCS_TTS_OUTPUT_BUCKET = "tts-output-europe-west4-6899" # Bucket für MP3-Dateien
 
 # Verwende immer Cloud Run Default Service Account für Storage und Firestore
 storage_client = storage.Client(project=PROJECT_ID)
