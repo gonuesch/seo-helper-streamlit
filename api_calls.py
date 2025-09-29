@@ -520,7 +520,8 @@ def generate_long_audio_gcs(ssml_content: str, voice_name: str, language_code: s
         
         # Initialize TTS client with default authentication (Cloud Run default service account)
         # The TTS service will use its own authentication to write to GCS
-        client_options = {"api_endpoint": "us-central1-texttospeech.googleapis.com"}
+        # Using europe-west4 to match the EU bucket location
+        client_options = {"api_endpoint": "europe-west4-texttospeech.googleapis.com"}
         client = texttospeech.TextToSpeechLongAudioSynthesizeClient(client_options=client_options)
 
         # The API takes the full SSML content directly in the input object.
@@ -540,7 +541,7 @@ def generate_long_audio_gcs(ssml_content: str, voice_name: str, language_code: s
         output_gcs_uri = f"gs://{gcs_output_bucket}/{output_blob_name}"
 
         request = texttospeech.SynthesizeLongAudioRequest(
-            parent=f"projects/{project_id}/locations/us-central1",
+            parent=f"projects/{project_id}/locations/europe-west4",
             input=synthesis_input,
             voice=voice,
             audio_config=audio_config,
