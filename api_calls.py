@@ -506,6 +506,25 @@ def get_google_tts_voices() -> Dict[str, Dict[str, str]]:
             "de-DE-Wavenet-F (FEMALE)": {"voice_id": "de-DE-Wavenet-F", "language": "de-DE", "gender": "FEMALE"}
         }
 
+def wrap_in_speak_tags(content: str) -> str:
+    """
+    Ensures SSML content is properly wrapped in <speak> tags.
+    If already wrapped, returns as is. If not, wraps the content.
+    """
+    # Remove leading/trailing whitespace
+    content = content.strip()
+    
+    # Check if already wrapped in speak tags
+    if content.startswith('<speak>') and content.endswith('</speak>'):
+        return content
+    
+    # Remove any existing speak tags to avoid nesting
+    content = re.sub(r'^\s*<speak>\s*', '', content, flags=re.IGNORECASE)
+    content = re.sub(r'\s*</speak>\s*$', '', content, flags=re.IGNORECASE)
+    
+    # Wrap in speak tags
+    return f'<speak>{content}</speak>'
+
 def generate_long_audio_gcs(ssml_content: str, voice_name: str, language_code: str, project_id: str, gcs_output_bucket: str) -> bytes:
     """
     Synthesizes audio from SSML content using standard TTS API (not Long Audio API).
@@ -571,7 +590,11 @@ def generate_long_audio_gcs(ssml_content: str, voice_name: str, language_code: s
             progress_bar = st.progress(0, text=f"Verarbeite Chunk 1/{len(chunks)}")
             
             for i, chunk in enumerate(chunks):
-                synthesis_input = texttospeech.SynthesisInput(ssml=chunk)
+                # Ensure chunk is wrapped in speak tags
+
+                wrapped_chunk = wrap_in_speak_tags(chunk)
+
+                synthesis_input = texttospeech.SynthesisInput(ssml=wrapped_chunk)
                 voice = texttospeech.VoiceSelectionParams(
                     language_code=language_code,
                     name=voice_name

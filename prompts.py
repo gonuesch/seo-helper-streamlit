@@ -101,6 +101,7 @@ Deine Aufgabe ist es, den folgenden Text-Abschnitt mit SSML-Tags anzureichern, u
 2.  Halte dich strikt an die vorgegebene **Regieleitlinie**.
 3.  Verwende passende SSML-Tags wie `<break time="...s"/>` für Pausen und `<emphasis level="...">` für Betonungen.
 4.  Das Ergebnis muss valides SSML sein, das von der Google TTS API verarbeitet werden kann.
+5.  **WICHTIG:** Verwende KEINE `<speak>` Tags. Der Text wird automatisch in `<speak>` Tags eingebettet.
 
 **Regieleitlinie:**
 ---
@@ -112,7 +113,7 @@ Deine Aufgabe ist es, den folgenden Text-Abschnitt mit SSML-Tags anzureichern, u
 {text_chunk}
 ---
 
-Gib als Antwort **ausschließlich den mit SSML-Tags angereicherten Text** zurück.
+Gib als Antwort **ausschließlich den mit SSML-Tags angereicherten Text** zurück (ohne `<speak>` Tags).
 """
 
 SCENE_ANALYSIS_PROMPT = """
