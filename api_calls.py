@@ -682,8 +682,10 @@ def safe_synthesize_speech(client, synthesis_input, voice, audio_config, max_ret
     """
     for attempt in range(max_retries + 1):
         try:
-            response = safe_synthesize_speech(
-                client, synthesis_input, voice, audio_config
+            response = client.synthesize_speech(
+                input=synthesis_input,
+                voice=voice,
+                audio_config=audio_config
             )
             return response
         except Exception as e:
