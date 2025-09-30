@@ -525,6 +525,26 @@ def wrap_in_speak_tags(content: str) -> str:
     # Wrap in speak tags
     return f'<speak>{content}</speak>'
 
+
+def clean_ssml_for_studio_voices(ssml_content: str) -> str:
+    """
+    Removes SSML tags that are not supported by Studio voices.
+    Studio voices don't support: <mark>, <emphasis>, <prosody pitch>, and <lang>
+    """
+    # Remove <emphasis> tags but keep the content
+    ssml_content = re.sub(r'<emphasis[^>]*>(.*?)</emphasis>', r'', ssml_content, flags=re.IGNORECASE)
+    
+    # Remove <mark> tags but keep the content
+    ssml_content = re.sub(r'<mark[^>]*>(.*?)</mark>', r'', ssml_content, flags=re.IGNORECASE)
+    
+    # Remove <prosody pitch> attributes but keep other prosody attributes
+    ssml_content = re.sub(r'<prosody[^>]*pitch[^>]*>', '<prosody>', ssml_content, flags=re.IGNORECASE)
+    
+    # Remove <lang> tags but keep the content
+    ssml_content = re.sub(r'<lang[^>]*>(.*?)</lang>', r'', ssml_content, flags=re.IGNORECASE)
+    
+    return ssml_content
+
 def generate_long_audio_gcs(ssml_content: str, voice_name: str, language_code: str, project_id: str, gcs_output_bucket: str) -> bytes:
     """
     Synthesizes audio from SSML content using standard TTS API (not Long Audio API).
@@ -591,6 +611,15 @@ def generate_long_audio_gcs(ssml_content: str, voice_name: str, language_code: s
             
             for i, chunk in enumerate(chunks):
                 # Ensure chunk is wrapped in speak tags
+
+                # Clean SSML for Studio voices if needed
+
+
+                if "Studio" in voice_name:
+
+
+                    chunk = clean_ssml_for_studio_voices(chunk)
+
 
                 wrapped_chunk = wrap_in_speak_tags(chunk)
 
