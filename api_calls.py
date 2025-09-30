@@ -608,6 +608,101 @@ def log_ssml_debug_info(ssml_content: str, voice_name: str, chunk_index: int = N
     except Exception as e:
         logging.error(f"Error in SSML debug logging: {e}")
 
+
+
+def create_fallback_ssml(text_content: str) -> str:
+    """
+    Creates a simple, valid SSML fallback when the AI-generated SSML is invalid.
+    """
+    # Clean the text content
+    text_content = text_content.strip()
+    
+    # Remove any existing SSML tags
+    text_content = re.sub(r'<[^>]+>', '', text_content)
+    
+    # Create simple, valid SSML with just the text
+    return f'<speak>{text_content}</speak>'
+
+
+
+def create_minimal_valid_ssml(text_content: str) -> str:
+    """
+    Creates minimal, guaranteed valid SSML by stripping all tags and using only basic structure.
+    This is a last resort when AI-generated SSML is completely invalid.
+    """
+    if not text_content or not text_content.strip():
+        return '<speak>Text content is empty.</speak>'
+    
+    # Strip all SSML tags and get clean text
+    clean_text = re.sub(r'<[^>]+>', '', text_content)
+    clean_text = clean_text.strip()
+    
+    # If text is too short, return a simple message
+    if len(clean_text) < 3:
+        return '<speak>Content is too short to process.</speak>'
+    
+    # Create minimal valid SSML with just the text
+    return f'<speak>{clean_text}</speak>'
+
+def is_ssml_valid(ssml_content: str) -> bool:
+    """
+    Basic validation to check if SSML content is likely valid.
+    """
+    if not ssml_content or not ssml_content.strip():
+        return False
+    
+    # Check for basic SSML structure
+    if '<speak>' not in ssml_content.lower() or '</speak>' not in ssml_content.lower():
+        return False
+    
+    # Check for balanced tags
+    open_tags = ssml_content.count('<')
+    close_tags = ssml_content.count('>')
+    if open_tags != close_tags:
+        return False
+    
+    # Check for common problematic patterns
+    problematic_patterns = [
+        r'<[^>]*>[^<]*<[^>]*>[^<]*</[^>]*>',  # Nested tags without proper structure
+        r'<break[^>]*>[^<]*</break>',  # Break tags with content
+        r'<prosody[^>]*pitch[^>]*>',  # Pitch attributes (not supported by Studio)
+    ]
+    
+    for pattern in problematic_patterns:
+        if re.search(pattern, ssml_content, re.IGNORECASE):
+            return False
+    
+    return True
+
+
+
+def safe_synthesize_speech(client, synthesis_input, voice, audio_config, max_retries=2):
+    """
+    Safely calls synthesize_speech with fallback mechanisms for SSML errors.
+    """
+    for attempt in range(max_retries + 1):
+        try:
+            response = safe_synthesize_speech(
+                client, synthesis_input, voice, audio_config
+            )
+            return response
+        except Exception as e:
+            error_msg = str(e)
+            logging.warning(f"TTS API call failed (attempt {attempt + 1}): {error_msg}")
+            
+            # If it's an SSML error and we have retries left, try with minimal SSML
+            if "Invalid SSML" in error_msg and attempt < max_retries:
+                logging.info("Retrying with minimal SSML...")
+                # Extract text content and create minimal SSML
+                ssml_text = synthesis_input.ssml
+                clean_text = re.sub(r'<[^>]+>', '', ssml_text)
+                minimal_ssml = f'<speak>{clean_text.strip()}</speak>'
+                synthesis_input = texttospeech.SynthesisInput(ssml=minimal_ssml)
+                continue
+            else:
+                # If all retries failed, raise the original exception
+                raise e
+
 def generate_long_audio_gcs(ssml_content: str, voice_name: str, language_code: str, project_id: str, gcs_output_bucket: str) -> bytes:
     """
     Synthesizes audio from SSML content using standard TTS API (not Long Audio API).
@@ -637,10 +732,8 @@ def generate_long_audio_gcs(ssml_content: str, voice_name: str, language_code: s
                 audio_encoding=texttospeech.AudioEncoding.LINEAR16
             )
             
-            response = client.synthesize_speech(
-                input=synthesis_input,
-                voice=voice,
-                audio_config=audio_config
+            response = safe_synthesize_speech(
+                client, synthesis_input, voice, audio_config
             )
             
             st.success("Audio erfolgreich generiert!")
@@ -690,6 +783,15 @@ def generate_long_audio_gcs(ssml_content: str, voice_name: str, language_code: s
                 log_ssml_debug_info(chunk, voice_name, i)
 
 
+                # If SSML is still invalid, use fallback
+
+
+                if not chunk or len(chunk.strip()) < 10 or not is_ssml_valid(chunk):
+
+
+                    chunk = create_minimal_valid_ssml(chunk)
+
+
                 if "Studio" in voice_name:
 
 
@@ -707,10 +809,8 @@ def generate_long_audio_gcs(ssml_content: str, voice_name: str, language_code: s
                     audio_encoding=texttospeech.AudioEncoding.LINEAR16
                 )
                 
-                response = client.synthesize_speech(
-                    input=synthesis_input,
-                    voice=voice,
-                    audio_config=audio_config
+                response = safe_synthesize_speech(
+                    client, synthesis_input, voice, audio_config
                 )
                 
                 # Convert to AudioSegment for combining
