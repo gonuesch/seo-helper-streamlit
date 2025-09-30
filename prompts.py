@@ -99,10 +99,16 @@ Deine Aufgabe ist es, den folgenden Text-Abschnitt mit SSML-Tags anzureichern, u
 **Regeln:**
 1.  Der Originaltext darf **auf keinen Fall verändert, umformuliert oder korrigiert** werden. Füge ausschließlich SSML-Tags hinzu.
 2.  Halte dich strikt an die vorgegebene **Regieleitlinie**.
-3.  Verwende passende SSML-Tags wie `<break time="...s"/>` für Pausen und `<prosody rate="...">` für Sprechgeschwindigkeit.
+3.  Verwende NUR diese erlaubten SSML-Tags:
+    - `<break time="1s"/>` für Pausen (nur mit time-Attribut)
+    - `<prosody rate="slow">Text</prosody>` für Sprechgeschwindigkeit
+    - `<prosody volume="loud">Text</prosody>` für Lautstärke
+    - `<say-as interpret-as="characters">ABC</say-as>` für Buchstabieren
 4.  Das Ergebnis muss valides SSML sein, das von der Google TTS API verarbeitet werden kann.
 5.  **WICHTIG:** Verwende KEINE `<speak>` Tags. Der Text wird automatisch in `<speak>` Tags eingebettet.
-6.  **WICHTIG:** Verwende KEINE `<emphasis>`, `<mark>`, `<prosody pitch>`, oder `<lang>` Tags, da diese von Studio-Stimmen nicht unterstützt werden.
+6.  **WICHTIG:** Verwende KEINE `<emphasis>`, `<mark>`, `<prosody pitch>`, oder `<lang>` Tags.
+7.  **WICHTIG:** Alle Tags müssen korrekt geschlossen werden. Verwende `<break/>` für leere Tags.
+8.  **WICHTIG:** Verwende nur einfache, bewährte SSML-Tags. Komplexe Verschachtelungen vermeiden.
 
 **Regieleitlinie:**
 ---

@@ -545,6 +545,69 @@ def clean_ssml_for_studio_voices(ssml_content: str) -> str:
     
     return ssml_content
 
+
+def validate_and_clean_ssml(ssml_content: str) -> str:
+    """
+    Validates and cleans SSML content to ensure it's compatible with all voice types.
+    Removes malformed tags, fixes common issues, and ensures proper structure.
+    """
+    if not ssml_content or not ssml_content.strip():
+        return ssml_content
+    
+    # Remove any XML declaration
+    ssml_content = re.sub(r'<\?xml.*?\?>\s*', '', ssml_content, flags=re.IGNORECASE)
+    
+    # Remove any leading/trailing whitespace
+    ssml_content = ssml_content.strip()
+    
+    # Fix common malformed tags
+    # Fix unclosed tags (basic fix)
+    ssml_content = re.sub(r'<break\s+time="([^"]*)"\s*/>', r'<break time=""/>', ssml_content)
+    ssml_content = re.sub(r'<break\s+time="([^"]*)"\s*>\s*</break>', r'<break time=""/>', ssml_content)
+    
+    # Remove any malformed prosody tags
+    ssml_content = re.sub(r'<prosody[^>]*>\s*</prosody>', '', ssml_content)
+    
+    # Fix nested speak tags
+    ssml_content = re.sub(r'<speak[^>]*>\s*<speak[^>]*>', '<speak>', ssml_content)
+    ssml_content = re.sub(r'</speak>\s*</speak>', '</speak>', ssml_content)
+    
+    # Remove any empty tags
+    ssml_content = re.sub(r'<(\w+)[^>]*>\s*</>', '', ssml_content)
+    
+    # Ensure proper break tag format
+    ssml_content = re.sub(r'<break\s+time="([^"]*)"\s*/>', r'<break time=""/>', ssml_content)
+    
+    # Remove any invalid characters that might cause issues
+    ssml_content = re.sub(r'[^ -~ -￿]', '', ssml_content)
+    
+    return ssml_content
+
+
+def log_ssml_debug_info(ssml_content: str, voice_name: str, chunk_index: int = None):
+    """
+    Logs SSML content for debugging purposes.
+    """
+    try:
+        # Log basic info
+        logging.info(f"SSML Debug - Voice: {voice_name}, Chunk: {chunk_index}")
+        logging.info(f"SSML Length: {len(ssml_content)} characters")
+        
+        # Log first 200 characters for debugging
+        preview = ssml_content[:200] + "..." if len(ssml_content) > 200 else ssml_content
+        logging.info(f"SSML Preview: {preview}")
+        
+        # Check for common issues
+        if '<speak>' not in ssml_content.lower():
+            logging.warning("SSML missing <speak> tags")
+        if ssml_content.count('<speak>') != ssml_content.count('</speak>'):
+            logging.warning("SSML has mismatched <speak> tags")
+        if '<emphasis>' in ssml_content and 'Studio' in voice_name:
+            logging.warning("SSML contains <emphasis> tags for Studio voice")
+            
+    except Exception as e:
+        logging.error(f"Error in SSML debug logging: {e}")
+
 def generate_long_audio_gcs(ssml_content: str, voice_name: str, language_code: str, project_id: str, gcs_output_bucket: str) -> bytes:
     """
     Synthesizes audio from SSML content using standard TTS API (not Long Audio API).
@@ -613,6 +676,18 @@ def generate_long_audio_gcs(ssml_content: str, voice_name: str, language_code: s
                 # Ensure chunk is wrapped in speak tags
 
                 # Clean SSML for Studio voices if needed
+
+
+                # Validate and clean SSML content
+
+
+                chunk = validate_and_clean_ssml(chunk)
+
+
+                # Log SSML debug info
+
+
+                log_ssml_debug_info(chunk, voice_name, i)
 
 
                 if "Studio" in voice_name:
