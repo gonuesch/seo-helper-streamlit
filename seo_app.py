@@ -882,28 +882,23 @@ with st.sidebar:
     elif selected_tool == "Barrierefreie Bildbeschreibung":
         st.markdown(f"Erzeuge **Bildbeschreibungen** mit Gemini.\n\n**Unterstützte Formate:** `{supported_formats_images}`\n\n**Download möglich:** Die Ergebnisse können als Excel-Datei heruntergeladen werden.\n\nBei Fragen -> Gordon")
     elif selected_tool == "Text-to-Speech":
-        st.header("Text-to-Speech")
-        st.caption("Upload a document and convert it to audio. Text will be automatically truncated to API limits.")
+        st.header("🎤 Text-to-Speech")
+        st.write("Upload a document and convert it to audio.")
         
-        # Debug: Check if functions are available
-        try:
-            st.info("🔧 Debug: TTS functions loaded successfully")
-            voices = get_simple_voices()
-            st.info(f"🔧 Debug: Found {len(voices)} voices")
-        except Exception as e:
-            st.error(f"🔧 Debug: Error loading TTS functions: {e}")
-
-        # Simple TTS functions are imported at the top of the file
+        # Simple test
+        st.write("✅ TTS section is working!")
         
         # Document upload
         uploaded_file = st.file_uploader(
-            label="Upload your document (.docx or .pdf)",
+            "Upload your document (.docx or .pdf)",
             type=['docx', 'pdf'],
             key="simple_tts_uploader"
         )
         
         if uploaded_file:
-            # Extract text from document
+            st.write(f"📄 File uploaded: {uploaded_file.name}")
+            
+            # Extract text
             if uploaded_file.name.endswith('.pdf'):
                 text_content = read_text_from_pdf(BytesIO(uploaded_file.getvalue()))
             elif uploaded_file.name.endswith('.docx'):
@@ -912,11 +907,11 @@ with st.sidebar:
                 text_content = None
             
             if text_content:
-                st.success(f"✅ Document loaded ({len(text_content):,} characters)")
+                st.success(f"✅ Text extracted: {len(text_content):,} characters")
                 
-                # Show text preview
+                # Show preview
                 with st.expander("📄 Text Preview"):
-                    st.text(text_content[:1000] + "..." if len(text_content) > 1000 else text_content)
+                    st.text(text_content[:500] + "..." if len(text_content) > 500 else text_content)
                 
                 # Voice selection
                 voices = get_simple_voices()
@@ -926,7 +921,7 @@ with st.sidebar:
                     key="simple_voice_selection"
                 )
                 
-                # Generate audio button
+                # Generate button
                 if st.button("🎵 Generate Audio", type="primary"):
                     with st.spinner("Generating audio..."):
                         try:
@@ -945,14 +940,14 @@ with st.sidebar:
             else:
                 st.error("❌ Could not extract text from document")
         
-        # Audio player and download
+        # Audio player
         if st.session_state.get("simple_audio_data"):
             st.audio(st.session_state.simple_audio_data, format="audio/wav")
             
             # Download button
             audio_filename = st.session_state.get("simple_audio_filename", "audio.wav")
             st.download_button(
-                label="📥 Download Audio (.wav)",
+                "📥 Download Audio (.wav)",
                 data=st.session_state.simple_audio_data,
                 file_name=audio_filename,
                 mime="audio/wav"
