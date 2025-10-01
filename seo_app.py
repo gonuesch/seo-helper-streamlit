@@ -43,7 +43,8 @@ from api_calls import (
     detect_language,
     get_voices_for_language,
     smart_text_to_speech,
-    long_audio_synthesis
+    long_audio_synthesis,
+    text_to_speech_with_ssml
     # Commented out complex TTS functions
     # generate_text_summary,
     # generate_ssml_chunk,
@@ -1350,34 +1351,67 @@ elif selected_tool == "Text-to-Speech":
                 key="simple_voice_selection"
             )
             
+            # SSML option
+            use_ssml = st.checkbox(
+                "🎭 Use AI-enhanced speech (SSML)",
+                value=True,
+                help="Uses Gemini AI to add natural pauses and pacing for more expressive audio. May increase processing time."
+            )
+            
             # Generate button
             if st.button("🎵 Generate Audio", type="primary"):
-                # Show different spinner message based on text length
-                spinner_message = "Generating audio..." if len(text_content) <= 4500 else "Generating long audio (this may take a few minutes)..."
+                # Show different spinner message based on options
+                if use_ssml:
+                    if len(text_content) <= 4500:
+                        spinner_message = "Generating SSML and audio..."
+                    else:
+                        spinner_message = "Generating SSML and long audio (this may take a few minutes)..."
+                else:
+                    spinner_message = "Generating audio..." if len(text_content) <= 4500 else "Generating long audio (this may take a few minutes)..."
                 
                 with st.spinner(spinner_message):
                     try:
                         voice_info = available_voices[selected_voice]
                         
-                        # Use smart TTS that automatically chooses standard or long audio synthesis
-                        audio_data, audio_format = smart_text_to_speech(
-                            text_content, 
-                            voice_info['name'],
-                            voice_info['language_code'],
-                            GCS_TTS_OUTPUT_BUCKET,
-                            PROJECT_ID
-                        )
+                        # Use SSML-enhanced TTS if enabled
+                        if use_ssml:
+                            audio_data, audio_format, ssml_used = text_to_speech_with_ssml(
+                                text_content, 
+                                voice_info['name'],
+                                voice_info['language_code'],
+                                GCS_TTS_OUTPUT_BUCKET,
+                                PROJECT_ID,
+                                gemini_api_key,
+                                use_ssml=True
+                            )
+                        else:
+                            # Use standard TTS without SSML
+                            audio_data, audio_format = smart_text_to_speech(
+                                text_content, 
+                                voice_info['name'],
+                                voice_info['language_code'],
+                                GCS_TTS_OUTPUT_BUCKET,
+                                PROJECT_ID
+                            )
+                            ssml_used = False
                         
                         if audio_data:
                             st.session_state.simple_audio_data = audio_data
                             st.session_state.simple_audio_format = audio_format
                             st.session_state.simple_audio_filename = f"audio_{selected_lang}_{int(time.time())}.{audio_format}"
                             
-                            # Show success message with character count
+                            # Show success message with details
                             if len(text_content) > 4500:
-                                st.success(f"✅ Long audio generated successfully! ({len(text_content):,} characters)")
+                                success_msg = f"✅ Long audio generated successfully! ({len(text_content):,} characters"
                             else:
-                                st.success(f"✅ Audio generated successfully! ({len(text_content):,} characters)")
+                                success_msg = f"✅ Audio generated successfully! ({len(text_content):,} characters"
+                            
+                            if ssml_used:
+                                success_msg += ", SSML-enhanced)"
+                            else:
+                                success_msg += ")"
+                            
+                            st.success(success_msg)
                         else:
                             st.error("❌ Audio generation failed!")
                     except Exception as e:

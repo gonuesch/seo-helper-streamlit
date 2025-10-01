@@ -1151,3 +1151,269 @@ def smart_text_to_speech(text_content: str, voice_name: str, language_code: str,
         logging.error(f"Error in smart_text_to_speech: {e}", exc_info=True)
         return (None, None)
 
+def generate_simple_ssml(text_content: str, gemini_api_key: str) -> str:
+    """
+    Uses Gemini to generate simple, natural SSML for text-to-speech.
+    Handles size management to avoid exceeding API limits.
+    Returns SSML-enriched text or original text if generation fails.
+    """
+    try:
+        import google.generativeai as genai
+        
+        # Configure Gemini
+        genai.configure(api_key=gemini_api_key)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        # Estimate SSML expansion (typically 30-50% increase)
+        estimated_ssml_size = int(len(text_content) * 1.4)
+        
+        # Define size limits based on expected usage
+        standard_api_limit = 4500
+        long_api_limit = 1000000
+        
+        # If text is too long even with expansion, we need to be more conservative
+        if estimated_ssml_size > long_api_limit:
+            logging.warning(f"Text too long for SSML enrichment ({len(text_content)} chars, estimated {estimated_ssml_size} with SSML). Using plain text.")
+            return text_content
+        
+        # Create a simplified SSML prompt for TTS
+        ssml_prompt = f"""Generate natural SSML markup for text-to-speech. 
+
+Rules:
+1. DO NOT change or modify the original text in any way
+2. ONLY add these SSML tags where appropriate:
+   - <break time="0.5s"/> for short pauses
+   - <break time="1s"/> for longer pauses
+   - <prosody rate="slow">text</prosody> for slower speech
+   - <prosody rate="fast">text</prosody> for faster speech
+3. Use pauses at sentence breaks and paragraph boundaries
+4. Keep it SIMPLE - don't over-tag
+5. Return ONLY the SSML-enriched text, WITHOUT <speak> tags
+6. Maximum expansion: 30% of original text length
+
+Text to enrich:
+---
+{text_content[:5000]}
+---
+
+Return the SSML-enriched text:"""
+
+        # Generate SSML
+        logging.info(f"Generating SSML with Gemini for {len(text_content)} characters...")
+        response = model.generate_content(ssml_prompt)
+        ssml_text = response.text.strip()
+        
+        # Validate SSML size
+        if len(ssml_text) > long_api_limit:
+            logging.warning(f"Generated SSML too long ({len(ssml_text)} chars). Using plain text.")
+            return text_content
+        
+        # Basic SSML validation
+        if '<' not in ssml_text or '>' not in ssml_text:
+            logging.warning("Generated text doesn't appear to contain SSML tags. Using original text.")
+            return text_content
+        
+        logging.info(f"SSML generated successfully. Original: {len(text_content)} chars, SSML: {len(ssml_text)} chars (expansion: {((len(ssml_text)/len(text_content))-1)*100:.1f}%)")
+        return ssml_text
+        
+    except Exception as e:
+        logging.error(f"Error generating SSML: {e}. Using plain text.", exc_info=True)
+        return text_content
+
+def text_to_speech_with_ssml(text_content: str, voice_name: str, language_code: str, gcs_bucket: str = None, project_id: str = None, gemini_api_key: str = None, use_ssml: bool = True) -> tuple:
+    """
+    Advanced TTS function that optionally generates SSML for more natural speech.
+    
+    Args:
+        text_content: The text to convert to speech
+        voice_name: The voice to use
+        language_code: The language code
+        gcs_bucket: GCS bucket for long audio synthesis
+        project_id: Google Cloud project ID
+        gemini_api_key: Gemini API key for SSML generation
+        use_ssml: Whether to use SSML enrichment (default: True)
+    
+    Returns: (audio_bytes, format, ssml_used) tuple
+    """
+    try:
+        ssml_used = False
+        final_text = text_content
+        
+        # Generate SSML if enabled and Gemini key is available
+        if use_ssml and gemini_api_key and len(text_content) > 100:
+            logging.info("Attempting to generate SSML for more natural speech...")
+            ssml_text = generate_simple_ssml(text_content, gemini_api_key)
+            
+            # Only use SSML if it's different from original and within limits
+            if ssml_text != text_content:
+                final_text = ssml_text
+                ssml_used = True
+                logging.info("Using SSML-enriched text for synthesis")
+            else:
+                logging.info("SSML generation failed or returned original text. Using plain text.")
+        
+        # Use the appropriate TTS method based on text length
+        long_audio_threshold = 4500
+        
+        if len(final_text) <= long_audio_threshold:
+            # Standard synthesis
+            logging.info(f"Using standard synthesis for {len(final_text)} characters")
+            
+            # Use SSML input if we generated SSML
+            if ssml_used:
+                audio_data = simple_text_to_speech_ssml(final_text, voice_name, language_code)
+            else:
+                audio_data = simple_text_to_speech(final_text, voice_name, language_code)
+            
+            return (audio_data, 'wav', ssml_used) if audio_data else (None, None, False)
+        else:
+            # Long audio synthesis
+            if not gcs_bucket or not project_id:
+                logging.error("GCS bucket and project ID required for long audio synthesis")
+                return (None, None, False)
+            
+            logging.info(f"Using long audio synthesis for {len(final_text)} characters")
+            result = long_audio_synthesis_ssml(final_text, voice_name, language_code, gcs_bucket, project_id, use_ssml=ssml_used)
+            
+            if result['status'] == 'success':
+                return (result['audio_content'], result['format'], ssml_used)
+            else:
+                logging.error(f"Long audio synthesis failed: {result.get('error')}")
+                return (None, None, False)
+                
+    except Exception as e:
+        logging.error(f"Error in text_to_speech_with_ssml: {e}", exc_info=True)
+        return (None, None, False)
+
+def simple_text_to_speech_ssml(ssml_content: str, voice_name: str, language_code: str) -> bytes:
+    """
+    TTS function that uses SSML input instead of plain text.
+    """
+    try:
+        from google.cloud import texttospeech
+        
+        # Initialize TTS client
+        client = texttospeech.TextToSpeechClient()
+        
+        # Wrap SSML in speak tags
+        if not ssml_content.strip().startswith('<speak>'):
+            ssml_content = f'<speak>{ssml_content}</speak>'
+        
+        # Create synthesis input with SSML
+        synthesis_input = texttospeech.SynthesisInput(ssml=ssml_content)
+        
+        # Voice selection
+        voice = texttospeech.VoiceSelectionParams(
+            language_code=language_code,
+            name=voice_name
+        )
+        
+        # Audio config
+        audio_config = texttospeech.AudioConfig(
+            audio_encoding=texttospeech.AudioEncoding.LINEAR16
+        )
+        
+        # Generate speech
+        response = client.synthesize_speech(
+            input=synthesis_input,
+            voice=voice,
+            audio_config=audio_config
+        )
+        
+        return response.audio_content
+        
+    except Exception as e:
+        logging.error(f"Error in simple_text_to_speech_ssml: {e}", exc_info=True)
+        return None
+
+def long_audio_synthesis_ssml(content: str, voice_name: str, language_code: str, gcs_bucket: str, project_id: str, use_ssml: bool = False) -> dict:
+    """
+    Long audio synthesis that supports both text and SSML input.
+    """
+    try:
+        from google.cloud import texttospeech_v1
+        from google.cloud import storage
+        import time
+        
+        # Initialize TTS client
+        client = texttospeech_v1.TextToSpeechLongAudioSynthesizeClient()
+        
+        # Check content length
+        max_chars = 1000000
+        if len(content) > max_chars:
+            logging.warning(f"Content too long ({len(content)} chars). Truncating to {max_chars} characters.")
+            content = content[:max_chars]
+        
+        logging.info(f"Starting long audio synthesis for {len(content)} characters (SSML: {use_ssml})")
+        
+        # Create unique output filename
+        output_gcs_uri = f"gs://{gcs_bucket}/tts_output_{int(time.time())}.wav"
+        
+        # Create synthesis input (SSML or text)
+        if use_ssml:
+            # Wrap SSML in speak tags if not already wrapped
+            if not content.strip().startswith('<speak>'):
+                content = f'<speak>{content}</speak>'
+            input_config = texttospeech_v1.SynthesisInput(ssml=content)
+        else:
+            input_config = texttospeech_v1.SynthesisInput(text=content)
+        
+        # Voice selection
+        voice_config = texttospeech_v1.VoiceSelectionParams(
+            language_code=language_code,
+            name=voice_name
+        )
+        
+        # Audio config
+        audio_config = texttospeech_v1.AudioConfig(
+            audio_encoding=texttospeech_v1.AudioEncoding.LINEAR16
+        )
+        
+        # Create the request
+        request = texttospeech_v1.SynthesizeLongAudioRequest(
+            parent=f"projects/{project_id}/locations/global",
+            input=input_config,
+            voice=voice_config,
+            audio_config=audio_config,
+            output_gcs_uri=output_gcs_uri
+        )
+        
+        # Start the operation
+        logging.info(f"Submitting long audio synthesis request to GCS: {output_gcs_uri}")
+        operation = client.synthesize_long_audio(request=request)
+        
+        logging.info("Waiting for long audio synthesis to complete...")
+        response = operation.result(timeout=600)
+        
+        logging.info(f"Long audio synthesis completed. Output: {output_gcs_uri}")
+        
+        # Download the audio from GCS
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(gcs_bucket)
+        blob_name = output_gcs_uri.replace(f"gs://{gcs_bucket}/", "")
+        blob = bucket.blob(blob_name)
+        
+        audio_bytes = blob.download_as_bytes()
+        logging.info(f"Downloaded audio from GCS: {len(audio_bytes)} bytes")
+        
+        # Delete temporary file
+        try:
+            blob.delete()
+            logging.info(f"Deleted temporary file from GCS: {blob_name}")
+        except Exception as e:
+            logging.warning(f"Could not delete temporary file from GCS: {e}")
+        
+        return {
+            'status': 'success',
+            'audio_content': audio_bytes,
+            'gcs_uri': output_gcs_uri,
+            'format': 'wav'
+        }
+        
+    except Exception as e:
+        logging.error(f"Error in long_audio_synthesis_ssml: {e}", exc_info=True)
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
