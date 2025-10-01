@@ -882,76 +882,76 @@ with st.sidebar:
     elif selected_tool == "Barrierefreie Bildbeschreibung":
         st.markdown(f"Erzeuge **Bildbeschreibungen** mit Gemini.\n\n**Unterstützte Formate:** `{supported_formats_images}`\n\n**Download möglich:** Die Ergebnisse können als Excel-Datei heruntergeladen werden.\n\nBei Fragen -> Gordon")
     elif selected_tool == "Text-to-Speech":
-    st.header("Text-to-Speech")
-    st.caption("Upload a document and convert it to audio. Text will be automatically truncated to API limits.")
+        st.header("Text-to-Speech")
+        st.caption("Upload a document and convert it to audio. Text will be automatically truncated to API limits.")
 
-    # Import the simple TTS functions
-    from api_calls import simple_text_to_speech, get_simple_voices
-    
-    # Document upload
-    uploaded_file = st.file_uploader(
-        label="Upload your document (.docx or .pdf)",
-        type=['docx', 'pdf'],
-        key="simple_tts_uploader"
-    )
-    
-    if uploaded_file:
-        # Extract text from document
-        if uploaded_file.name.endswith('.pdf'):
-            text_content = read_text_from_pdf(BytesIO(uploaded_file.getvalue()))
-        elif uploaded_file.name.endswith('.docx'):
-            text_content = read_text_from_docx(BytesIO(uploaded_file.getvalue()))
-        else:
-            text_content = None
+        # Import the simple TTS functions
+        from api_calls import simple_text_to_speech, get_simple_voices
         
-        if text_content:
-            st.success(f"✅ Document loaded ({len(text_content):,} characters)")
-            
-            # Show text preview
-            with st.expander("📄 Text Preview"):
-                st.text(text_content[:1000] + "..." if len(text_content) > 1000 else text_content)
-            
-            # Voice selection
-            voices = get_simple_voices()
-            selected_voice = st.selectbox(
-                "🎤 Choose Voice:",
-                list(voices.keys()),
-                key="simple_voice_selection"
-            )
-            
-            # Generate audio button
-            if st.button("🎵 Generate Audio", type="primary"):
-                with st.spinner("Generating audio..."):
-                    try:
-                        voice_id = voices[selected_voice]
-                        audio_data = simple_text_to_speech(text_content, voice_id)
-                        
-                        if audio_data:
-                            st.session_state.simple_audio_data = audio_data
-                            st.session_state.simple_audio_filename = f"audio_{int(time.time())}.wav"
-                            st.success("✅ Audio generated successfully!")
-                        else:
-                            st.error("❌ Audio generation failed!")
-                    except Exception as e:
-                        st.error(f"❌ Error: {str(e)}")
-                        logging.error(f"Simple TTS error: {e}", exc_info=True)
-        else:
-            st.error("❌ Could not extract text from document")
-    
-    # Audio player and download
-    if st.session_state.get("simple_audio_data"):
-        st.audio(st.session_state.simple_audio_data, format="audio/wav")
-        
-        # Download button
-        audio_filename = st.session_state.get("simple_audio_filename", "audio.wav")
-        st.download_button(
-            label="📥 Download Audio (.wav)",
-            data=st.session_state.simple_audio_data,
-            file_name=audio_filename,
-            mime="audio/wav"
+        # Document upload
+        uploaded_file = st.file_uploader(
+            label="Upload your document (.docx or .pdf)",
+            type=['docx', 'pdf'],
+            key="simple_tts_uploader"
         )
+        
+        if uploaded_file:
+            # Extract text from document
+            if uploaded_file.name.endswith('.pdf'):
+                text_content = read_text_from_pdf(BytesIO(uploaded_file.getvalue()))
+            elif uploaded_file.name.endswith('.docx'):
+                text_content = read_text_from_docx(BytesIO(uploaded_file.getvalue()))
+            else:
+                text_content = None
+            
+            if text_content:
+                st.success(f"✅ Document loaded ({len(text_content):,} characters)")
+                
+                # Show text preview
+                with st.expander("📄 Text Preview"):
+                    st.text(text_content[:1000] + "..." if len(text_content) > 1000 else text_content)
+                
+                # Voice selection
+                voices = get_simple_voices()
+                selected_voice = st.selectbox(
+                    "🎤 Choose Voice:",
+                    list(voices.keys()),
+                    key="simple_voice_selection"
+                )
+                
+                # Generate audio button
+                if st.button("🎵 Generate Audio", type="primary"):
+                    with st.spinner("Generating audio..."):
+                        try:
+                            voice_id = voices[selected_voice]
+                            audio_data = simple_text_to_speech(text_content, voice_id)
+                            
+                            if audio_data:
+                                st.session_state.simple_audio_data = audio_data
+                                st.session_state.simple_audio_filename = f"audio_{int(time.time())}.wav"
+                                st.success("✅ Audio generated successfully!")
+                            else:
+                                st.error("❌ Audio generation failed!")
+                        except Exception as e:
+                            st.error(f"❌ Error: {str(e)}")
+                            logging.error(f"Simple TTS error: {e}", exc_info=True)
+            else:
+                st.error("❌ Could not extract text from document")
+        
+        # Audio player and download
+        if st.session_state.get("simple_audio_data"):
+            st.audio(st.session_state.simple_audio_data, format="audio/wav")
+            
+            # Download button
+            audio_filename = st.session_state.get("simple_audio_filename", "audio.wav")
+            st.download_button(
+                label="📥 Download Audio (.wav)",
+                data=st.session_state.simple_audio_data,
+                file_name=audio_filename,
+                mime="audio/wav"
+            )
 
-elif selected_tool == "Manuskript-Übersetzung":
+    elif selected_tool == "Manuskript-Übersetzung":
         st.markdown("Übersetze **deutsche Manuskripte** ins Englische im Hintergrund.\n\n**Unterstützte Formate:** `.docx`, `.pdf`\n\n**Features:** Asynchrone Verarbeitung, Job-Tracking\n\nBei Fragen -> Gordon")
 
 st.divider()
