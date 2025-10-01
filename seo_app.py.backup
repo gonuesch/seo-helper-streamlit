@@ -1,14 +1,5 @@
 # seo_app.py - Finale, bereinigte Version für IAP-Authentifizierung
 
-import asyncio
-
-# Behebt den "RuntimeError: no running event loop" in bestimmten Umgebungen
-try:
-    loop = asyncio.get_running_loop()
-except RuntimeError:
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
 import streamlit as st
 from pathlib import Path
 import pandas as pd
@@ -22,11 +13,11 @@ import uuid
 import time
 import datetime
 from google.cloud import storage, firestore, pubsub_v1
-from google.cloud import texttospeech
 import random
 from typing import Tuple, Dict
 import re
 import requests
+from google.cloud import texttospeech
 import os
 
 # Richte ein einfaches Logging ein
@@ -34,18 +25,15 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Importiere Funktionen aus deinen Modulen
-from utils import convert_tiff_to_png_bytes, read_text_from_docx, read_text_from_pdf, chunk_text, chunk_text_by_paragraphs, log_exceptions, upload_to_gcs, download_from_gcs
+from utils import convert_tiff_to_png_bytes, read_text_from_docx, read_text_from_pdf, chunk_text, chunk_text_by_paragraphs, log_exceptions
 from api_calls import (
     generate_seo_tags_cached, 
     generate_accessibility_description_cached,
-    simple_text_to_speech,
-    get_simple_voices
-    # Commented out complex TTS functions
-    # generate_text_summary,
-    # generate_ssml_chunk,
-    # get_google_tts_voices,
-    # get_voice_recommendations,
-    # generate_long_audio_gcs
+    generate_text_summary,
+    generate_ssml_chunk,
+    get_google_tts_voices,
+    generate_audio_google_tts,
+    get_voice_recommendations
 )
 
 # --- SICHERHEITSKONFIGURATION FÜR TTS ---
@@ -63,12 +51,6 @@ GOOGLE_TTS_PRICE_PER_1M_CHARS = 4.0  # $4 pro 1 Million Zeichen
 # $10 ÷ $0.18 × 1000 Zeichen = 55.556 Zeichen
 # 55.556 ÷ 1562.5 = ~35.5 Seiten
 MAX_PAGES_FOR_TTS = 35  # Maximale Seitenanzahl für TTS
-
-# API Limit für Long Audio Synthesis (in Bytes)
-# Wir setzen ein konservatives Limit für den reinen Text, um SSML-Expansion zu berücksichtigen
-LONG_AUDIO_API_LIMIT_BYTES = 1_000_000
-SSML_EXPANSION_FACTOR = 1.25 # Annahme: 25% Längenzunahme durch SSML
-SAFE_CHAR_LIMIT_FOR_TTS = int(LONG_AUDIO_API_LIMIT_BYTES / SSML_EXPANSION_FACTOR)
 
 def calculate_tts_cost(text_length_chars):
     """Berechnet die Kosten für Google TTS basierend auf Textlänge."""
@@ -131,7 +113,7 @@ def get_google_credentials():
         # Hole die komplette Service Account JSON aus dem Secret Manager
         client = secretmanager.SecretManagerServiceClient()
         project_id = "avid-infinity-458913-p3"
-        secret_name = "google-tts-service-account"  # Updated to match correct service account
+        secret_name = "google-tts-service-account"
         name = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
         response = client.access_secret_version(request={"name": name})
         service_account_json = response.payload.data.decode("UTF-8")
@@ -154,12 +136,16 @@ if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
     logger.info("🗑️ GOOGLE_APPLICATION_CREDENTIALS Umgebungsvariable entfernt")
 
 # Lade Credentials
-# TTS credentials will be loaded when needed in TTS functions
+google_credentials = get_google_credentials()
 
 # Richte den Google Cloud Pub/Sub Publisher ein
-# Verwende immer Cloud Run Default Service Account für Pub/Sub
-publisher = pubsub_v1.PublisherClient()
-logger.info("✅ Pub/Sub Client mit Cloud Run Default Service Account initialisiert")
+if google_credentials:
+    publisher = pubsub_v1.PublisherClient(credentials=google_credentials)
+    logger.info("✅ Pub/Sub Client mit expliziten Credentials initialisiert")
+else:
+    # Verwende Cloud Run Default Service Account
+    publisher = pubsub_v1.PublisherClient()
+    logger.info("✅ Pub/Sub Client mit Cloud Run Default Service Account initialisiert")
 
 topic_path = publisher.topic_path("avid-infinity-458913-p3", "event-tracking-toolbox")
 
@@ -169,19 +155,19 @@ BUCKET_NAME = "manuskripte-upload-avid-infinity"
 FIRESTORE_DB_ID = "hbu-toolbox-firestone"
 PUB_SUB_TOPIC = "start-translation"
 
-# GCS Buckets für Text-to-Speech
-GCS_TTS_OUTPUT_BUCKET = "tts-output-europe-west4-6899" # Bucket für MP3-Dateien
-
-# Verwende immer Cloud Run Default Service Account für Storage und Firestore
-storage_client = storage.Client(project=PROJECT_ID)
-firestore_client = firestore.Client(project=PROJECT_ID, database=FIRESTORE_DB_ID)
-logger.info("✅ Storage und Firestore Clients mit Cloud Run Default Service Account initialisiert")
+if google_credentials:
+    storage_client = storage.Client(project=PROJECT_ID, credentials=google_credentials)
+    firestore_client = firestore.Client(project=PROJECT_ID, database=FIRESTORE_DB_ID, credentials=google_credentials)
+    logger.info("✅ Storage und Firestore Clients mit expliziten Credentials initialisiert")
+else:
+    storage_client = storage.Client(project=PROJECT_ID)
+    firestore_client = firestore.Client(project=PROJECT_ID, database=FIRESTORE_DB_ID)
+    logger.info("✅ Storage und Firestore Clients mit Default Credentials initialisiert")
 
 # Pub/Sub Publisher für Translation Jobs
 pubsub_publisher = publisher  # Verwende den bereits initialisierten Publisher
 translation_topic_path = publisher.topic_path(PROJECT_ID, PUB_SUB_TOPIC)
 logger.info("✅ Translation Pub/Sub Publisher und Topic Path initialisiert")
-
 
 # Pub/Sub Event Tracking Funktion
 def send_event_to_pubsub(event_data):
@@ -797,8 +783,6 @@ if 'uploaded_file_name' not in st.session_state:
     st.session_state.uploaded_file_name = None
 if 'tts_result' not in st.session_state:
     st.session_state.tts_result = None
-if 'ssml_generated' not in st.session_state:
-    st.session_state.ssml_generated = False
 
 # Für Übersetzungs-Tool
 if 'translation_job_id' not in st.session_state:
@@ -835,13 +819,15 @@ if 'click_counter' not in st.session_state:
 # API-Schlüssel direkt aus st.secrets laden
 gemini_api_key = st.secrets.get("gemini_api_key")
 
+
 # Prüfe, ob die API-Schlüssel vorhanden sind.
 missing_keys = []
 if not gemini_api_key:
     missing_keys.append("gemini-api-key")
 
+
 if missing_keys:
-    st.error(f" Folgende API-Schlüssel sind nicht konfiguriert: {', '.join(missing_keys)}")
+    st.error(f"🚨 Folgende API-Schlüssel sind nicht konfiguriert: {', '.join(missing_keys)}")
     st.info("Die App läuft im Demo-Modus. Funktionen sind eingeschränkt.")
     logging.warning("API-Schlüssel fehlen: %s", missing_keys)
 
@@ -882,76 +868,14 @@ with st.sidebar:
     elif selected_tool == "Barrierefreie Bildbeschreibung":
         st.markdown(f"Erzeuge **Bildbeschreibungen** mit Gemini.\n\n**Unterstützte Formate:** `{supported_formats_images}`\n\n**Download möglich:** Die Ergebnisse können als Excel-Datei heruntergeladen werden.\n\nBei Fragen -> Gordon")
     elif selected_tool == "Text-to-Speech":
-    st.header("Text-to-Speech")
-    st.caption("Upload a document and convert it to audio. Text will be automatically truncated to API limits.")
-
-    # Import the simple TTS functions
-    from api_calls import simple_text_to_speech, get_simple_voices
-    
-    # Document upload
-    uploaded_file = st.file_uploader(
-        label="Upload your document (.docx or .pdf)",
-        type=['docx', 'pdf'],
-        key="simple_tts_uploader"
-    )
-    
-    if uploaded_file:
-        # Extract text from document
-        if uploaded_file.name.endswith('.pdf'):
-            text_content = read_text_from_pdf(BytesIO(uploaded_file.getvalue()))
-        elif uploaded_file.name.endswith('.docx'):
-            text_content = read_text_from_docx(BytesIO(uploaded_file.getvalue()))
-        else:
-            text_content = None
+        st.markdown("""
+        ** Unterstützte Formate:** `.docx`, `.pdf`
         
-        if text_content:
-            st.success(f"✅ Document loaded ({len(text_content):,} characters)")
-            
-            # Show text preview
-            with st.expander("📄 Text Preview"):
-                st.text(text_content[:1000] + "..." if len(text_content) > 1000 else text_content)
-            
-            # Voice selection
-            voices = get_simple_voices()
-            selected_voice = st.selectbox(
-                "🎤 Choose Voice:",
-                list(voices.keys()),
-                key="simple_voice_selection"
-            )
-            
-            # Generate audio button
-            if st.button("🎵 Generate Audio", type="primary"):
-                with st.spinner("Generating audio..."):
-                    try:
-                        voice_id = voices[selected_voice]
-                        audio_data = simple_text_to_speech(text_content, voice_id)
-                        
-                        if audio_data:
-                            st.session_state.simple_audio_data = audio_data
-                            st.session_state.simple_audio_filename = f"audio_{int(time.time())}.wav"
-                            st.success("✅ Audio generated successfully!")
-                        else:
-                            st.error("❌ Audio generation failed!")
-                    except Exception as e:
-                        st.error(f"❌ Error: {str(e)}")
-                        logging.error(f"Simple TTS error: {e}", exc_info=True)
-        else:
-            st.error("❌ Could not extract text from document")
-    
-    # Audio player and download
-    if st.session_state.get("simple_audio_data"):
-        st.audio(st.session_state.simple_audio_data, format="audio/wav")
+        **🎤 TTS:** Google Cloud Text-to-Speech
         
-        # Download button
-        audio_filename = st.session_state.get("simple_audio_filename", "audio.wav")
-        st.download_button(
-            label="📥 Download Audio (.wav)",
-            data=st.session_state.simple_audio_data,
-            file_name=audio_filename,
-            mime="audio/wav"
-        )
-
-elif selected_tool == "Manuskript-Übersetzung":
+        Bei Fragen -> Gordon
+        """)
+    elif selected_tool == "Manuskript-Übersetzung":
         st.markdown("Übersetze **deutsche Manuskripte** ins Englische im Hintergrund.\n\n**Unterstützte Formate:** `.docx`, `.pdf`\n\n**Features:** Asynchrone Verarbeitung, Job-Tracking\n\nBei Fragen -> Gordon")
 
 st.divider()
@@ -977,7 +901,6 @@ if selected_tool != st.session_state.get("last_selected_tool", ""):
     st.session_state.accessibility_export_data = None
     st.session_state.accessibility_summary = None
     st.session_state.tts_result = None
-    st.session_state.ssml_generated = False
     st.session_state.translation_job_id = None
     st.session_state.translation_job_status = None
     st.session_state.current_style_guide = None
@@ -1370,15 +1293,32 @@ elif selected_tool == "Text-to-Speech":
         st.metric("💰 Kostendeckel", f"${MAX_TTS_COST_USD}")
     
     with col2:
-        st.metric("📝 Max. Zeichen", "1,000,000")
+        st.metric("📄 Max. Seiten", f"{MAX_PAGES_FOR_TTS}")
     
     with col3:
         st.metric("⏱️ Zeitlimit", f"{MAX_TTS_RUNTIME_MINUTES} Min")
     
-    st.caption(f"💡 **Hinweis:** Die `synthesizeLongAudio` API unterstützt bis zu {LONG_AUDIO_API_LIMIT_BYTES:,} Bytes an Input-Text (inklusive SSML-Markup).")
+    st.caption(f"💡 **Empfehlung:** Dokumente mit maximal {MAX_PAGES_FOR_TTS} Seiten (ca. {MAX_PAGES_FOR_TTS * 1250:,} Zeichen) für optimale Ergebnisse. Größere Dokumente können aufgeteilt werden.")
 
-    # --- Step 1: Dokument hochladen ---
-    if st.session_state.tts_step == 1:
+    if st.session_state.tts_step == 2:
+        st.subheader("2. Stimme auswählen")
+        
+        # Zeige die KI-Empfehlungen
+        if st.session_state.get("top_3_voices"):
+            guideline, recommendations = st.session_state.top_3_voices
+            
+            st.success("✅ KI-Analyse abgeschlossen!")
+            
+            # Zeige die Regieleitlinie
+            with st.expander("📋 KI-Regieleitlinie anzeigen"):
+                st.text(guideline)
+            
+            # Erster Button (Zeile 1312) - Key hinzufügen
+            if st.button("🎤 SSML vorbereiten", type="primary", key="ssml_button_1"):
+                st.session_state.tts_step = 3
+                st.rerun()
+
+    elif st.session_state.tts_step < 3:
         st.subheader("1. Dokument hochladen")
         uploaded_file = st.file_uploader(
             label="Lade dein Dokument hoch (.docx oder .pdf)",
@@ -1386,77 +1326,100 @@ elif selected_tool == "Text-to-Speech":
             key="tts_uploader"
         )
 
-        if uploaded_file:
-            # Kosten- und Seitenanalyse vor der Verarbeitung
-            with st.spinner("Analysiere Dokument..."):
-                if uploaded_file.name.lower().endswith('.pdf'):
-                    text_content = read_text_from_pdf(uploaded_file)
-                else:
-                    text_content = read_text_from_docx(uploaded_file)
-            
-            # --- Validierung des Dokuments ---
-            document_is_valid = True
-            if not text_content or not text_content.strip() or text_content == "NO_TEXT_IN_PDF":
-                st.error("Das Dokument scheint keinen lesbaren Text zu enthalten.")
-                document_is_valid = False
-            elif len(text_content) > SAFE_CHAR_LIMIT_FOR_TTS:
-                st.error(f"❌ Dokument zu lang ({len(text_content):,} Zeichen)")
-                st.warning(f"Das Limit für diese Funktion liegt bei {SAFE_CHAR_LIMIT_FOR_TTS:,} Zeichen, um die API-Grenze von {LONG_AUDIO_API_LIMIT_BYTES:,} Bytes nicht zu überschreiten. Bitte kürzen Sie das Dokument oder teilen Sie es auf.")
-                document_is_valid = False
+    if 'uploaded_file' not in locals():
+        uploaded_file = None 
+
+    if uploaded_file and st.session_state.tts_step == 1:
+        # Kosten- und Seitenanalyse vor der Verarbeitung
+        with st.spinner("Analysiere Dokument..."):
+            if uploaded_file.name.lower().endswith('.pdf'):
+                text_content = read_text_from_pdf(uploaded_file)
             else:
-                st.success(f"✅ Ihr Dokument hat eine passende Länge ({len(text_content):,} Zeichen) und kann verarbeitet werden.")
-
-            # Nur wenn das Dokument gültig ist, den Button anzeigen
-            if document_is_valid:
-                if st.button("Text analysieren & Stimmen empfehlen", type="primary"):
-                    logging.info(" TTS Button clicked - starting analysis process")
-                    st.session_state.uploaded_file_name = uploaded_file.name 
-                    st.session_state.text_content = text_content
+                text_content = read_text_from_docx(uploaded_file)
+        
+        if not text_content or not text_content.strip() or text_content == "NO_TEXT_IN_PDF":
+            st.error("Das Dokument scheint keinen lesbaren Text zu enthalten.")
+        else:
+            # Kosten- und Seitenanalyse anzeigen
+            estimated_cost = estimate_total_tts_cost(text_content)
+            estimated_pages = estimate_page_count(text_content)
+            
+            st.success("✅ Dokument erfolgreich gelesen!")
+            
+            # Kosten- und Seitenanalyse
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("📄 Geschätzte Seiten", estimated_pages)
+            with col2:
+                st.metric("💰 Geschätzte Kosten", f"${estimated_cost:.2f}")
+            with col3:
+                if estimated_pages <= MAX_PAGES_FOR_TTS and estimated_cost <= MAX_TTS_COST_USD:
+                    st.metric("✅ Status", "OK")
+                else:
+                    st.metric("⚠️ Status", "Limit überschritten")
+            
+            # Warnung bei Überschreitung
+            if estimated_pages > MAX_PAGES_FOR_TTS or estimated_cost > MAX_TTS_COST_USD:
+                st.warning(f"⚠️ **Achtung:** Ihr Dokument überschreitet die Limits!")
+                if estimated_pages > MAX_PAGES_FOR_TTS:
+                    st.write(f"• **Seitenlimit:** {estimated_pages} Seiten > {MAX_PAGES_FOR_TTS} Seiten (maximal)")
+                if estimated_cost > MAX_TTS_COST_USD:
+                    st.write(f"• **Kostenlimit:** ${estimated_cost:.2f} > ${MAX_TTS_COST_USD} (maximal)")
+                st.write("**Empfehlung:** Teilen Sie das Dokument in kleinere Abschnitte auf oder kontaktieren Sie den Administrator.")
+            else:
+                st.success("✅ Ihr Dokument liegt innerhalb der Limits und kann verarbeitet werden!")
+        
+        if st.button("Text analysieren & Stimmen empfehlen", type="primary"):
+            logging.info(" TTS Button clicked - starting analysis process")
+            st.session_state.uploaded_file_name = uploaded_file.name 
+            st.session_state.text_content = text_content
+            
+            with st.status("Führe KI-Analyse aus...", expanded=True) as status:
+                try:
+                    status.write("Schritt 1/3: Erstelle Zusammenfassung des Textes...")
+                    logging.info(" Starting step 1/3: Text summary generation")
+                    summary = generate_text_summary(text_content, gemini_api_key)
+                    st.session_state.summary = summary
+                    status.write("✅ Zusammenfassung erstellt")
+                    logging.info("✅ Step 1/3 completed: Summary created")
                     
-                    with st.status("Führe KI-Analyse aus...", expanded=True) as status:
-                        try:
-                            status.write("Schritt 1/2: Erstelle Zusammenfassung des Textes...")
-                            logging.info(" Starting step 1/2: Text summary generation")
-                            summary = generate_text_summary(text_content, gemini_api_key)
-                            st.session_state.summary = summary
-                            status.write("✅ Zusammenfassung erstellt")
-                            logging.info("✅ Step 1/2 completed: Summary created")
-                            
-                            status.write("Schritt 2/2: Empfehle passende Stimmen & generiere Regieanweisung...")
-                            logging.info(" Starting step 2/2: Voice recommendations")
-                            
-                            # Hole verfügbare Stimmen von Google TTS
-                            logging.info(" Fetching available voices from Google TTS API")
-                            available_voices = get_google_tts_voices()
-                            logging.info(f"🎤 Retrieved {len(available_voices)} voices from API")
-                            
-                            # Speichere Stimmen im Session State für spätere Verwendung
-                            st.session_state.voices = available_voices
-                            
-                            voices_info = "\n".join([f"{name}" for name in available_voices.keys()]) if available_voices and "Fehler" not in available_voices else "Adam, Antoni, Arnold, Bella, Domi, Elli, Josh, Rachel, Sam"
-                            logging.info(f"🎤 Voices info prepared: {len(voices_info)} characters")
-                            
-                            logging.info("🤖 Calling get_voice_recommendations with 3 parameters")
-                            top_3_voices = get_voice_recommendations(summary, voices_info, gemini_api_key)
-                            st.session_state.top_3_voices = top_3_voices
-                            
-                            # Extrahiere und speichere die Regieanweisung explizit
-                            if top_3_voices and isinstance(top_3_voices, tuple) and len(top_3_voices) > 0:
-                                st.session_state.guideline = top_3_voices[0]
+                    status.write("Schritt 2/3: Generiere KI-Regieanweisung...")
+                    logging.info(" Starting step 2/3: SSML guideline generation")
+                    guideline = generate_ssml_chunk(summary, gemini_api_key)
+                    st.session_state.guideline = guideline
+                    status.write("✅ KI-Regieanweisung generiert")
+                    logging.info("✅ Step 2/3 completed: SSML guideline created")
+                    
+                    status.write("Schritt 3/3: Empfehle passende Stimmen...")
+                    logging.info(" Starting step 3/3: Voice recommendations")
+                    
+                    # Hole verfügbare Stimmen von Google TTS
+                    logging.info(" Fetching available voices from Google TTS API")
+                    available_voices = get_google_tts_voices()
+                    logging.info(f"🎤 Retrieved {len(available_voices)} voices from API")
+                    
+                    # Speichere Stimmen im Session State für spätere Verwendung
+                    st.session_state.voices = available_voices
+                    
+                    voices_info = "\n".join([f"{name}" for name in available_voices.keys()]) if available_voices and "Fehler" not in available_voices else "Adam, Antoni, Arnold, Bella, Domi, Elli, Josh, Rachel, Sam"
+                    logging.info(f"🎤 Voices info prepared: {len(voices_info)} characters")
+                    
+                    logging.info("🤖 Calling get_voice_recommendations with 3 parameters")
+                    top_3_voices = get_voice_recommendations(summary, voices_info, gemini_api_key)
+                    st.session_state.top_3_voices = top_3_voices
+                    status.write("✅ Stimmen-Empfehlungen erstellt")
+                    logging.info("✅ Step 3/3 completed: Voice recommendations created")
+                    
+                except Exception as e:
+                    logging.error(f"❌ Error in TTS analysis process: {e}", exc_info=True)
+                    st.error(f"Fehler bei der Analyse: {e}")
+                    # Fehler aufgetreten, aber Prozess fortsetzen
+            
+            logging.info("🔄 Setting tts_step to 2 and calling st.rerun()")
+            st.session_state.tts_step = 2
+            st.rerun()
 
-                            status.write("✅ Stimmen-Empfehlungen erstellt")
-                            logging.info("✅ Step 2/2 completed: Voice recommendations created")
-                            
-                        except Exception as e:
-                            logging.error(f"❌ Error in TTS analysis process: {e}", exc_info=True)
-                            st.error(f"Fehler bei der Analyse: {e}")
-                        
-                        logging.info("🔄 Setting tts_step to 2 and calling st.rerun()")
-                        st.session_state.tts_step = 2
-                        st.rerun()
-
-    # --- Step 2: Stimme auswählen ---
-    if st.session_state.tts_step >= 2:
+    elif st.session_state.tts_step == 2:
         st.subheader("2. Stimme auswählen")
         
         # Zeige die KI-Empfehlungen
@@ -1498,107 +1461,89 @@ elif selected_tool == "Text-to-Speech":
                     st.session_state.tts_step = 3
                     st.rerun()
 
-    # --- Step 3: SSML vorbereiten und Audio generieren ---
-    if st.session_state.tts_step >= 3:
+    elif st.session_state.tts_step == 3:
         logging.info("📝 TTS Step 3: SSML preparation step reached")
-        st.subheader("3. SSML vorbereiten und Audio generieren")
+        st.subheader("3. SSML vorbereiten")
         
-        if st.session_state.get("selected_voice_name") and st.session_state.get("guideline") and st.session_state.get("text_content"):
+        if st.session_state.get("selected_voice_name") and st.session_state.get("guideline"):
             selected_voice = st.session_state.selected_voice_name
             ssml_guideline = st.session_state.get("guideline")
-            text_content = st.session_state.get("text_content")
-
+            
             logging.info(f"🎤 Selected voice: {selected_voice}")
             logging.info(f"📝 SSML guideline length: {len(ssml_guideline)} characters")
             
             st.info(f"🎤 Vorbereitung für Stimme: **{selected_voice}**")
             
-            # Generate SSML from the original text, only if not already done
-            if not st.session_state.get("ssml_generated", False):
-                with st.spinner("Generiere SSML aus Text..."):
-                    logging.info("📝 Splitting text into chunks")
-                    # paragraphs in diesem Fall als Chunks verwendet
-                    text_chunks = chunk_text_by_paragraphs(text_content, 4500) 
-                    logging.info(f"📝 Created {len(text_chunks)} text chunks")
-
-                    ssml_chunks = []
-                    progress_bar = st.progress(0, text=f"Erstelle SSML Chunk 1/{len(text_chunks)}")
-                    for i, chunk in enumerate(text_chunks):
-                        logging.info(f"📝 Generating SSML for chunk {i+1}/{len(text_chunks)}")
-                        # Hier wird für jeden Text-Chunk SSML generiert
-                        ssml_chunk = generate_ssml_chunk(ssml_guideline, chunk, gemini_api_key)
-                        if ssml_chunk:
-                            ssml_chunks.append(ssml_chunk)
-                        progress_bar.progress((i + 1) / len(text_chunks), text=f"Erstelle SSML Chunk {i+1}/{len(text_chunks)}")
-                    
-                    logging.info(f"📝 Created {len(ssml_chunks)} SSML chunks")
-                    st.session_state.ssml_chunks = ssml_chunks
-                    st.session_state.ssml_generated = True  # Mark SSML as generated
-                    st.success(f"✅ SSML in {len(ssml_chunks)} Chunks aufgeteilt und generiert.")
-
+            # Teile SSML in Chunks auf
+            logging.info("📝 Splitting SSML into chunks")
+            ssml_chunks = chunk_ssml_for_google_tts(ssml_guideline)
+            logging.info(f"📝 Created {len(ssml_chunks)} SSML chunks")
+            
+            st.success(f"✅ SSML in {len(ssml_chunks)} Chunks aufgeteilt")
+            
+            # Speichere Chunks im Session State
+            st.session_state.ssml_chunks = ssml_chunks
+            
             if st.button("🚀 Audio jetzt generieren", type="primary"):
                 logging.info("🚀 Audio generation button clicked")
                 
                 try:
                     # Hole Stimme-ID für Google TTS
                     voice_id = None
-                    language_code = None
                     if st.session_state.get("google_voices"):
                         voice_data = st.session_state.google_voices.get(selected_voice)
                         if voice_data:
                             voice_id = voice_data.get("voice_id")
-                            language_code = voice_data.get("language")
                     
-                    if not voice_id or not language_code:
-                        st.error("❌ Stimme-ID oder Sprachcode nicht gefunden!")
-                        logging.error(f"❌ Voice ID or language code not found for voice: {selected_voice}")
+                    if not voice_id:
+                        st.error("❌ Stimme-ID nicht gefunden!")
+                        logging.error(f"❌ Voice ID not found for voice: {selected_voice}")
                     else:
                         logging.info(f"🎤 Using Google TTS voice ID: {voice_id}")
                         
-                        # Use the SSML chunks from session state
-                        ssml_chunks = st.session_state.get("ssml_chunks", [])
-                        if not ssml_chunks:
-                            st.error("❌ Keine SSML-Daten gefunden. Bitte gehen Sie einen Schritt zurück.")
-                            logging.error("❌ No SSML chunks found in session state for audio generation.")
-                        else:
-                            # [REFACTOR] New long audio synthesis process
-                            with st.spinner("🎵 Generiere Audio mit Google TTS Long Audio API..."):
-                                # 1. Combine all SSML chunks into one string for the API call
-                                full_ssml_content = "".join(ssml_chunks)
-                                
-                                # 2. Call the long audio synthesis function with the full SSML content
-                                audio_bytes = generate_long_audio_gcs(
-                                    full_ssml_content,
-                                    voice_id, 
-                                    language_code,
-                                    PROJECT_ID,
-                                    GCS_TTS_OUTPUT_BUCKET
-                                )
-                                
-                                if audio_bytes:
-                                    st.session_state.audio_data = audio_bytes
-                                    st.session_state.audio_filename = f"tts_audio_{int(time.time())}.wav"
-                                    st.success("✅ Audio erfolgreich generiert!")
-                                    logging.info("✅ Audio generation completed successfully")
+                        # Generiere Audio für alle Chunks
+                        all_audio_chunks = []
+                        with st.spinner("🎵 Generiere Audio mit Google TTS..."):
+                            for i, chunk in enumerate(ssml_chunks):
+                                logging.info(f"🎵 Generating audio for chunk {i+1}/{len(ssml_chunks)}")
+                                audio_chunk = generate_audio_google_tts(chunk, voice_id)
+                                if audio_chunk:
+                                    all_audio_chunks.append(audio_chunk)
+                                    logging.info(f"✅ Chunk {i+1} audio generated successfully")
                                 else:
-                                    st.error("❌ Audio-Generierung fehlgeschlagen!")
-                                    logging.error("❌ Audio generation failed.")
-
+                                    logging.error(f"❌ Failed to generate audio for chunk {i+1}")
+                        
+                        if not all_audio_chunks:
+                            st.error("❌ Audio-Generierung fehlgeschlagen!")
+                            logging.error("❌ No audio chunks generated")
+                        else:
+                            # Füge alle Audio-Chunks zusammen
+                            logging.info("🎵 Combining audio chunks")
+                            combined_audio = b"".join(all_audio_chunks)
+                            logging.info(f"✅ Combined audio size: {len(combined_audio)} bytes")
+                            
+                            # Speichere Audio im Session State
+                            st.session_state.audio_data = combined_audio
+                            st.session_state.audio_filename = f"tts_audio_{int(time.time())}.mp3"
+                            
+                            st.success("✅ Audio erfolgreich generiert!")
+                            logging.info("✅ Audio generation completed successfully")
+                    
                 except Exception as e:
                     st.error(f"❌ Fehler bei Audio-Generierung: {str(e)}")
-                    logging.error(f"❌ Audio generation error: {str(e)}", exc_info=True)
+                    logging.error(f"❌ Audio generation error: {str(e)}")
         
         # Audio Player und Download
         if st.session_state.get("audio_data"):
-            st.audio(st.session_state.audio_data, format="audio/wav")
+            st.audio(st.session_state.audio_data, format="audio/mpeg")
             
             # Download Button
-            audio_filename = st.session_state.get("audio_filename", "tts_audio.wav")
+            audio_filename = st.session_state.get("audio_filename", "tts_audio.mp3")
             st.download_button(
-                label="📥 Audio herunterladen (.wav)",
+                label="📥 Audio herunterladen",
                 data=st.session_state.audio_data,
                 file_name=audio_filename,
-                mime="audio/wav"
+                mime="audio/mpeg"
             )
 
 elif selected_tool == "Manuskript-Übersetzung":
@@ -2035,3 +1980,5 @@ def get_voice_recommendations(_summary: str, _voices_info: str = None, gemini_ap
     except Exception as e:
         logger.error(f"Fehler bei der Regie-Erstellung: {e}", exc_info=True)
         return f"Fehler bei der Regie-Erstellung: {e}", []
+
+

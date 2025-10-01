@@ -839,3 +839,119 @@ def generate_long_audio_gcs(ssml_content: str, voice_name: str, language_code: s
         logging.error(f"Error in generate_long_audio_gcs: {e}", exc_info=True)
         st.error(f"Fehler bei der Audiosynthese: {e}")
         return None
+
+
+def simple_generate_audio(text_content: str, voice_name: str, language_code: str = "de-DE") -> bytes:
+    """
+    Simple TTS function: truncate text to API limit and generate audio.
+    No complex SSML, no chunking, just straightforward text-to-speech.
+    """
+    try:
+        from google.cloud import texttospeech
+        
+        # Initialize TTS client
+        client = texttospeech.TextToSpeechClient()
+        
+        # Truncate text to API limit (5000 characters)
+        max_length = 4500  # Leave some buffer
+        if len(text_content) > max_length:
+            text_content = text_content[:max_length]
+            st.warning(f"Text truncated to {max_length} characters due to API limits")
+        
+        # Create synthesis input with plain text (no SSML)
+        synthesis_input = texttospeech.SynthesisInput(text=text_content)
+        
+        # Set up voice parameters
+        voice = texttospeech.VoiceSelectionParams(
+            language_code=language_code,
+            name=voice_name
+        )
+        
+        # Set up audio configuration
+        audio_config = texttospeech.AudioConfig(
+            audio_encoding=texttospeech.AudioEncoding.MP3
+        )
+        
+        # Generate speech
+        response = client.synthesize_speech(
+            input=synthesis_input,
+            voice=voice,
+            audio_config=audio_config
+        )
+        
+        st.success("Audio generated successfully!")
+        return response.audio_content
+        
+    except Exception as e:
+        st.error(f"Error generating audio: {e}")
+        return None
+
+
+
+# ==============================================================================
+# SIMPLE TTS IMPLEMENTATION
+# ==============================================================================
+
+def simple_text_to_speech(text_content: str, voice_name: str = "en-US-Standard-B") -> bytes:
+    """
+    Simple TTS function that converts text directly to audio.
+    Truncates text to API limits and generates audio.
+    """
+    try:
+        from google.cloud import texttospeech
+        
+        # Initialize TTS client
+        client = texttospeech.TextToSpeechClient()
+        
+        # Truncate text to API limit (5000 characters for standard API)
+        max_chars = 4500  # Leave some buffer
+        if len(text_content) > max_chars:
+            text_content = text_content[:max_chars]
+            logging.info(f"Text truncated to {max_chars} characters")
+        
+        # Create synthesis input
+        synthesis_input = texttospeech.SynthesisInput(text=text_content)
+        
+        # Voice selection
+        voice = texttospeech.VoiceSelectionParams(
+            language_code="en-US",  # Default to English
+            name=voice_name
+        )
+        
+        # Audio config
+        audio_config = texttospeech.AudioConfig(
+            audio_encoding=texttospeech.AudioEncoding.LINEAR16
+        )
+        
+        # Generate speech
+        response = client.synthesize_speech(
+            input=synthesis_input,
+            voice=voice,
+            audio_config=audio_config
+        )
+        
+        return response.audio_content
+        
+    except Exception as e:
+        logging.error(f"Error in simple_text_to_speech: {e}", exc_info=True)
+        return None
+
+def get_simple_voices() -> dict:
+    """
+    Returns a simple list of common voices.
+    """
+    return {
+        "en-US-Standard-A (Female)": "en-US-Standard-A",
+        "en-US-Standard-B (Male)": "en-US-Standard-B", 
+        "en-US-Standard-C (Female)": "en-US-Standard-C",
+        "en-US-Standard-D (Male)": "en-US-Standard-D",
+        "en-US-Wavenet-A (Female)": "en-US-Wavenet-A",
+        "en-US-Wavenet-B (Male)": "en-US-Wavenet-B",
+        "en-US-Wavenet-C (Female)": "en-US-Wavenet-C",
+        "en-US-Wavenet-D (Male)": "en-US-Wavenet-D",
+        "de-DE-Standard-A (Female)": "de-DE-Standard-A",
+        "de-DE-Standard-B (Male)": "de-DE-Standard-B",
+        "de-DE-Wavenet-A (Female)": "de-DE-Wavenet-A",
+        "de-DE-Wavenet-B (Male)": "de-DE-Wavenet-B"
+    }
+
