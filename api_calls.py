@@ -1050,7 +1050,7 @@ def long_audio_synthesis(text_content: str, voice_name: str, language_code: str,
         logging.info(f"Starting long audio synthesis for {len(text_content)} characters")
         
         # Create unique output filename
-        output_gcs_uri = f"gs://{gcs_bucket}/tts_output_{int(time.time())}.mp3"
+        output_gcs_uri = f"gs://{gcs_bucket}/tts_output_{int(time.time())}.wav"
         
         # Create synthesis input
         input_config = texttospeech_v1.SynthesisInput(text=text_content)
@@ -1061,9 +1061,9 @@ def long_audio_synthesis(text_content: str, voice_name: str, language_code: str,
             name=voice_name
         )
         
-        # Audio config - Long Audio API outputs to MP3
+        # Audio config - Long Audio API currently only supports LINEAR16 (WAV)
         audio_config = texttospeech_v1.AudioConfig(
-            audio_encoding=texttospeech_v1.AudioEncoding.MP3
+            audio_encoding=texttospeech_v1.AudioEncoding.LINEAR16
         )
         
         # Create the request
@@ -1106,7 +1106,7 @@ def long_audio_synthesis(text_content: str, voice_name: str, language_code: str,
             'status': 'success',
             'audio_content': audio_bytes,
             'gcs_uri': output_gcs_uri,
-            'format': 'mp3'
+            'format': 'wav'
         }
         
     except Exception as e:
@@ -1120,7 +1120,8 @@ def smart_text_to_speech(text_content: str, voice_name: str, language_code: str,
     """
     Smart TTS function that automatically chooses between standard and long audio synthesis
     based on text length.
-    Returns: (audio_bytes, format) tuple where format is 'wav' or 'mp3'
+    Returns: (audio_bytes, format) tuple where format is 'wav'
+    Note: Both standard and long audio synthesis return WAV format.
     """
     try:
         # Threshold for switching to long audio synthesis
