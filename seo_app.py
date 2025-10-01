@@ -882,77 +882,7 @@ with st.sidebar:
     elif selected_tool == "Barrierefreie Bildbeschreibung":
         st.markdown(f"Erzeuge **Bildbeschreibungen** mit Gemini.\n\n**Unterstützte Formate:** `{supported_formats_images}`\n\n**Download möglich:** Die Ergebnisse können als Excel-Datei heruntergeladen werden.\n\nBei Fragen -> Gordon")
     elif selected_tool == "Text-to-Speech":
-        st.header("🎤 Text-to-Speech")
-        st.write("Upload a document and convert it to audio.")
-        
-        # Simple test
-        st.write("✅ TTS section is working!")
-        
-        # Document upload
-        uploaded_file = st.file_uploader(
-            "Upload your document (.docx or .pdf)",
-            type=['docx', 'pdf'],
-            key="simple_tts_uploader"
-        )
-        
-        if uploaded_file:
-            st.write(f"📄 File uploaded: {uploaded_file.name}")
-            
-            # Extract text
-            if uploaded_file.name.endswith('.pdf'):
-                text_content = read_text_from_pdf(BytesIO(uploaded_file.getvalue()))
-            elif uploaded_file.name.endswith('.docx'):
-                text_content = read_text_from_docx(BytesIO(uploaded_file.getvalue()))
-            else:
-                text_content = None
-            
-            if text_content:
-                st.success(f"✅ Text extracted: {len(text_content):,} characters")
-                
-                # Show preview
-                with st.expander("📄 Text Preview"):
-                    st.text(text_content[:500] + "..." if len(text_content) > 500 else text_content)
-                
-                # Voice selection
-                voices = get_simple_voices()
-                selected_voice = st.selectbox(
-                    "🎤 Choose Voice:",
-                    list(voices.keys()),
-                    key="simple_voice_selection"
-                )
-                
-                # Generate button
-                if st.button("🎵 Generate Audio", type="primary"):
-                    with st.spinner("Generating audio..."):
-                        try:
-                            voice_id = voices[selected_voice]
-                            audio_data = simple_text_to_speech(text_content, voice_id)
-                            
-                            if audio_data:
-                                st.session_state.simple_audio_data = audio_data
-                                st.session_state.simple_audio_filename = f"audio_{int(time.time())}.wav"
-                                st.success("✅ Audio generated successfully!")
-                            else:
-                                st.error("❌ Audio generation failed!")
-                        except Exception as e:
-                            st.error(f"❌ Error: {str(e)}")
-                            logging.error(f"Simple TTS error: {e}", exc_info=True)
-            else:
-                st.error("❌ Could not extract text from document")
-        
-        # Audio player
-        if st.session_state.get("simple_audio_data"):
-            st.audio(st.session_state.simple_audio_data, format="audio/wav")
-            
-            # Download button
-            audio_filename = st.session_state.get("simple_audio_filename", "audio.wav")
-            st.download_button(
-                "📥 Download Audio (.wav)",
-                data=st.session_state.simple_audio_data,
-                file_name=audio_filename,
-                mime="audio/wav"
-            )
-
+        st.markdown("**Unterstützte Formate:** `.docx`, `.pdf`\n\n**🎤 TTS:** Google Cloud Text-to-Speech\n\nBei Fragen -> Gordon")
     elif selected_tool == "Manuskript-Übersetzung":
         st.markdown("Übersetze **deutsche Manuskripte** ins Englische im Hintergrund.\n\n**Unterstützte Formate:** `.docx`, `.pdf`\n\n**Features:** Asynchrone Verarbeitung, Job-Tracking\n\nBei Fragen -> Gordon")
 
@@ -1359,6 +1289,77 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
             col1, col2 = st.columns(2)
             col1.metric("Erfolgreich verarbeitet", summary["processed_count"])
             col2.metric("Fehlgeschlagen", summary["failed_count"], delta=None if summary["failed_count"] == 0 else -summary["failed_count"], delta_color="inverse")
+
+elif selected_tool == "Text-to-Speech":
+    st.header("🎤 Text-to-Speech")
+    st.caption("Upload a document and convert it to audio. Text will be automatically truncated to API limits.")
+    
+    # Document upload
+    uploaded_file = st.file_uploader(
+        "Upload your document (.docx or .pdf)",
+        type=['docx', 'pdf'],
+        key="simple_tts_uploader"
+    )
+    
+    if uploaded_file:
+        st.write(f"📄 File uploaded: {uploaded_file.name}")
+        
+        # Extract text
+        if uploaded_file.name.endswith('.pdf'):
+            text_content = read_text_from_pdf(BytesIO(uploaded_file.getvalue()))
+        elif uploaded_file.name.endswith('.docx'):
+            text_content = read_text_from_docx(BytesIO(uploaded_file.getvalue()))
+        else:
+            text_content = None
+        
+        if text_content:
+            st.success(f"✅ Text extracted: {len(text_content):,} characters")
+            
+            # Show preview
+            with st.expander("📄 Text Preview"):
+                st.text(text_content[:500] + "..." if len(text_content) > 500 else text_content)
+            
+            # Voice selection
+            voices = get_simple_voices()
+            selected_voice = st.selectbox(
+                "🎤 Choose Voice:",
+                list(voices.keys()),
+                key="simple_voice_selection"
+            )
+            
+            # Generate button
+            if st.button("🎵 Generate Audio", type="primary"):
+                with st.spinner("Generating audio..."):
+                    try:
+                        voice_id = voices[selected_voice]
+                        audio_data = simple_text_to_speech(text_content, voice_id)
+                        
+                        if audio_data:
+                            st.session_state.simple_audio_data = audio_data
+                            st.session_state.simple_audio_filename = f"audio_{int(time.time())}.wav"
+                            st.success("✅ Audio generated successfully!")
+                        else:
+                            st.error("❌ Audio generation failed!")
+                    except Exception as e:
+                        st.error(f"❌ Error: {str(e)}")
+                        logging.error(f"Simple TTS error: {e}", exc_info=True)
+        else:
+            st.error("❌ Could not extract text from document")
+    
+    # Audio player
+    if st.session_state.get("simple_audio_data"):
+        st.divider()
+        st.subheader("🎵 Generated Audio")
+        st.audio(st.session_state.simple_audio_data, format="audio/wav")
+        
+        # Download button
+        audio_filename = st.session_state.get("simple_audio_filename", "audio.wav")
+        st.download_button(
+            "📥 Download Audio (.wav)",
+            data=st.session_state.simple_audio_data,
+            file_name=audio_filename,
+            mime="audio/wav"
+        )
 
 elif selected_tool == "Manuskript-Übersetzung":
     st.header("Manuskript-Übersetzung (Deutsch → Englisch)")
