@@ -892,7 +892,79 @@ def simple_generate_audio(text_content: str, voice_name: str, language_code: str
 # SIMPLE TTS IMPLEMENTATION
 # ==============================================================================
 
-def simple_text_to_speech(text_content: str, voice_name: str = "en-US-Standard-B") -> bytes:
+def detect_language(text_content: str) -> str:
+    """
+    Detects the language of the given text using Google Cloud Translation API.
+    Returns a language code (e.g., 'en', 'de', 'fr').
+    """
+    try:
+        from google.cloud import translate_v2 as translate
+        
+        # Initialize Translation client
+        translate_client = translate.Client()
+        
+        # Detect language (use first 1000 chars for detection)
+        sample_text = text_content[:1000]
+        result = translate_client.detect_language(sample_text)
+        
+        detected_lang = result['language']
+        confidence = result['confidence']
+        
+        logging.info(f"Detected language: {detected_lang} (confidence: {confidence})")
+        return detected_lang
+        
+    except Exception as e:
+        logging.error(f"Error detecting language: {e}", exc_info=True)
+        return "en"  # Default to English
+
+def get_voices_for_language(language_code: str) -> dict:
+    """
+    Returns appropriate voices for the detected language.
+    """
+    # Map language codes to voice options
+    voice_map = {
+        'de': {
+            "Deutsch - Standard A (Female)": {"name": "de-DE-Standard-A", "language_code": "de-DE"},
+            "Deutsch - Standard B (Male)": {"name": "de-DE-Standard-B", "language_code": "de-DE"},
+            "Deutsch - Wavenet A (Female)": {"name": "de-DE-Wavenet-A", "language_code": "de-DE"},
+            "Deutsch - Wavenet B (Male)": {"name": "de-DE-Wavenet-B", "language_code": "de-DE"},
+            "Deutsch - Wavenet C (Female)": {"name": "de-DE-Wavenet-C", "language_code": "de-DE"},
+            "Deutsch - Wavenet D (Male)": {"name": "de-DE-Wavenet-D", "language_code": "de-DE"},
+        },
+        'en': {
+            "English (US) - Standard A (Female)": {"name": "en-US-Standard-A", "language_code": "en-US"},
+            "English (US) - Standard B (Male)": {"name": "en-US-Standard-B", "language_code": "en-US"},
+            "English (US) - Standard C (Female)": {"name": "en-US-Standard-C", "language_code": "en-US"},
+            "English (US) - Standard D (Male)": {"name": "en-US-Standard-D", "language_code": "en-US"},
+            "English (US) - Wavenet A (Female)": {"name": "en-US-Wavenet-A", "language_code": "en-US"},
+            "English (US) - Wavenet B (Male)": {"name": "en-US-Wavenet-B", "language_code": "en-US"},
+            "English (US) - Wavenet C (Female)": {"name": "en-US-Wavenet-C", "language_code": "en-US"},
+            "English (US) - Wavenet D (Male)": {"name": "en-US-Wavenet-D", "language_code": "en-US"},
+        },
+        'fr': {
+            "Français - Standard A (Female)": {"name": "fr-FR-Standard-A", "language_code": "fr-FR"},
+            "Français - Standard B (Male)": {"name": "fr-FR-Standard-B", "language_code": "fr-FR"},
+            "Français - Wavenet A (Female)": {"name": "fr-FR-Wavenet-A", "language_code": "fr-FR"},
+            "Français - Wavenet B (Male)": {"name": "fr-FR-Wavenet-B", "language_code": "fr-FR"},
+        },
+        'es': {
+            "Español - Standard A (Female)": {"name": "es-ES-Standard-A", "language_code": "es-ES"},
+            "Español - Standard B (Male)": {"name": "es-ES-Standard-B", "language_code": "es-ES"},
+            "Español - Wavenet B (Male)": {"name": "es-ES-Wavenet-B", "language_code": "es-ES"},
+            "Español - Wavenet C (Female)": {"name": "es-ES-Wavenet-C", "language_code": "es-ES"},
+        },
+        'it': {
+            "Italiano - Standard A (Female)": {"name": "it-IT-Standard-A", "language_code": "it-IT"},
+            "Italiano - Wavenet A (Female)": {"name": "it-IT-Wavenet-A", "language_code": "it-IT"},
+            "Italiano - Wavenet B (Female)": {"name": "it-IT-Wavenet-B", "language_code": "it-IT"},
+            "Italiano - Wavenet C (Male)": {"name": "it-IT-Wavenet-C", "language_code": "it-IT"},
+        },
+    }
+    
+    # Return voices for the detected language, default to English
+    return voice_map.get(language_code, voice_map['en'])
+
+def simple_text_to_speech(text_content: str, voice_name: str, language_code: str) -> bytes:
     """
     Simple TTS function that converts text directly to audio.
     Truncates text to API limits and generates audio.
@@ -912,9 +984,9 @@ def simple_text_to_speech(text_content: str, voice_name: str = "en-US-Standard-B
         # Create synthesis input
         synthesis_input = texttospeech.SynthesisInput(text=text_content)
         
-        # Voice selection
+        # Voice selection with detected language
         voice = texttospeech.VoiceSelectionParams(
-            language_code="en-US",  # Default to English
+            language_code=language_code,
             name=voice_name
         )
         
@@ -938,7 +1010,7 @@ def simple_text_to_speech(text_content: str, voice_name: str = "en-US-Standard-B
 
 def get_simple_voices() -> dict:
     """
-    Returns a simple list of common voices.
+    Returns a simple list of common voices (kept for backward compatibility).
     """
     return {
         "en-US-Standard-A (Female)": "en-US-Standard-A",

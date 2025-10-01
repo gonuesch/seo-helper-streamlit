@@ -39,7 +39,9 @@ from api_calls import (
     generate_seo_tags_cached, 
     generate_accessibility_description_cached,
     simple_text_to_speech,
-    get_simple_voices
+    get_simple_voices,
+    detect_language,
+    get_voices_for_language
     # Commented out complex TTS functions
     # generate_text_summary,
     # generate_ssml_chunk,
@@ -1292,7 +1294,7 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
 
 elif selected_tool == "Text-to-Speech":
     st.header("🎤 Text-to-Speech")
-    st.caption("Upload a document and convert it to audio. Text will be automatically truncated to API limits.")
+    st.caption("Upload a document and convert it to audio. Language is automatically detected and appropriate voices are suggested.")
     
     # Document upload
     uploaded_file = st.file_uploader(
@@ -1315,15 +1317,33 @@ elif selected_tool == "Text-to-Speech":
         if text_content:
             st.success(f"✅ Text extracted: {len(text_content):,} characters")
             
+            # Detect language
+            with st.spinner("Detecting language..."):
+                detected_lang = detect_language(text_content)
+                st.session_state.detected_language = detected_lang
+            
+            # Get appropriate voices for the detected language
+            available_voices = get_voices_for_language(detected_lang)
+            
+            # Display detected language
+            language_names = {
+                'de': '🇩🇪 German',
+                'en': '🇬🇧 English',
+                'fr': '🇫🇷 French',
+                'es': '🇪🇸 Spanish',
+                'it': '🇮🇹 Italian'
+            }
+            detected_lang_name = language_names.get(detected_lang, f"Language: {detected_lang}")
+            st.info(f"🌍 Detected language: **{detected_lang_name}**")
+            
             # Show preview
             with st.expander("📄 Text Preview"):
                 st.text(text_content[:500] + "..." if len(text_content) > 500 else text_content)
             
-            # Voice selection
-            voices = get_simple_voices()
+            # Voice selection with language-appropriate voices
             selected_voice = st.selectbox(
                 "🎤 Choose Voice:",
-                list(voices.keys()),
+                list(available_voices.keys()),
                 key="simple_voice_selection"
             )
             
@@ -1331,12 +1351,16 @@ elif selected_tool == "Text-to-Speech":
             if st.button("🎵 Generate Audio", type="primary"):
                 with st.spinner("Generating audio..."):
                     try:
-                        voice_id = voices[selected_voice]
-                        audio_data = simple_text_to_speech(text_content, voice_id)
+                        voice_info = available_voices[selected_voice]
+                        audio_data = simple_text_to_speech(
+                            text_content, 
+                            voice_info['name'],
+                            voice_info['language_code']
+                        )
                         
                         if audio_data:
                             st.session_state.simple_audio_data = audio_data
-                            st.session_state.simple_audio_filename = f"audio_{int(time.time())}.wav"
+                            st.session_state.simple_audio_filename = f"audio_{detected_lang}_{int(time.time())}.wav"
                             st.success("✅ Audio generated successfully!")
                         else:
                             st.error("❌ Audio generation failed!")
