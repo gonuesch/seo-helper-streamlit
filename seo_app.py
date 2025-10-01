@@ -1294,7 +1294,7 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
 
 elif selected_tool == "Text-to-Speech":
     st.header("🎤 Text-to-Speech")
-    st.caption("Upload a document and convert it to audio. Language is automatically detected and appropriate voices are suggested.")
+    st.caption("Upload a document and convert it to audio. Select the document language to get appropriate voice options.")
     
     # Document upload
     uploaded_file = st.file_uploader(
@@ -1317,28 +1317,29 @@ elif selected_tool == "Text-to-Speech":
         if text_content:
             st.success(f"✅ Text extracted: {len(text_content):,} characters")
             
-            # Detect language
-            with st.spinner("Detecting language..."):
-                detected_lang = detect_language(text_content)
-                st.session_state.detected_language = detected_lang
-            
-            # Get appropriate voices for the detected language
-            available_voices = get_voices_for_language(detected_lang)
-            
-            # Display detected language
-            language_names = {
-                'de': '🇩🇪 German',
-                'en': '🇬🇧 English',
-                'fr': '🇫🇷 French',
-                'es': '🇪🇸 Spanish',
-                'it': '🇮🇹 Italian'
-            }
-            detected_lang_name = language_names.get(detected_lang, f"Language: {detected_lang}")
-            st.info(f"🌍 Detected language: **{detected_lang_name}**")
-            
             # Show preview
             with st.expander("📄 Text Preview"):
                 st.text(text_content[:500] + "..." if len(text_content) > 500 else text_content)
+            
+            # Language selection dropdown
+            language_options = {
+                '🇩🇪 Deutsch': 'de',
+                '🇬🇧 English': 'en',
+                '🇫🇷 Français': 'fr',
+                '🇪🇸 Español': 'es',
+                '🇮🇹 Italiano': 'it'
+            }
+            
+            selected_language_name = st.selectbox(
+                "🌍 Select document language:",
+                list(language_options.keys()),
+                key="language_selection"
+            )
+            
+            selected_lang = language_options[selected_language_name]
+            
+            # Get appropriate voices for the selected language
+            available_voices = get_voices_for_language(selected_lang)
             
             # Voice selection with language-appropriate voices
             selected_voice = st.selectbox(
@@ -1360,7 +1361,7 @@ elif selected_tool == "Text-to-Speech":
                         
                         if audio_data:
                             st.session_state.simple_audio_data = audio_data
-                            st.session_state.simple_audio_filename = f"audio_{detected_lang}_{int(time.time())}.wav"
+                            st.session_state.simple_audio_filename = f"audio_{selected_lang}_{int(time.time())}.wav"
                             st.success("✅ Audio generated successfully!")
                         else:
                             st.error("❌ Audio generation failed!")
