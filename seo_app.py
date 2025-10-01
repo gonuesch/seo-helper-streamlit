@@ -884,9 +884,16 @@ with st.sidebar:
     elif selected_tool == "Text-to-Speech":
         st.header("Text-to-Speech")
         st.caption("Upload a document and convert it to audio. Text will be automatically truncated to API limits.")
+        
+        # Debug: Check if functions are available
+        try:
+            st.info("🔧 Debug: TTS functions loaded successfully")
+            voices = get_simple_voices()
+            st.info(f"🔧 Debug: Found {len(voices)} voices")
+        except Exception as e:
+            st.error(f"🔧 Debug: Error loading TTS functions: {e}")
 
-        # Import the simple TTS functions
-        from api_calls import simple_text_to_speech, get_simple_voices
+        # Simple TTS functions are imported at the top of the file
         
         # Document upload
         uploaded_file = st.file_uploader(
