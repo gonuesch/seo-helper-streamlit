@@ -103,7 +103,7 @@ def generate_ssml_chunk(_guideline: str, _text_chunk: str, gemini_api_key: str =
 
 @st.cache_data
 @log_exceptions
-def generate_seo_tags_cached(image_source: Union[bytes, str], file_name_for_log: str, gemini_api_key: str = None, model_name: str = "gemini-1.5-pro-latest") -> Tuple[Union[str, None], Union[str, None]]:
+def generate_seo_tags_cached(image_source: Union[bytes, str], file_name_for_log: str, gemini_api_key: str = None, model_name: str = "gemini-2.5-pro") -> Tuple[Union[str, None], Union[str, None]]:
     """
     Nimmt Bild-Bytes oder eine URL, ruft die Gemini API mit dem SEO-Prompt auf
     und gibt (title, alt) als Tupel zurück.
@@ -164,7 +164,7 @@ def generate_seo_tags_cached(image_source: Union[bytes, str], file_name_for_log:
 
 @st.cache_data
 @log_exceptions
-def generate_accessibility_description_cached(image_bytes_for_api, file_name_for_log: str, ebook_context: str = "", gemini_api_key: str = None, model_name: str = "gemini-1.5-pro-latest") -> Tuple[Union[str, None], Union[str, None]]:
+def generate_accessibility_description_cached(image_bytes_for_api, file_name_for_log: str, ebook_context: str = "", gemini_api_key: str = None, model_name: str = "gemini-2.5-pro") -> Tuple[Union[str, None], Union[str, None]]:
     """
     Nimmt Bild-Bytes und Kontext, ruft die Gemini API mit dem Barrierefreiheits-Prompt auf
     und gibt (kurzbeschreibung, langbeschreibung) als Tupel zurück.
@@ -1162,7 +1162,7 @@ def generate_simple_ssml(text_content: str, gemini_api_key: str) -> str:
         
         # Configure Gemini
         genai.configure(api_key=gemini_api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         
         # Estimate SSML expansion (typically 30-50% increase)
         estimated_ssml_size = int(len(text_content) * 1.4)
