@@ -41,7 +41,9 @@ from api_calls import (
     simple_text_to_speech,
     get_simple_voices,
     detect_language,
-    get_voices_for_language
+    get_voices_for_language,
+    smart_text_to_speech,
+    long_audio_synthesis
     # Commented out complex TTS functions
     # generate_text_summary,
     # generate_ssml_chunk,
@@ -1294,7 +1296,7 @@ elif selected_tool == "Barrierefreie Bildbeschreibung":
 
 elif selected_tool == "Text-to-Speech":
     st.header("🎤 Text-to-Speech")
-    st.caption("Upload a document and convert it to audio. Select the document language to get appropriate voice options.")
+    st.caption("Upload a document and convert it to audio. Supports up to 1,000,000 characters. Select the document language to get appropriate voice options.")
     
     # Document upload
     uploaded_file = st.file_uploader(
@@ -1350,24 +1352,37 @@ elif selected_tool == "Text-to-Speech":
             
             # Generate button
             if st.button("🎵 Generate Audio", type="primary"):
-                with st.spinner("Generating audio..."):
+                # Show different spinner message based on text length
+                spinner_message = "Generating audio..." if len(text_content) <= 4500 else "Generating long audio (this may take a few minutes)..."
+                
+                with st.spinner(spinner_message):
                     try:
                         voice_info = available_voices[selected_voice]
-                        audio_data = simple_text_to_speech(
+                        
+                        # Use smart TTS that automatically chooses standard or long audio synthesis
+                        audio_data, audio_format = smart_text_to_speech(
                             text_content, 
                             voice_info['name'],
-                            voice_info['language_code']
+                            voice_info['language_code'],
+                            GCS_TTS_OUTPUT_BUCKET,
+                            PROJECT_ID
                         )
                         
                         if audio_data:
                             st.session_state.simple_audio_data = audio_data
-                            st.session_state.simple_audio_filename = f"audio_{selected_lang}_{int(time.time())}.wav"
-                            st.success("✅ Audio generated successfully!")
+                            st.session_state.simple_audio_format = audio_format
+                            st.session_state.simple_audio_filename = f"audio_{selected_lang}_{int(time.time())}.{audio_format}"
+                            
+                            # Show success message with character count
+                            if len(text_content) > 4500:
+                                st.success(f"✅ Long audio generated successfully! ({len(text_content):,} characters)")
+                            else:
+                                st.success(f"✅ Audio generated successfully! ({len(text_content):,} characters)")
                         else:
                             st.error("❌ Audio generation failed!")
                     except Exception as e:
                         st.error(f"❌ Error: {str(e)}")
-                        logging.error(f"Simple TTS error: {e}", exc_info=True)
+                        logging.error(f"TTS error: {e}", exc_info=True)
         else:
             st.error("❌ Could not extract text from document")
     
@@ -1375,15 +1390,20 @@ elif selected_tool == "Text-to-Speech":
     if st.session_state.get("simple_audio_data"):
         st.divider()
         st.subheader("🎵 Generated Audio")
-        st.audio(st.session_state.simple_audio_data, format="audio/wav")
+        
+        # Get audio format (wav or mp3)
+        audio_format = st.session_state.get("simple_audio_format", "wav")
+        mime_type = f"audio/{audio_format}"
+        
+        st.audio(st.session_state.simple_audio_data, format=mime_type)
         
         # Download button
-        audio_filename = st.session_state.get("simple_audio_filename", "audio.wav")
+        audio_filename = st.session_state.get("simple_audio_filename", f"audio.{audio_format}")
         st.download_button(
-            "📥 Download Audio (.wav)",
+            f"📥 Download Audio (.{audio_format})",
             data=st.session_state.simple_audio_data,
             file_name=audio_filename,
-            mime="audio/wav"
+            mime=mime_type
         )
 
 elif selected_tool == "Manuskript-Übersetzung":

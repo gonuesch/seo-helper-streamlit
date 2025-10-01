@@ -1027,3 +1027,126 @@ def get_simple_voices() -> dict:
         "de-DE-Wavenet-B (Male)": "de-DE-Wavenet-B"
     }
 
+def long_audio_synthesis(text_content: str, voice_name: str, language_code: str, gcs_bucket: str, project_id: str) -> dict:
+    """
+    Uses Google Cloud TTS Long Audio Synthesis API for texts longer than 5000 characters.
+    Supports up to 1,000,000 characters.
+    Returns a dict with status and GCS URI or audio content.
+    """
+    try:
+        from google.cloud import texttospeech_v1
+        from google.cloud import storage
+        import time
+        
+        # Initialize TTS client
+        client = texttospeech_v1.TextToSpeechLongAudioSynthesizeClient()
+        
+        # Check text length
+        max_chars = 1000000  # Long Audio API supports up to 1 million characters
+        if len(text_content) > max_chars:
+            logging.warning(f"Text too long ({len(text_content)} chars). Truncating to {max_chars} characters.")
+            text_content = text_content[:max_chars]
+        
+        logging.info(f"Starting long audio synthesis for {len(text_content)} characters")
+        
+        # Create unique output filename
+        output_gcs_uri = f"gs://{gcs_bucket}/tts_output_{int(time.time())}.mp3"
+        
+        # Create synthesis input
+        input_config = texttospeech_v1.SynthesisInput(text=text_content)
+        
+        # Voice selection
+        voice_config = texttospeech_v1.VoiceSelectionParams(
+            language_code=language_code,
+            name=voice_name
+        )
+        
+        # Audio config - Long Audio API outputs to MP3
+        audio_config = texttospeech_v1.AudioConfig(
+            audio_encoding=texttospeech_v1.AudioEncoding.MP3
+        )
+        
+        # Create the request
+        request = texttospeech_v1.SynthesizeLongAudioRequest(
+            parent=f"projects/{project_id}/locations/global",
+            input=input_config,
+            voice=voice_config,
+            audio_config=audio_config,
+            output_gcs_uri=output_gcs_uri
+        )
+        
+        # Start the long audio synthesis operation
+        logging.info(f"Submitting long audio synthesis request to GCS: {output_gcs_uri}")
+        operation = client.synthesize_long_audio(request=request)
+        
+        logging.info("Waiting for long audio synthesis to complete...")
+        # Wait for the operation to complete
+        response = operation.result(timeout=600)  # 10 minute timeout
+        
+        logging.info(f"Long audio synthesis completed. Output: {output_gcs_uri}")
+        
+        # Download the audio from GCS
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(gcs_bucket)
+        blob_name = output_gcs_uri.replace(f"gs://{gcs_bucket}/", "")
+        blob = bucket.blob(blob_name)
+        
+        # Download audio content
+        audio_bytes = blob.download_as_bytes()
+        logging.info(f"Downloaded audio from GCS: {len(audio_bytes)} bytes")
+        
+        # Optionally delete the file from GCS after download
+        try:
+            blob.delete()
+            logging.info(f"Deleted temporary file from GCS: {blob_name}")
+        except Exception as e:
+            logging.warning(f"Could not delete temporary file from GCS: {e}")
+        
+        return {
+            'status': 'success',
+            'audio_content': audio_bytes,
+            'gcs_uri': output_gcs_uri,
+            'format': 'mp3'
+        }
+        
+    except Exception as e:
+        logging.error(f"Error in long_audio_synthesis: {e}", exc_info=True)
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+def smart_text_to_speech(text_content: str, voice_name: str, language_code: str, gcs_bucket: str = None, project_id: str = None) -> tuple:
+    """
+    Smart TTS function that automatically chooses between standard and long audio synthesis
+    based on text length.
+    Returns: (audio_bytes, format) tuple where format is 'wav' or 'mp3'
+    """
+    try:
+        # Threshold for switching to long audio synthesis
+        long_audio_threshold = 4500
+        
+        if len(text_content) <= long_audio_threshold:
+            # Use standard synthesis for short texts
+            logging.info(f"Using standard synthesis for {len(text_content)} characters")
+            audio_data = simple_text_to_speech(text_content, voice_name, language_code)
+            return (audio_data, 'wav') if audio_data else (None, None)
+        else:
+            # Use long audio synthesis for long texts
+            if not gcs_bucket or not project_id:
+                logging.error("GCS bucket and project ID required for long audio synthesis")
+                return (None, None)
+            
+            logging.info(f"Using long audio synthesis for {len(text_content)} characters")
+            result = long_audio_synthesis(text_content, voice_name, language_code, gcs_bucket, project_id)
+            
+            if result['status'] == 'success':
+                return (result['audio_content'], result['format'])
+            else:
+                logging.error(f"Long audio synthesis failed: {result.get('error')}")
+                return (None, None)
+                
+    except Exception as e:
+        logging.error(f"Error in smart_text_to_speech: {e}", exc_info=True)
+        return (None, None)
+
