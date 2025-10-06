@@ -1849,9 +1849,9 @@ elif selected_tool == "Manuskript-Agent":
                             
                         elif agent_mode == "Nur Manuskript-Analyse":
                             # Nur Analyse
-                            analysis_result = manuscript_analyzer.tools[0].function(text_content)
-                            summary_result = manuscript_analyzer.tools[1].function(text_content)
-                            evaluation_result = manuscript_analyzer.tools[2].function(text_content)
+                            analysis_result = manuscript_analyzer.analyze_manuscript(text_content)
+                            summary_result = manuscript_analyzer.summarize_manuscript(text_content)
+                            evaluation_result = manuscript_analyzer.evaluate_manuscript(text_content)
                             
                             results["analysis"] = analysis_result
                             results["summary"] = summary_result
@@ -1859,18 +1859,18 @@ elif selected_tool == "Manuskript-Agent":
                             
                         elif agent_mode == "Nur Zielgruppen-Analyse":
                             # Nur Zielgruppen
-                            summary_result = manuscript_analyzer.tools[1].function(text_content)
-                            audience_result = target_audience.tools[0].function(summary_result["summary"])
-                            channels_result = target_audience.tools[1].function(summary_result["summary"], audience_result["audience_analysis"])
+                            summary_result = manuscript_analyzer.summarize_manuscript(text_content)
+                            audience_result = target_audience.analyze_target_audience(summary_result["summary"])
+                            channels_result = target_audience.suggest_marketing_channels(summary_result["summary"], audience_result["audience_analysis"])
                             
                             results["audience"] = audience_result
                             results["channels"] = channels_result
                             
                         elif agent_mode == "Nur Marketing-Strategie":
                             # Nur Marketing
-                            summary_result = manuscript_analyzer.tools[1].function(text_content)
-                            audience_result = target_audience.tools[0].function(summary_result["summary"])
-                            strategy_result = marketing_strategy.tools[0].function(summary_result["summary"], audience_result["audience_analysis"])
+                            summary_result = manuscript_analyzer.summarize_manuscript(text_content)
+                            audience_result = target_audience.analyze_target_audience(summary_result["summary"])
+                            strategy_result = marketing_strategy.optimize_marketing_strategy(summary_result["summary"], audience_result["audience_analysis"])
                             
                             results["strategy"] = strategy_result
                         
