@@ -62,6 +62,9 @@ from manuscript_agents import (
     ManuscriptWorkflowAgent
 )
 
+# Importiere den Chat Agent
+from chat_agent import ManuscriptChatAgent
+
 # --- SICHERHEITSKONFIGURATION FÜR TTS ---
 MAX_TTS_COST_USD = 10.0  # Maximal 10 USD pro TTS-Job (erhöht von 5.0)
 MAX_TTS_RUNTIME_MINUTES = 30  # Maximal 30 Minuten Laufzeit
@@ -917,6 +920,14 @@ if 'manuscript_agent_marketing' not in st.session_state:
 if 'manuscript_agent_button_clicked' not in st.session_state:
     st.session_state.manuscript_agent_button_clicked = False
 
+# Für Chat-Agent
+if 'chat_agent' not in st.session_state:
+    st.session_state.chat_agent = None
+if 'chat_history' not in st.session_state:
+    st.session_state.chat_history = []
+if 'manuscript_for_chat' not in st.session_state:
+    st.session_state.manuscript_for_chat = None
+
 # Für allgemeine App-Funktionalität
 if 'last_selected_tool' not in st.session_state:
     st.session_state.last_selected_tool = ""
@@ -954,8 +965,8 @@ if st.session_state.get("last_selected_tool") == "Manuskript-Übersetzung":
 
 selected_tool = option_menu(
     menu_title=None,
-    options=["SEO Tags", "Barrierefreie Bildbeschreibung", "Text-to-Speech", "Manuskript-Übersetzung", "Manuskript-Agent"],
-    icons=['search', 'universal-access-circle', 'sound-wave', 'translate', 'robot'],
+    options=["SEO Tags", "Barrierefreie Bildbeschreibung", "Text-to-Speech", "Manuskript-Übersetzung", "Manuskript-Agent", "Chat-Agent"],
+    icons=['search', 'universal-access-circle', 'sound-wave', 'translate', 'robot', 'chat-dots'],
     menu_icon="cast", default_index=default_index, orientation="horizontal",
     styles={
         "container": {"padding": "5px !important", "background-color": "#fafafa", "border-radius": "10px"},
@@ -978,6 +989,9 @@ with st.sidebar:
         st.markdown("Übersetze **deutsche Manuskripte** ins Englische im Hintergrund.\n\n**Unterstützte Formate:** `.docx`, `.pdf`\n\n**Features:** Asynchrone Verarbeitung, Job-Tracking\n\nBei Fragen -> Gordon")
     elif selected_tool == "Manuskript-Agent":
         st.markdown("🤖 **AI-Agent für Manuskript-Analyse**\n\n**Features:**\n- Manuskript-Analyse & Bewertung\n- Zielgruppen-Identifikation\n- Marketing-Strategien\n- ROI-Analyse\n\n**Unterstützte Formate:** `.docx`, `.pdf`\n\nBei Fragen -> Gordon")
+    
+    elif selected_tool == "Chat-Agent":
+        st.markdown("💬 **Interaktiver Chat-Agent**\n\n**Features:**\n- Natürliche Gespräche über Manuskripte\n- Tool-Integration für Analysen\n- Chat-Historie\n- Kontextbewusste Antworten\n\n**Unterstützte Formate:** `.docx`, `.pdf`\n\nBei Fragen -> Gordon")
 
 st.divider()
 
@@ -2105,6 +2119,127 @@ elif selected_tool == "Manuskript-Agent":
                         file_name=f"manuscript_agent_results_{int(time.time())}.json",
                         mime="application/json"
                     )
+
+elif selected_tool == "Chat-Agent":
+    st.header("💬 Chat-Agent")
+    st.caption("Interaktiver AI-Agent für Manuskript-Diskussionen mit Tool-Zugriff.")
+    
+    # Initialisiere Chat Agent falls noch nicht vorhanden
+    if st.session_state.chat_agent is None:
+        st.session_state.chat_agent = ManuscriptChatAgent(gemini_api_key)
+    
+    # Manuskript-Upload für Chat
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        uploaded_file = st.file_uploader(
+            label="Lade dein Manuskript hoch für den Chat (.docx oder .pdf)",
+            type=['docx', 'pdf'],
+            key="chat_agent_uploader"
+        )
+    
+    with col2:
+        if st.button("🗑️ Chat zurücksetzen", type="secondary"):
+            st.session_state.chat_agent.clear_chat_history()
+            st.session_state.chat_history = []
+            st.session_state.manuscript_for_chat = None
+            st.rerun()
+    
+    # Manuskript verarbeiten
+    if uploaded_file:
+        if uploaded_file.name.endswith('.pdf'):
+            text_content = read_text_from_pdf(BytesIO(uploaded_file.getvalue()))
+        elif uploaded_file.name.endswith('.docx'):
+            text_content = read_text_from_docx(BytesIO(uploaded_file.getvalue()))
+        else:
+            text_content = None
+        
+        if text_content:
+            st.session_state.manuscript_for_chat = text_content
+            st.session_state.chat_agent.set_manuscript_context(text_content)
+            st.success(f"✅ Manuskript geladen: {len(text_content):,} Zeichen")
+            
+            # Manuskript-Vorschau
+            with st.expander("📄 Manuskript-Vorschau"):
+                st.text(text_content[:1000] + "..." if len(text_content) > 1000 else text_content)
+        else:
+            st.error("❌ Konnte Text aus dem Dokument nicht extrahieren")
+    
+    # Chat-Interface
+    st.divider()
+    
+    # Verfügbare Tools anzeigen
+    with st.expander("🛠️ Verfügbare Tools"):
+        tools = st.session_state.chat_agent.get_available_tools()
+        for tool_name, tool_info in tools.items():
+            st.write(f"**{tool_name}**: {tool_info['description']}")
+    
+    # Chat-Historie anzeigen
+    if st.session_state.chat_history:
+        st.subheader("💬 Chat-Verlauf")
+        for i, message in enumerate(st.session_state.chat_history):
+            if message["role"] == "user":
+                st.write(f"**Du:** {message['message']}")
+            else:
+                st.write(f"**Agent:** {message['message']}")
+                if message.get("tools_used"):
+                    st.caption(f"Verwendete Tools: {', '.join(message['tools_used'])}")
+            st.divider()
+    
+    # Chat-Eingabe
+    user_input = st.text_input(
+        "💬 Frage den Agent etwas über dein Manuskript:",
+        placeholder="z.B. 'Analysiere mein Manuskript' oder 'Welche Zielgruppe passt zu meinem Buch?'",
+        key="chat_input"
+    )
+    
+    if st.button("📤 Nachricht senden", type="primary") and user_input:
+        if not st.session_state.manuscript_for_chat:
+            st.warning("⚠️ Bitte lade zuerst ein Manuskript hoch.")
+        else:
+            with st.spinner("🤖 Agent denkt nach..."):
+                try:
+                    # Chat-Antwort generieren
+                    response = st.session_state.chat_agent.chat(user_input)
+                    
+                    if response["status"] == "success":
+                        # Chat-Historie aktualisieren
+                        st.session_state.chat_history = st.session_state.chat_agent.get_chat_history()
+                        st.rerun()
+                    else:
+                        st.error(f"❌ Fehler: {response.get('error', 'Unbekannter Fehler')}")
+                        
+                except Exception as e:
+                    st.error(f"❌ Fehler beim Chat: {str(e)}")
+                    logging.error(f"Chat error: {e}")
+    
+    # Beispiel-Fragen
+    st.subheader("💡 Beispiel-Fragen")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("📊 Analysiere mein Manuskript", key="example_analyze"):
+            if st.session_state.manuscript_for_chat:
+                st.session_state.chat_input = "Analysiere mein Manuskript"
+                st.rerun()
+            else:
+                st.warning("Bitte lade zuerst ein Manuskript hoch.")
+    
+    with col2:
+        if st.button("🎯 Welche Zielgruppe?", key="example_audience"):
+            if st.session_state.manuscript_for_chat:
+                st.session_state.chat_input = "Welche Zielgruppe passt zu meinem Manuskript?"
+                st.rerun()
+            else:
+                st.warning("Bitte lade zuerst ein Manuskript hoch.")
+    
+    with col3:
+        if st.button("📈 Marketing-Strategie", key="example_marketing"):
+            if st.session_state.manuscript_for_chat:
+                st.session_state.chat_input = "Erstelle eine Marketing-Strategie für mein Manuskript"
+                st.rerun()
+            else:
+                st.warning("Bitte lade zuerst ein Manuskript hoch.")
 
 # --- SICHERHEITSKONFIGURATION FÜR TTS ---
 MAX_TTS_COST_USD = 10.0  # Maximal 10 USD pro TTS-Job (erhöht von 5.0)
