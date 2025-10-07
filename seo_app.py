@@ -275,6 +275,17 @@ def start_translation_job(uploaded_file):
             }
         )
         
+        # Send Pub/Sub event for analytics
+        log_data = {
+            "event_type": "translation_job_started",
+            "job_id": job_id,
+            "file_name": uploaded_file.name,
+            "file_size": uploaded_file.size,
+            "file_type": uploaded_file.type,
+            "status": "started"
+        }
+        send_event_to_pubsub(log_data)
+        
         # Store job info in session state for tracking
         st.session_state.translation_job_id = job_id
         st.session_state.translation_job_status = "pending"
@@ -333,6 +344,17 @@ def refresh_translation_status():
                     "file_name": job_data.get("file_name", "unknown")
                 }
             )
+            
+            # Send Pub/Sub event for analytics
+            event_type = "translation_job_completed" if job_status == "completed" else "translation_job_failed"
+            log_data = {
+                "event_type": event_type,
+                "job_id": job_id,
+                "file_name": job_data.get("file_name", "unknown"),
+                "status": job_status,
+                "previous_status": old_status
+            }
+            send_event_to_pubsub(log_data)
         
         # Kosten- und Token-Informationen aus Firestore lesen
         st.session_state.job_cost = job_data.get("estimated_cost_usd")
@@ -1513,6 +1535,19 @@ elif selected_tool == "Text-to-Speech":
                                     "status": "success"
                                 }
                             )
+                            
+                            # Send Pub/Sub event for analytics
+                            log_data = {
+                                "event_type": "audio_generation_completed",
+                                "file_name": uploaded_file.name,
+                                "text_length": len(text_content),
+                                "language": selected_lang,
+                                "voice": selected_voice,
+                                "use_ssml": ssml_used,
+                                "audio_format": audio_format,
+                                "status": "success"
+                            }
+                            send_event_to_pubsub(log_data)
                         else:
                             st.error("❌ Audio generation failed!")
                             # Log failed audio generation
@@ -1530,6 +1565,19 @@ elif selected_tool == "Text-to-Speech":
                                     "error": "Audio generation returned no data"
                                 }
                             )
+                            
+                            # Send Pub/Sub event for analytics
+                            log_data = {
+                                "event_type": "audio_generation_failed",
+                                "file_name": uploaded_file.name,
+                                "text_length": len(text_content),
+                                "language": selected_lang,
+                                "voice": selected_voice,
+                                "use_ssml": use_ssml,
+                                "status": "failed",
+                                "error": "Audio generation returned no data"
+                            }
+                            send_event_to_pubsub(log_data)
                     except Exception as e:
                         st.error(f"❌ Error: {str(e)}")
                         logging.error(f"TTS error: {e}", exc_info=True)
@@ -1549,6 +1597,19 @@ elif selected_tool == "Text-to-Speech":
                                 "error": str(e)
                             }
                         )
+                        
+                        # Send Pub/Sub event for analytics
+                        log_data = {
+                            "event_type": "audio_generation_error",
+                            "file_name": uploaded_file.name,
+                            "text_length": len(text_content),
+                            "language": selected_lang,
+                            "voice": selected_voice,
+                            "use_ssml": use_ssml,
+                            "status": "error",
+                            "error": str(e)
+                        }
+                        send_event_to_pubsub(log_data)
         else:
             st.error("❌ Could not extract text from document")
     
