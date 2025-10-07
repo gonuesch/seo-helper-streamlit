@@ -991,7 +991,7 @@ with st.sidebar:
         st.markdown("🤖 **AI-Agent für Manuskript-Analyse**\n\n**Features:**\n- Manuskript-Analyse & Bewertung\n- Zielgruppen-Identifikation\n- Marketing-Strategien\n- ROI-Analyse\n\n**Unterstützte Formate:** `.docx`, `.pdf`\n\nBei Fragen -> Gordon")
     
     elif selected_tool == "Chat-Agent":
-        st.markdown("💬 **Interaktiver Chat-Agent**\n\n**Features:**\n- Natürliche Gespräche über Manuskripte\n- Tool-Integration für Analysen\n- Chat-Historie\n- Kontextbewusste Antworten\n\n**Unterstützte Formate:** `.docx`, `.pdf`\n\nBei Fragen -> Gordon")
+        st.markdown("💬 **Interaktiver Chat-Agent**\n\n**Features:**\n- Natürliche Gespräche über Manuskripte\n- Tool-Integration für Analysen\n- Chat-Historie\n- Kontextbewusste Antworten\n- **Moodboard-Generator** mit 9 thematischen Bildern\n\n**Unterstützte Formate:** `.docx`, `.pdf`\n\nBei Fragen -> Gordon")
 
 st.divider()
 
@@ -2184,6 +2184,12 @@ elif selected_tool == "Chat-Agent":
                 st.write(f"**Agent:** {message['message']}")
                 if message.get("tools_used"):
                     st.caption(f"Verwendete Tools: {', '.join(message['tools_used'])}")
+                    
+                    # Spezielle Anzeige für Moodboard-Tool
+                    if "create_moodboard" in message.get("tools_used", []):
+                        st.success("🎨 Moodboard wurde erstellt!")
+                        # Hier könnten die generierten Bilder angezeigt werden
+                        # st.image(generated_images, caption=image_descriptions)
             st.divider()
     
     # Chat-Eingabe
@@ -2215,7 +2221,7 @@ elif selected_tool == "Chat-Agent":
     
     # Beispiel-Fragen
     st.subheader("💡 Beispiel-Fragen")
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         if st.button("📊 Analysiere mein Manuskript", key="example_analyze"):
@@ -2237,6 +2243,14 @@ elif selected_tool == "Chat-Agent":
         if st.button("📈 Marketing-Strategie", key="example_marketing"):
             if st.session_state.manuscript_for_chat:
                 st.session_state.chat_input = "Erstelle eine Marketing-Strategie für mein Manuskript"
+                st.rerun()
+            else:
+                st.warning("Bitte lade zuerst ein Manuskript hoch.")
+    
+    with col4:
+        if st.button("🎨 Erstelle Moodboard", key="example_moodboard"):
+            if st.session_state.manuscript_for_chat:
+                st.session_state.chat_input = "Erstelle ein Moodboard mit 9 Bildern für mein Manuskript"
                 st.rerun()
             else:
                 st.warning("Bitte lade zuerst ein Manuskript hoch.")

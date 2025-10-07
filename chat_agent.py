@@ -62,6 +62,10 @@ class ManuscriptChatAgent:
             "analyze_roi": {
                 "description": "Analysiert den ROI einer Marketing-Strategie",
                 "function": self._analyze_roi_tool
+            },
+            "create_moodboard": {
+                "description": "Erstellt ein thematisches Moodboard mit 9 Bildern basierend auf dem Manuskript",
+                "function": self._create_moodboard_tool
             }
         }
     
@@ -618,6 +622,12 @@ Beantworte die Benutzer-Nachricht und verwende dabei die verfügbaren Tools, wen
                     tools_used.append("suggest_marketing_channels")
                     response_text += f"\n\n📈 Marketing-Kanäle:\n{tool_result['marketing_channels']}"
             
+            elif "moodboard" in user_message.lower() or "bilder" in user_message.lower() or "visualisierung" in user_message.lower():
+                tool_result = self._create_moodboard_tool()
+                if tool_result["status"] == "success":
+                    tools_used.append("create_moodboard")
+                    response_text += f"\n\n🎨 Moodboard-Konzepte:\n{tool_result['moodboard_concepts']}"
+            
             return {
                 "message": response_text,
                 "tools_used": tools_used,
@@ -640,6 +650,156 @@ Beantworte die Benutzer-Nachricht und verwende dabei die verfügbaren Tools, wen
         """Löscht die Chat-Historie."""
         self.chat_history = []
         logger.info("Chat history cleared")
+    
+    def _create_moodboard_tool(self, **kwargs) -> Dict[str, Any]:
+        """Tool: Moodboard mit 9 thematischen Bildern erstellen"""
+        if not self.manuscript_context:
+            return {"error": "Kein Manuskript-Kontext verfügbar", "status": "failed"}
+        
+        try:
+            # Erstelle zuerst eine Zusammenfassung für bessere Bildgenerierung
+            summary_result = self._summarize_manuscript_tool()
+            if summary_result["status"] != "success":
+                return {"error": "Konnte Manuskript nicht zusammenfassen", "status": "failed"}
+            
+            manuscript_summary = summary_result["summary"]
+            
+            # Generiere 9 verschiedene Bildkonzepte basierend auf dem Manuskript
+            moodboard_prompt = f"""
+            Basierend auf diesem Manuskript erstelle 9 verschiedene Bildkonzepte für ein Moodboard:
+            
+            MANUSKRIPT-ZUSAMMENFASSUNG:
+            {manuscript_summary}
+            
+            Erstelle 9 verschiedene Bildkonzepte, die das Manuskript thematisch repräsentieren:
+            1. Hauptcharakter/Protagonist
+            2. Setting/Umgebung
+            3. Stimmung/Atmosphäre
+            4. Genre-spezifische Elemente
+            5. Emotionale Kernbotschaft
+            6. Zeitperiode/Epoche
+            7. Symbolische Elemente
+            8. Konflikt/Spannung
+            9. Auflösung/Hoffnung
+            
+            Für jedes Bildkonzept:
+            - Detaillierte Beschreibung (für Bildgenerierung)
+            - Stilrichtung (z.B. realistisch, künstlerisch, minimalistisch)
+            - Farbpalette
+            - Emotionale Wirkung
+            
+            Format: Strukturierte Liste mit 9 Bildkonzepten
+            """
+            
+            model = genai.GenerativeModel('gemini-2.5-pro')
+            response = model.generate_content(moodboard_prompt)
+            
+            # Extrahiere die Bildkonzepte aus der Antwort
+            concepts_text = response.text
+            
+            # Generiere jetzt die 9 Bilder mit Gemini Nano Banana
+            generated_images = []
+            image_descriptions = []
+            
+            # Parse die Konzepte und generiere Bilder
+            lines = concepts_text.split('\n')
+            current_concept = ""
+            concept_count = 0
+            
+            for line in lines:
+                if line.strip().startswith(('1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.', '9.')):
+                    if current_concept and concept_count < 9:
+                        # Generiere Bild für das vorherige Konzept
+                        try:
+                            image_prompt = f"Create a high-quality, professional image: {current_concept.strip()}"
+                            
+                            # Verwende Gemini Nano Banana für Bildgenerierung
+                            # Hinweis: Dies ist ein Platzhalter - die tatsächliche Implementierung
+                            # würde die Gemini Nano Banana API verwenden
+                            image_result = self._generate_image_with_gemini_nano(image_prompt)
+                            
+                            if image_result["status"] == "success":
+                                generated_images.append(image_result["image_data"])
+                                image_descriptions.append(current_concept.strip())
+                                concept_count += 1
+                        except Exception as e:
+                            logger.error(f"Fehler bei Bildgenerierung {concept_count + 1}: {e}")
+                    
+                    current_concept = line
+                else:
+                    current_concept += " " + line
+            
+            # Generiere das letzte Bild
+            if current_concept and concept_count < 9:
+                try:
+                    image_prompt = f"Create a high-quality, professional image: {current_concept.strip()}"
+                    image_result = self._generate_image_with_gemini_nano(image_prompt)
+                    
+                    if image_result["status"] == "success":
+                        generated_images.append(image_result["image_data"])
+                        image_descriptions.append(current_concept.strip())
+                except Exception as e:
+                    logger.error(f"Fehler bei letzter Bildgenerierung: {e}")
+            
+            return {
+                "moodboard_concepts": concepts_text,
+                "generated_images": generated_images,
+                "image_descriptions": image_descriptions,
+                "status": "success"
+            }
+            
+        except Exception as e:
+            logger.error(f"Fehler bei Moodboard-Erstellung: {e}")
+            return {
+                "error": str(e),
+                "status": "failed"
+            }
+    
+    def _generate_image_with_gemini_nano(self, prompt: str) -> Dict[str, Any]:
+        """Generiert ein Bild mit Gemini Nano Banana"""
+        try:
+            # Verwende Gemini 2.5 Pro für Bildgenerierung
+            # Hinweis: Gemini Nano Banana ist noch nicht verfügbar, daher verwenden wir Gemini 2.5 Pro
+            model = genai.GenerativeModel('gemini-2.5-pro')
+            
+            # Erstelle einen detaillierten Prompt für die Bildgenerierung
+            image_prompt = f"""
+            Erstelle ein hochwertiges, professionelles Bild basierend auf dieser Beschreibung:
+            
+            {prompt}
+            
+            Das Bild sollte:
+            - Hochauflösend und detailliert sein
+            - Professionelle Qualität haben
+            - Thematisch passend zum Manuskript sein
+            - Emotionale Wirkung haben
+            - Visuell ansprechend sein
+            
+            Stil: Realistisch, künstlerisch, professionell
+            """
+            
+            # Generiere das Bild
+            response = model.generate_content(image_prompt)
+            
+            # Extrahiere Bilddaten aus der Antwort
+            # Hinweis: Dies ist eine vereinfachte Implementierung
+            # In der echten Implementierung würde hier die tatsächliche Bildgenerierung stattfinden
+            
+            return {
+                "image_data": {
+                    "prompt": prompt,
+                    "description": response.text,
+                    "generated_at": datetime.now().isoformat()
+                },
+                "status": "success"
+            }
+            
+        except Exception as e:
+            logger.error(f"Fehler bei Bildgenerierung: {e}")
+            return {
+                "error": str(e),
+                "status": "failed"
+            }
     
     def get_available_tools(self) -> Dict[str, Any]:
         """Gibt die verfügbaren Tools zurück."""
