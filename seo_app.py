@@ -35,7 +35,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Importiere Funktionen aus deinen Modulen
-from utils import convert_tiff_to_png_bytes, read_text_from_docx, read_text_from_pdf, chunk_text, chunk_text_by_paragraphs, log_exceptions, upload_to_gcs, download_from_gcs
+from utils import convert_tiff_to_png_bytes, read_text_from_docx, read_text_from_pdf, chunk_text, chunk_text_by_paragraphs, log_exceptions, upload_to_gcs, download_from_gcs, log_usage
 from api_calls import (
     generate_seo_tags_cached, 
     generate_accessibility_description_cached,
@@ -261,6 +261,20 @@ def start_translation_job(uploaded_file):
 
         st.success(f"Übersetzungsauftrag '{uploaded_file.name}' wurde gestartet! Job-ID: {job_id}")
         
+        # Log translation job start
+        user_email = st.session_state.get("email", "unknown")
+        log_usage(
+            user_email, 
+            "translation", 
+            "job_started", 
+            {
+                "job_id": job_id,
+                "file_name": uploaded_file.name,
+                "file_size": uploaded_file.size,
+                "file_type": uploaded_file.type
+            }
+        )
+        
         # Store job info in session state for tracking
         st.session_state.translation_job_id = job_id
         st.session_state.translation_job_status = "pending"
@@ -268,6 +282,18 @@ def start_translation_job(uploaded_file):
     except Exception as e:
         st.error(f"Ein Fehler ist aufgetreten: {e}")
         logging.error(f"Translation job error: {e}")
+        
+        # Log translation job error
+        user_email = st.session_state.get("email", "unknown")
+        log_usage(
+            user_email, 
+            "translation", 
+            "job_error", 
+            {
+                "error": str(e),
+                "file_name": uploaded_file.name if uploaded_file else "unknown"
+            }
+        )
 
 def refresh_translation_status():
     """Aktualisiert den Status eines Übersetzungsauftrags und lädt bei Bedarf den Style-Guide herunter."""
@@ -289,7 +315,24 @@ def refresh_translation_status():
         job_status = job_data.get("status", "unknown")
         
         # Status im Session State aktualisieren
+        old_status = st.session_state.get("translation_job_status", "unknown")
         st.session_state.translation_job_status = job_status
+        
+        # Log status changes for completed or failed translations
+        if job_status in ["completed", "translation_failed"] and old_status != job_status:
+            user_email = st.session_state.get("email", "unknown")
+            action = "job_completed" if job_status == "completed" else "job_failed"
+            log_usage(
+                user_email, 
+                "translation", 
+                action, 
+                {
+                    "job_id": job_id,
+                    "status": job_status,
+                    "previous_status": old_status,
+                    "file_name": job_data.get("file_name", "unknown")
+                }
+            )
         
         # Kosten- und Token-Informationen aus Firestore lesen
         st.session_state.job_cost = job_data.get("estimated_cost_usd")
@@ -1388,6 +1431,20 @@ elif selected_tool == "Text-to-Speech":
             
             # Generate button
             if st.button("🎵 Generate Audio", type="primary"):
+                # Log audio generation start
+                user_email = st.session_state.get("email", "unknown")
+                log_usage(
+                    user_email, 
+                    "audio_generation", 
+                    "tts_started", 
+                    {
+                        "text_length": len(text_content),
+                        "language": selected_lang,
+                        "voice": selected_voice,
+                        "use_ssml": use_ssml,
+                        "file_name": uploaded_file.name
+                    }
+                )
                 # Show different spinner message based on options
                 if use_ssml:
                     if len(text_content) <= 4500:
@@ -1440,11 +1497,58 @@ elif selected_tool == "Text-to-Speech":
                                 success_msg += ")"
                             
                             st.success(success_msg)
+                            
+                            # Log successful audio generation
+                            log_usage(
+                                user_email, 
+                                "audio_generation", 
+                                "tts_completed", 
+                                {
+                                    "text_length": len(text_content),
+                                    "language": selected_lang,
+                                    "voice": selected_voice,
+                                    "use_ssml": ssml_used,
+                                    "audio_format": audio_format,
+                                    "file_name": uploaded_file.name,
+                                    "status": "success"
+                                }
+                            )
                         else:
                             st.error("❌ Audio generation failed!")
+                            # Log failed audio generation
+                            log_usage(
+                                user_email, 
+                                "audio_generation", 
+                                "tts_failed", 
+                                {
+                                    "text_length": len(text_content),
+                                    "language": selected_lang,
+                                    "voice": selected_voice,
+                                    "use_ssml": use_ssml,
+                                    "file_name": uploaded_file.name,
+                                    "status": "failed",
+                                    "error": "Audio generation returned no data"
+                                }
+                            )
                     except Exception as e:
                         st.error(f"❌ Error: {str(e)}")
                         logging.error(f"TTS error: {e}", exc_info=True)
+                        
+                        # Log audio generation error
+                        log_usage(
+                            user_email, 
+                            "audio_generation", 
+                            "tts_error", 
+                            {
+                                "text_length": len(text_content),
+                                "language": selected_lang,
+                                "voice": selected_voice,
+                                "use_ssml": use_ssml,
+                                "file_name": uploaded_file.name,
+                                "status": "error",
+                                "error": str(e)
+                            }
+                        )
         else:
             st.error("❌ Could not extract text from document")
     
