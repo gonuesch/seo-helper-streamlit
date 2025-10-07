@@ -2188,8 +2188,25 @@ elif selected_tool == "Chat-Agent":
                     # Spezielle Anzeige für Moodboard-Tool
                     if "create_moodboard" in message.get("tools_used", []):
                         st.success("🎨 Moodboard wurde erstellt!")
-                        # Hier könnten die generierten Bilder angezeigt werden
-                        # st.image(generated_images, caption=image_descriptions)
+                        
+                        # Zeige die generierten Bilder an
+                        if hasattr(st.session_state.chat_agent, '_last_moodboard_data'):
+                            moodboard_data = st.session_state.chat_agent._last_moodboard_data
+                            
+                            st.subheader("🖼️ Generierte Bilder")
+                            
+                            # Erstelle ein 3x3 Grid für die Bilder
+                            cols = st.columns(3)
+                            for i, (image_data, description) in enumerate(zip(moodboard_data.get('images', []), moodboard_data.get('descriptions', []))):
+                                with cols[i % 3]:
+                                    st.write(f"**Bild {i+1}:**")
+                                    if isinstance(image_data, dict) and 'url' in image_data:
+                                        # Zeige Platzhalter für echte Bilder
+                                        st.info(f"🖼️ Bild {i+1}: {description[:50]}...")
+                                        st.caption(f"URL: {image_data.get('url', 'Generiert')}")
+                                    else:
+                                        st.info(f"🖼️ Bild {i+1}: {description[:50]}...")
+                                    st.divider()
             st.divider()
     
     # Chat-Eingabe

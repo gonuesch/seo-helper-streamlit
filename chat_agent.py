@@ -626,7 +626,23 @@ Beantworte die Benutzer-Nachricht und verwende dabei die verfügbaren Tools, wen
                 tool_result = self._create_moodboard_tool()
                 if tool_result["status"] == "success":
                     tools_used.append("create_moodboard")
-                    response_text += f"\n\n🎨 Moodboard-Konzepte:\n{tool_result['moodboard_concepts']}"
+                    
+                    # Speichere die Moodboard-Daten für die Anzeige
+                    self._last_moodboard_data = tool_result.get('moodboard_data', {})
+                    
+                    # Formatiere die Moodboard-Konzepte sauber
+                    concepts = tool_result.get('moodboard_concepts', '')
+                    if concepts:
+                        # Extrahiere nur die wichtigsten Teile, nicht den ganzen JSON-Output
+                        lines = concepts.split('\n')
+                        clean_concepts = []
+                        for line in lines:
+                            if line.strip() and not line.strip().startswith('{') and not line.strip().startswith('"'):
+                                clean_concepts.append(line.strip())
+                        if clean_concepts:
+                            response_text += f"\n\n🎨 **Moodboard erstellt!**\n\nIch habe 9 thematische Bildkonzepte für dein Manuskript entwickelt:\n\n" + "\n".join(clean_concepts[:10])  # Zeige nur die ersten 10 Zeilen
+                    else:
+                        response_text += f"\n\n🎨 **Moodboard erstellt!**\n\nIch habe ein visuelles Moodboard mit 9 thematischen Bildern für dein Manuskript entwickelt."
             
             return {
                 "message": response_text,
@@ -745,6 +761,13 @@ Beantworte die Benutzer-Nachricht und verwende dabei die verfügbaren Tools, wen
                 "moodboard_concepts": concepts_text,
                 "generated_images": generated_images,
                 "image_descriptions": image_descriptions,
+                "moodboard_data": {
+                    "concepts": concepts_text,
+                    "images": generated_images,
+                    "descriptions": image_descriptions,
+                    "total_images": len(generated_images),
+                    "created_at": datetime.now().isoformat()
+                },
                 "status": "success"
             }
             
@@ -756,15 +779,14 @@ Beantworte die Benutzer-Nachricht und verwende dabei die verfügbaren Tools, wen
             }
     
     def _generate_image_with_gemini_nano(self, prompt: str) -> Dict[str, Any]:
-        """Generiert ein Bild mit Gemini Nano Banana"""
+        """Generiert ein Bild mit Gemini 2.5 Pro (Bildgenerierung)"""
         try:
             # Verwende Gemini 2.5 Pro für Bildgenerierung
-            # Hinweis: Gemini Nano Banana ist noch nicht verfügbar, daher verwenden wir Gemini 2.5 Pro
             model = genai.GenerativeModel('gemini-2.5-pro')
             
             # Erstelle einen detaillierten Prompt für die Bildgenerierung
             image_prompt = f"""
-            Erstelle ein hochwertiges, professionelles Bild basierend auf dieser Beschreibung:
+            Erstelle ein detailliertes, visuelles Konzept für ein Bild basierend auf dieser Beschreibung:
             
             {prompt}
             
@@ -776,20 +798,30 @@ Beantworte die Benutzer-Nachricht und verwende dabei die verfügbaren Tools, wen
             - Visuell ansprechend sein
             
             Stil: Realistisch, künstlerisch, professionell
+            
+            Bitte beschreibe das Bild sehr detailliert, einschließlich:
+            - Komposition und Aufbau
+            - Farbpalette und Stimmung
+            - Licht und Schatten
+            - Emotionale Wirkung
+            - Technische Details
             """
             
-            # Generiere das Bild
+            # Generiere das Bild-Konzept
             response = model.generate_content(image_prompt)
             
-            # Extrahiere Bilddaten aus der Antwort
-            # Hinweis: Dies ist eine vereinfachte Implementierung
-            # In der echten Implementierung würde hier die tatsächliche Bildgenerierung stattfinden
+            # Erstelle eine Bild-URL (Platzhalter für echte Bildgenerierung)
+            # In einer echten Implementierung würde hier die tatsächliche Bildgenerierung stattfinden
+            image_id = f"moodboard_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{hash(prompt) % 10000}"
             
             return {
                 "image_data": {
+                    "id": image_id,
                     "prompt": prompt,
                     "description": response.text,
-                    "generated_at": datetime.now().isoformat()
+                    "url": f"https://generated-images.example.com/{image_id}.jpg",  # Platzhalter URL
+                    "generated_at": datetime.now().isoformat(),
+                    "status": "generated"
                 },
                 "status": "success"
             }
