@@ -1958,8 +1958,31 @@ elif selected_tool == "Chat-Agent":
     if st.session_state.chat_agent is None:
         st.session_state.chat_agent = ManuscriptChatAgent(gemini_api_key)
     
+    # Buch-Informationen
+    st.subheader("📖 Buch-Informationen")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        book_title = st.text_input(
+            "Titel des Buches",
+            placeholder="z.B. Die Assistentin",
+            key="book_title_input"
+        )
+    
+    with col2:
+        book_author = st.text_input(
+            "Autor/in",
+            placeholder="z.B. Charlotte Weber",
+            key="book_author_input"
+        )
+    
+    # Setze Buch-Metadaten im Chat Agent
+    if book_title or book_author:
+        st.session_state.chat_agent.set_book_metadata(book_title, book_author)
+    
     # Manuskript-Upload für Chat
-    col1, col2 = st.columns([2, 1])
+    st.subheader("📄 Manuskript-Upload")
+    col1, col2, col3 = st.columns([2, 1, 1])
     
     with col1:
         uploaded_file = st.file_uploader(
@@ -1969,6 +1992,15 @@ elif selected_tool == "Chat-Agent":
         )
     
     with col2:
+        cover_file = st.file_uploader(
+            label="Cover-Bild (optional)",
+            type=['jpg', 'jpeg', 'png', 'gif'],
+            key="cover_uploader",
+            help="Optional: Ein Cover-Bild für bessere Moodboard-Generierung"
+        )
+    
+    with col3:
+        st.write("") # Empty space for alignment
         if st.button("🗑️ Chat zurücksetzen", type="secondary"):
             st.session_state.chat_agent.clear_chat_history()
             st.session_state.chat_history = []
@@ -1994,6 +2026,28 @@ elif selected_tool == "Chat-Agent":
                 st.text(text_content[:1000] + "..." if len(text_content) > 1000 else text_content)
         else:
             st.error("❌ Konnte Text aus dem Dokument nicht extrahieren")
+    
+    # Cover verarbeiten
+    if cover_file:
+        # Speichere das Cover-Bild temporär
+        cover_bytes = cover_file.getvalue()
+        cover_filename = f"cover_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{cover_file.name.split('.')[-1]}"
+        
+        # Speichere das Cover in einem temporären Ordner
+        import os
+        os.makedirs("temp_covers", exist_ok=True)
+        cover_path = f"temp_covers/{cover_filename}"
+        
+        with open(cover_path, "wb") as f:
+            f.write(cover_bytes)
+        
+        # Setze das Cover im Chat Agent
+        st.session_state.chat_agent.set_cover_image(cover_path)
+        st.success(f"✅ Cover geladen: {cover_file.name}")
+        
+        # Zeige das Cover an
+        with st.expander("📖 Cover-Vorschau"):
+            st.image(cover_path, caption="Hochgeladenes Cover", use_container_width=True)
     
     # Chat-Interface
     st.divider()
@@ -2023,48 +2077,47 @@ elif selected_tool == "Chat-Agent":
                         if hasattr(st.session_state.chat_agent, '_last_moodboard_data'):
                             moodboard_data = st.session_state.chat_agent._last_moodboard_data
                             
-                            st.subheader("🖼️ Generierte Bilder")
+                            st.subheader("🖼️ Generiertes Moodboard-Bild")
                             
-                            # Erstelle ein 3x3 Grid für die Bilder
-                            cols = st.columns(3)
+                            # Zeige das einzelne Bild
                             for i, image_data in enumerate(moodboard_data.get('images', [])):
-                                with cols[i % 3]:
-                                    st.write(f"**Bild {i+1}:**")
-                                    if isinstance(image_data, dict) and 'url' in image_data:
-                                        # Zeige das echte Bild
-                                        try:
-                                            # Prüfe ob es ein lokaler Pfad oder eine URL ist
-                                            image_url = image_data['url']
+                                st.write(f"**Moodboard-Bild:**")
+                                if isinstance(image_data, dict) and image_data.get('url'):
+                                    # Zeige das echte Bild
+                                    try:
+                                        image_url = image_data['url']
+                                        
+                                        # Debug-Information
+                                        st.caption(f"Debug: URL = {image_url}")
+                                        
+                                        if image_url.startswith('temp_images/'):
+                                            # Lokales Bild
+                                            st.image(image_url, caption="Moodboard-Bild", use_container_width=True)
+                                        else:
+                                            # Externe URL
+                                            st.image(image_url, caption="Moodboard-Bild", use_container_width=True)
+                                        
+                                        st.caption(f"Beschreibung: {image_data.get('description', '')[:200]}...")
+                                        
+                                        # Zeige Status
+                                        status = image_data.get('status', 'unknown')
+                                        if status == 'generated':
+                                            st.success("✅ Echt generiert mit Gemini")
+                                        elif status == 'fallback':
+                                            st.info("ℹ️ Fallback-Bild")
+                                        elif status == 'error':
+                                            st.error("❌ Fehler bei Bildgenerierung")
                                             
-                                            # Debug-Information
-                                            st.caption(f"Debug: URL = {image_url}")
-                                            
-                                            if image_url.startswith('temp_images/'):
-                                                # Lokales Bild
-                                                st.image(image_url, caption=f"Bild {i+1}", use_container_width=True)
-                                            else:
-                                                # Externe URL
-                                                st.image(image_url, caption=f"Bild {i+1}", use_container_width=True)
-                                            
-                                            st.caption(f"Beschreibung: {image_data.get('description', '')[:100]}...")
-                                            
-                                            # Zeige Status
-                                            status = image_data.get('status', 'unknown')
-                                            if status == 'generated':
-                                                st.success("✅ Echt generiert mit Gemini")
-                                            elif status == 'fallback':
-                                                st.info("ℹ️ Fallback-Bild")
-                                            elif status == 'error':
-                                                st.error("❌ Fehler bei Bildgenerierung")
-                                                
-                                        except Exception as e:
-                                            st.error(f"Bild konnte nicht geladen werden: {e}")
-                                            st.info(f"🖼️ Bild {i+1}: {image_data.get('description', '')[:50]}...")
-                                            # Zeige die URL als Text
-                                            st.text(f"URL: {image_data.get('url', 'Keine URL')}")
-                                    else:
-                                        st.info(f"🖼️ Bild {i+1}: {str(image_data)[:50]}...")
-                                    st.divider()
+                                    except Exception as e:
+                                        st.error(f"Bild konnte nicht geladen werden: {e}")
+                                        st.info(f"🖼️ Bild: {image_data.get('description', '')[:50]}...")
+                                        # Zeige die URL als Text
+                                        st.text(f"URL: {image_data.get('url', 'Keine URL')}")
+                                else:
+                                    st.info(f"🖼️ Bild: {str(image_data)[:50]}...")
+                                    if image_data.get('status') == 'error':
+                                        st.error("❌ Fehler bei Bildgenerierung")
+                                st.divider()
             st.divider()
     
     # Chat-Eingabe

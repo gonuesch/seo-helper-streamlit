@@ -23,6 +23,8 @@ class ManuscriptChatAgent:
         self.chat_history = []
         self.manuscript_context = None
         self.cover_image_path = None
+        self.book_title = None
+        self.book_author = None
         self.available_tools = self._initialize_tools()
     
     def _initialize_tools(self) -> Dict[str, Any]:
@@ -80,6 +82,12 @@ class ManuscriptChatAgent:
         self.cover_image_path = cover_path
         logger.info(f"Cover-Bild gesetzt: {cover_path}")
     
+    def set_book_metadata(self, title: str, author: str):
+        """Setzt Titel und Autor des Buches"""
+        self.book_title = title
+        self.book_author = author
+        logger.info(f"Buch-Metadaten gesetzt: '{title}' von {author}")
+    
     def _analyze_manuscript_tool(self, **kwargs) -> Dict[str, Any]:
         """Tool: Manuskript-Analyse"""
         if not self.manuscript_context:
@@ -88,9 +96,17 @@ class ManuscriptChatAgent:
         try:
             # Verwende das KOMPLETTE Manuskript für die Analyse
             manuscript_length = len(self.manuscript_context)
+            title = getattr(self, 'book_title', '')
+            author = getattr(self, 'book_author', '')
+            
             prompt = f"""
             Analysiere das KOMPLETTE Manuskript gründlich ({manuscript_length:,} Zeichen):
             
+            BUCH-INFORMATIONEN:
+            Titel: {title if title else 'Unbekannt'}
+            Autor: {author if author else 'Unbekannt'}
+            
+            MANUSKRIPT:
             {self.manuscript_context}
             
             WICHTIG: Du hast Zugriff auf das GESAMTE Manuskript. Analysiere alle Teile, 
@@ -134,9 +150,17 @@ class ManuscriptChatAgent:
         try:
             # Verwende das KOMPLETTE Manuskript für die Zusammenfassung
             manuscript_length = len(self.manuscript_context)
+            title = getattr(self, 'book_title', '')
+            author = getattr(self, 'book_author', '')
+            
             prompt = f"""
             Erstelle eine prägnante Zusammenfassung des KOMPLETTEN Manuskripts ({manuscript_length:,} Zeichen):
             
+            BUCH-INFORMATIONEN:
+            Titel: {title if title else 'Unbekannt'}
+            Autor: {author if author else 'Unbekannt'}
+            
+            MANUSKRIPT:
             {self.manuscript_context}
             
             WICHTIG: Du hast Zugriff auf das GESAMTE Manuskript. Berücksichtige den kompletten 
@@ -754,55 +778,64 @@ Beantworte die Benutzer-Nachricht und verwende dabei die verfügbaren Tools, wen
             current_concept = ""
             concept_count = 0
             
-            # Erstelle 9 spezifische Bildkonzepte basierend auf dem Manuskript
-            image_concepts = [
-                f"Hauptcharakter aus dem Manuskript: {manuscript_summary[:500]}",
-                f"Setting und Umgebung des Manuskripts: {manuscript_summary[:500]}",
-                f"Stimmung und Atmosphäre des Manuskripts: {manuscript_summary[:500]}",
-                f"Genre-spezifische Elemente des Manuskripts: {manuscript_summary[:500]}",
-                f"Emotionale Kernbotschaft des Manuskripts: {manuscript_summary[:500]}",
-                f"Zeitperiode und Epoche des Manuskripts: {manuscript_summary[:500]}",
-                f"Symbolische Elemente des Manuskripts: {manuscript_summary[:500]}",
-                f"Konflikt und Spannung des Manuskripts: {manuscript_summary[:500]}",
-                f"Auflösung und Hoffnung des Manuskripts: {manuscript_summary[:500]}"
-            ]
+            # Erstelle 1 Hauptbild basierend auf dem Manuskript
+            # Berücksichtige Titel, Autor und Cover falls verfügbar
+            title = getattr(self, 'book_title', '')
+            author = getattr(self, 'book_author', '')
+            cover_context = ""
             
-            # Generiere Bilder für alle 9 Konzepte
-            for i, concept in enumerate(image_concepts):
-                try:
-                    image_prompt = f"Create a cinematic, atmospheric image for a book moodboard: {concept}"
-                    
-                    # Verwende Gemini 2.5 Flash Image für Bildgenerierung
-                    image_result = self._generate_image_with_gemini_nano(image_prompt)
-                    
-                    if image_result["status"] == "success":
-                        generated_images.append(image_result["image_data"])
-                        image_descriptions.append(f"Bildkonzept {i+1}: {concept[:100]}...")
-                        concept_count += 1
-                    else:
-                        # Fallback für fehlgeschlagene Generierung
-                        generated_images.append({
-                            "id": f"fallback_{i+1}",
-                            "prompt": concept,
-                            "description": f"Fallback-Bild für Konzept {i+1}",
-                            "url": f"https://picsum.photos/400/400?random={i+1}",
-                            "status": "fallback"
-                        })
-                        image_descriptions.append(f"Fallback-Bild {i+1}")
-                        concept_count += 1
-                        
-                except Exception as e:
-                    logger.error(f"Fehler bei Bildgenerierung {i+1}: {e}")
-                    # Fallback für Fehler
+            if self.cover_image_path:
+                cover_context = f"Berücksichtige das hochgeladene Cover-Bild für die Bildkomposition. "
+            
+            # Erstelle einen umfassenden Prompt für ein einziges, aussagekräftiges Bild
+            main_concept = f"""
+            Erstelle ein einziges, aussagekräftiges Bild für ein Buch-Moodboard:
+            
+            BUCH-INFORMATIONEN:
+            Titel: {title if title else 'Unbekannt'}
+            Autor: {author if author else 'Unbekannt'}
+            
+            MANUSKRIPT-ZUSAMMENFASSUNG:
+            {manuscript_summary}
+            
+            {cover_context}
+            
+            Das Bild sollte die Essenz des Buches einfangen: Hauptcharakter, Setting, Stimmung und Genre.
+            Es soll als zentrales Moodboard-Bild fungieren, das die gesamte Atmosphäre des Buches repräsentiert.
+            """
+            
+            # Generiere nur 1 Bild
+            try:
+                image_prompt = f"Create a single, powerful, cinematic image for a book moodboard: {main_concept}"
+                
+                # Verwende nur Gemini 2.5 Flash Image - keine Fallbacks zu externen Anbietern
+                image_result = self._generate_image_with_gemini_nano(image_prompt)
+                
+                if image_result["status"] == "success":
+                    generated_images.append(image_result["image_data"])
+                    image_descriptions.append(f"Hauptbild: {main_concept[:100]}...")
+                else:
+                    # Kein Fallback - nur Fehler melden
                     generated_images.append({
-                        "id": f"error_{i+1}",
-                        "prompt": concept,
-                        "description": f"Fehler bei Bildgenerierung {i+1}",
-                        "url": f"https://picsum.photos/400/400?random={i+1}",
+                        "id": "error_main",
+                        "prompt": main_concept,
+                        "description": "Fehler bei Bildgenerierung",
+                        "url": None,
                         "status": "error"
                     })
-                    image_descriptions.append(f"Fehler-Bild {i+1}")
-                    concept_count += 1
+                    image_descriptions.append("Fehler bei Bildgenerierung")
+                    
+            except Exception as e:
+                logger.error(f"Fehler bei Bildgenerierung: {e}")
+                # Kein Fallback - nur Fehler melden
+                generated_images.append({
+                    "id": "error_main",
+                    "prompt": main_concept,
+                    "description": f"Fehler bei Bildgenerierung: {str(e)}",
+                    "url": None,
+                    "status": "error"
+                })
+                image_descriptions.append("Fehler bei Bildgenerierung")
             
             return {
                 "moodboard_concepts": concepts_text,
@@ -895,23 +928,19 @@ Beantworte die Benutzer-Nachricht und verwende dabei die verfügbaren Tools, wen
                     "status": "success"
                 }
             else:
-                # Fallback: Erstelle ein thematisches Bild mit Unsplash
+                # Kein Fallback zu externen Anbietern - nur Fehler melden
                 logger.warning(f"No image data received for prompt: {prompt[:100]}...")
-                
-                # Extrahiere Keywords für thematische Bilder
-                keywords = self._extract_keywords_for_image(prompt)
-                fallback_url = f"https://source.unsplash.com/400x400/?{keywords}"
                 
                 return {
                     "image_data": {
                         "id": image_id,
                         "prompt": prompt,
                         "description": image_description,
-                        "url": fallback_url,
+                        "url": None,
                         "generated_at": datetime.now().isoformat(),
-                        "status": "fallback"
+                        "status": "error"
                     },
-                    "status": "success"
+                    "status": "failed"
                 }
             
         except Exception as e:
@@ -1021,8 +1050,8 @@ Beantworte die Benutzer-Nachricht und verwende dabei die verfügbaren Tools, wen
             
         except Exception as e:
             logger.error(f"Fehler beim Speichern des Bildes: {e}")
-            # Fallback zu einem thematischen Platzhalter
-            return f"https://picsum.photos/400/400?random={image_id}"
+            # Kein Fallback - nur Fehler melden
+            return None
     
     def get_available_tools(self) -> Dict[str, Any]:
         """Gibt die verfügbaren Tools zurück."""
