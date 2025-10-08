@@ -163,12 +163,22 @@ if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
     logger.info("🗑️ GOOGLE_APPLICATION_CREDENTIALS Umgebungsvariable entfernt")
 
 # Lade Credentials
-# TTS credentials will be loaded when needed in TTS functions
+google_credentials = get_google_credentials()
+
+# Debug: Logge Credentials-Status
+if google_credentials:
+    logger.info("✅ Google Cloud Credentials erfolgreich geladen")
+else:
+    logger.warning("⚠️ Keine Google Cloud Credentials verfügbar - verwende Default Service Account")
 
 # Richte den Google Cloud Pub/Sub Publisher ein
-# Verwende immer Cloud Run Default Service Account für Pub/Sub
-publisher = pubsub_v1.PublisherClient()
-logger.info("✅ Pub/Sub Client mit Cloud Run Default Service Account initialisiert")
+if google_credentials:
+    publisher = pubsub_v1.PublisherClient(credentials=google_credentials)
+    logger.info("✅ Pub/Sub Client mit expliziten Credentials initialisiert")
+else:
+    # Verwende Cloud Run Default Service Account
+    publisher = pubsub_v1.PublisherClient()
+    logger.info("✅ Pub/Sub Client mit Cloud Run Default Service Account initialisiert")
 
 topic_path = publisher.topic_path("avid-infinity-458913-p3", "event-tracking-toolbox")
 
@@ -181,10 +191,15 @@ PUB_SUB_TOPIC = "start-translation"
 # GCS Buckets für Text-to-Speech
 GCS_TTS_OUTPUT_BUCKET = "tts-output-europe-west4-6899" # Bucket für MP3-Dateien
 
-# Verwende immer Cloud Run Default Service Account für Storage und Firestore
-storage_client = storage.Client(project=PROJECT_ID)
-firestore_client = firestore.Client(project=PROJECT_ID, database=FIRESTORE_DB_ID)
-logger.info("✅ Storage und Firestore Clients mit Cloud Run Default Service Account initialisiert")
+# Initialisiere Storage und Firestore mit korrekten Credentials
+if google_credentials:
+    storage_client = storage.Client(project=PROJECT_ID, credentials=google_credentials)
+    firestore_client = firestore.Client(project=PROJECT_ID, database=FIRESTORE_DB_ID, credentials=google_credentials)
+    logger.info("✅ Storage und Firestore Clients mit expliziten Credentials initialisiert")
+else:
+    storage_client = storage.Client(project=PROJECT_ID)
+    firestore_client = firestore.Client(project=PROJECT_ID, database=FIRESTORE_DB_ID)
+    logger.info("✅ Storage und Firestore Clients mit Cloud Run Default Service Account initialisiert")
 
 # Pub/Sub Publisher für Translation Jobs
 pubsub_publisher = publisher  # Verwende den bereits initialisierten Publisher
