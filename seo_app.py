@@ -765,6 +765,37 @@ def run_tts_processing_and_logging():
 # Page config MUSS der erste Streamlit-Befehl sein
 st.set_page_config(page_title="Toolbox", page_icon="app_icon.png", layout="wide")
 
+# Dark Mode CSS für bessere Lesbarkeit der Navigation
+st.markdown("""
+<style>
+/* Dark Mode Navigation Verbesserungen */
+.stMenu > div > div > div > div {
+    color: #ffffff !important;
+}
+
+.stMenu > div > div > div > div:hover {
+    color: #ffffff !important;
+    background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Bessere Kontraste für Dark Mode */
+[data-testid="stSidebar"] {
+    background-color: #262730;
+}
+
+/* Navigation Tabs im Dark Mode */
+div[data-testid="stHorizontalBlock"] > div > div > div > div {
+    color: #ffffff !important;
+}
+
+/* Hover-Effekte für bessere UX */
+.stMenu > div > div > div > div:hover {
+    background-color: rgba(0, 123, 255, 0.2) !important;
+    border-radius: 10px;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # ==============================================================================
 # HIER BEGINNT DIE ANWENDUNG
 # Da IAP-Authentifizierung aktiviert ist, wird dieser Code nur von
@@ -883,10 +914,21 @@ selected_tool = option_menu(
     icons=['search', 'universal-access-circle', 'sound-wave', 'translate'],
     menu_icon="cast", default_index=default_index, orientation="horizontal",
     styles={
-        "container": {"padding": "5px !important", "background-color": "#fafafa", "border-radius": "10px"},
+        "container": {"padding": "5px !important", "background-color": "transparent", "border-radius": "10px"},
         "icon": {"color": "#4A90E2", "font-size": "24px"},
-        "nav-link": {"font-size": "16px", "font-weight": "600", "text-align": "center", "margin": "0px 5px", "--hover-color": "#eee", "border-radius": "10px"},
-        "nav-link-selected": {"background-color": "#007bff"},
+        "nav-link": {
+            "font-size": "16px", 
+            "font-weight": "600", 
+            "text-align": "center", 
+            "margin": "0px 5px", 
+            "--hover-color": "#eee", 
+            "border-radius": "10px",
+            "color": "#ffffff !important"  # Weiße Schrift für bessere Lesbarkeit
+        },
+        "nav-link-selected": {
+            "background-color": "#007bff",
+            "color": "#ffffff !important"  # Weiße Schrift für ausgewählten Tab
+        },
     }
 )
 
