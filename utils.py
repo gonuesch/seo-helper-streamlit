@@ -124,17 +124,14 @@ def chunk_text(text: str, chunk_size: int = 8000) -> list[str]:
         # Finde den besten möglichen Trennpunkt von hinten
         break_point = -1
         for delimiter in ['\n\n', '.', ' ']:
-            # rfind gibt den letzten Index des Delimiters vor dem Ende zurück
             p = sub_text.rfind(delimiter, 0, chunk_size)
             if p != -1:
                 break_point = p + len(delimiter)
                 break
         
-        # Wenn gar kein Trennzeichen gefunden wird, mache einen harten Schnitt
         if break_point == -1:
             break_point = chunk_size
             
-        # Füge den Chunk hinzu und verarbeite den Rest rekursiv
         chunks.append(sub_text[:break_point])
         chunk_recursively(sub_text[break_point:])
 

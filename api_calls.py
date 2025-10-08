@@ -25,7 +25,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Gemini-Modell für die neuen Funktionen
-model_gemini = genai.GenerativeModel('gemini-2.5-pro')
+model_gemini = genai.GenerativeModel('gemini-2.5-flash')
 
 # --- Die Funktionen generate_seo_tags_cached und generate_accessibility_description_cached bleiben unverändert ---
 
