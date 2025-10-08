@@ -2197,15 +2197,35 @@ elif selected_tool == "Chat-Agent":
                             
                             # Erstelle ein 3x3 Grid für die Bilder
                             cols = st.columns(3)
-                            for i, (image_data, description) in enumerate(zip(moodboard_data.get('images', []), moodboard_data.get('descriptions', []))):
+                            for i, image_data in enumerate(moodboard_data.get('images', [])):
                                 with cols[i % 3]:
                                     st.write(f"**Bild {i+1}:**")
                                     if isinstance(image_data, dict) and 'url' in image_data:
-                                        # Zeige Platzhalter für echte Bilder
-                                        st.info(f"🖼️ Bild {i+1}: {description[:50]}...")
-                                        st.caption(f"URL: {image_data.get('url', 'Generiert')}")
+                                        # Zeige das echte Bild
+                                        try:
+                                            # Prüfe ob es ein lokaler Pfad oder eine URL ist
+                                            image_url = image_data['url']
+                                            if image_url.startswith('temp_images/'):
+                                                # Lokales Bild
+                                                st.image(image_url, caption=f"Bild {i+1}", use_column_width=True)
+                                            else:
+                                                # Externe URL
+                                                st.image(image_url, caption=f"Bild {i+1}", use_column_width=True)
+                                            
+                                            st.caption(f"Beschreibung: {image_data.get('description', '')[:100]}...")
+                                            
+                                            # Zeige Status
+                                            status = image_data.get('status', 'unknown')
+                                            if status == 'generated':
+                                                st.success("✅ Echt generiert mit Gemini")
+                                            elif status == 'fallback':
+                                                st.info("ℹ️ Fallback-Bild")
+                                                
+                                        except Exception as e:
+                                            st.error(f"Bild konnte nicht geladen werden: {e}")
+                                            st.info(f"🖼️ Bild {i+1}: {image_data.get('description', '')[:50]}...")
                                     else:
-                                        st.info(f"🖼️ Bild {i+1}: {description[:50]}...")
+                                        st.info(f"🖼️ Bild {i+1}: {str(image_data)[:50]}...")
                                     st.divider()
             st.divider()
     
