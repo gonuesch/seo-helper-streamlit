@@ -63,7 +63,7 @@ def analyze_manuscript_single_call(cloudevent):
         # --- Clients "Lazy" initialisieren ---
         firestore_client = firestore.Client(project=PROJECT_ID, database=FIRESTORE_DB_ID)
         vertexai.init(project=PROJECT_ID, location=LOCATION)
-        model = GenerativeModel("gemini-2.5-pro")
+        model = GenerativeModel("gemini-2.5-flash")
 
         # 1. Job-ID aus der Pub/Sub-Nachricht holen
         pubsub_message = json.loads(cloudevent.data.decode('utf-8'))
@@ -105,7 +105,7 @@ def analyze_manuscript_single_call(cloudevent):
         cache = None
         try:
             cache = caching.CachedContent.create(
-                model_name="gemini-2.5-pro",
+                model_name="gemini-2.5-flash",
                 system_instruction="Du bist ein Experte für Literaturanalyse und Übersetzung.",
                 contents=[manuscript_part]
             )

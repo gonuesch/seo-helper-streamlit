@@ -107,13 +107,8 @@ def read_text_from_pdf(file_object: BytesIO) -> str:
 @log_exceptions
 def chunk_text(text: str, chunk_size: int = 40000) -> list[str]:
     """
-    Teilt einen langen Text rekursiv in Chunks auf, die die chunk_size
-    garantiert nicht überschreiten.
-    
-    Optimiert für Gemini 2.5 Flash:
-    - Input: 1M Tokens (~800K Zeichen)
-    - Output: 65K Tokens (~50K Zeichen)
-    - Sicherer Chunk: 40K Zeichen Input → ~44K Zeichen Output
+    Teilt einen langen Text in Chunks auf.
+    Einfache Implementierung für Gemini 2.5 Flash.
     """
     if not isinstance(text, str):
         return []
@@ -129,132 +124,19 @@ def chunk_text(text: str, chunk_size: int = 40000) -> list[str]:
         # Finde den besten möglichen Trennpunkt von hinten
         break_point = -1
         for delimiter in ['\n\n', '.', ' ']:
-            # rfind gibt den letzten Index des Delimiters vor dem Ende zurück
             p = sub_text.rfind(delimiter, 0, chunk_size)
             if p != -1:
                 break_point = p + len(delimiter)
                 break
         
-        # Wenn gar kein Trennzeichen gefunden wird, mache einen harten Schnitt
         if break_point == -1:
             break_point = chunk_size
             
-        # Füge den Chunk hinzu und verarbeite den Rest rekursiv
         chunks.append(sub_text[:break_point])
         chunk_recursively(sub_text[break_point:])
 
     chunk_recursively(text)
     return [c for c in chunks if c.strip()]
 
-@log_exceptions
-def chunk_text_by_paragraphs(text: str, max_chunk_size: int = 40000) -> list[str]:
-    """
-    Teilt Text intelligent nach Absätzen auf, optimiert für Gemini 2.5 Flash.
-    - Input Limit: 1M Tokens (~800K Zeichen)
-    - Output Limit: 65K Tokens (~50K Zeichen)
-    - Sicherer Chunk: 40K Zeichen Input → ~44K Zeichen Output
-    """
-    if not isinstance(text, str):
-        return []
-    
-    # Teile Text in Absätze auf
-    paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
-    
-    if not paragraphs:
-        return []
-    
-    chunks = []
-    current_chunk = ""
-    
-    for paragraph in paragraphs:
-        # Wenn der aktuelle Chunk + neuer Absatz zu groß wäre
-        if current_chunk and len(current_chunk) + len(paragraph) + 2 > max_chunk_size:
-            # Speichere den aktuellen Chunk
-            chunks.append(current_chunk.strip())
-            current_chunk = paragraph
-        else:
-            # Füge Absatz zum aktuellen Chunk hinzu
-            if current_chunk:
-                current_chunk += "\n\n" + paragraph
-            else:
-                current_chunk = paragraph
-    
-    # Füge den letzten Chunk hinzu
-    if current_chunk.strip():
-        chunks.append(current_chunk.strip())
-    
-    return chunks
-
-@log_exceptions
-def estimate_translation_output_size(german_text: str) -> int:
-    """
-    Schätzt die Größe der englischen Übersetzung basierend auf dem deutschen Text.
-    Deutsche Texte sind typischerweise 10-15% kürzer als englische Übersetzungen.
-    """
-    if not isinstance(german_text, str):
-        return 0
-    
-    # Deutsche Texte sind ~10-15% kürzer als englische Übersetzungen
-    estimated_output_size = int(len(german_text) * 1.12)  # 12% länger
-    return estimated_output_size
-
-@log_exceptions
-def is_safe_for_gemini_flash_output(german_text: str) -> bool:
-    """
-    Prüft, ob der deutsche Text sicher für Gemini 2.5 Flash übersetzt werden kann.
-    Output-Limit: 65K Tokens (~50K Zeichen)
-    """
-    estimated_output = estimate_translation_output_size(german_text)
-    max_safe_output = 45000  # 45K Zeichen (sicher unter 50K)
-    
-    return estimated_output <= max_safe_output
-
-@log_exceptions
-def chunk_text_for_gemini_flash(text: str) -> list[str]:
-    """
-    Intelligente Chunking-Strategie für Gemini 2.5 Flash.
-    Berücksichtigt sowohl Input- als auch Output-Limits.
-    """
-    if not isinstance(text, str):
-        return []
-    
-    # Maximaler sicherer Input für Gemini 2.5 Flash
-    max_input_chars = 40000  # 40K Zeichen Input
-    chunks = []
-    
-    def chunk_recursively(sub_text):
-        if len(sub_text) <= max_input_chars:
-            # Prüfe Output-Limit
-            if is_safe_for_gemini_flash_output(sub_text):
-                chunks.append(sub_text)
-            else:
-                # Text ist zu groß für Output-Limit, weiter aufteilen
-                mid_point = len(sub_text) // 2
-                # Finde besseren Trennpunkt
-                for delimiter in ['\n\n', '.', ' ']:
-                    break_point = sub_text.rfind(delimiter, 0, mid_point)
-                    if break_point != -1:
-                        chunk_recursively(sub_text[:break_point + len(delimiter)])
-                        chunk_recursively(sub_text[break_point + len(delimiter):])
-                        return
-                # Fallback: harte Teilung
-                chunk_recursively(sub_text[:mid_point])
-                chunk_recursively(sub_text[mid_point:])
-            return
-        
-        # Finde besten Trennpunkt
-        break_point = -1
-        for delimiter in ['\n\n', '.', ' ']:
-            p = sub_text.rfind(delimiter, 0, max_input_chars)
-            if p != -1:
-                break_point = p + len(delimiter)
-                break
-        
-        if break_point == -1:
-            break_point = max_input_chars
-            
-        chunk_recursively(sub_text[:break_point])
-        chunk_recursively(sub_text[break_point:])
-    
-    chunk_recursively(text)
-    return [c for c in chunks if c.strip()]
+# Einfache Chunking-Funktion für Gemini 2.5 Flash
+# Alle komplexen Funktionen entfernt - zurück zu den Basics

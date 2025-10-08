@@ -171,11 +171,6 @@ if google_credentials:
 else:
     logger.warning("⚠️ Keine Google Cloud Credentials verfügbar - verwende Default Service Account")
 
-# TEMPORARY FIX: Verwende immer Cloud Run Default Service Account
-# um 403 Permission-Fehler zu vermeiden
-google_credentials = None
-logger.info("🔧 TEMPORARY FIX: Verwende Cloud Run Default Service Account für alle Services")
-
 # Richte den Google Cloud Pub/Sub Publisher ein
 if google_credentials:
     publisher = pubsub_v1.PublisherClient(credentials=google_credentials)
