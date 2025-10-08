@@ -171,17 +171,18 @@ if google_credentials:
 else:
     logger.warning("⚠️ Keine Google Cloud Credentials verfügbar - verwende Default Service Account")
 
-# FIX: Verwende immer Cloud Run Default Service Account für Translation
-# Der TTS Service Account hat nicht die nötigen Berechtigungen für Vertex AI
-google_credentials = None
-logger.info("🔧 FIX: Verwende Cloud Run Default Service Account für alle Services")
+# FIX: Verwende Cloud Run Default Service Account für Translation
+# aber TTS Service Account für Text-to-Speech
+translation_credentials = None  # Cloud Run Default Service Account für Translation
+tts_credentials = get_google_credentials()  # TTS Service Account für Text-to-Speech
+logger.info("🔧 FIX: Verwende Cloud Run Default Service Account für Translation, TTS Service Account für TTS")
 
 # Richte den Google Cloud Pub/Sub Publisher ein
-if google_credentials:
-    publisher = pubsub_v1.PublisherClient(credentials=google_credentials)
+if translation_credentials:
+    publisher = pubsub_v1.PublisherClient(credentials=translation_credentials)
     logger.info("✅ Pub/Sub Client mit expliziten Credentials initialisiert")
 else:
-    # Verwende Cloud Run Default Service Account
+    # Verwende Cloud Run Default Service Account für Translation
     publisher = pubsub_v1.PublisherClient()
     logger.info("✅ Pub/Sub Client mit Cloud Run Default Service Account initialisiert")
 
@@ -197,9 +198,9 @@ PUB_SUB_TOPIC = "start-translation"
 GCS_TTS_OUTPUT_BUCKET = "tts-output-europe-west4-6899" # Bucket für MP3-Dateien
 
 # Initialisiere Storage und Firestore mit korrekten Credentials
-if google_credentials:
-    storage_client = storage.Client(project=PROJECT_ID, credentials=google_credentials)
-    firestore_client = firestore.Client(project=PROJECT_ID, database=FIRESTORE_DB_ID, credentials=google_credentials)
+if translation_credentials:
+    storage_client = storage.Client(project=PROJECT_ID, credentials=translation_credentials)
+    firestore_client = firestore.Client(project=PROJECT_ID, database=FIRESTORE_DB_ID, credentials=translation_credentials)
     logger.info("✅ Storage und Firestore Clients mit expliziten Credentials initialisiert")
 else:
     storage_client = storage.Client(project=PROJECT_ID)
