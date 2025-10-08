@@ -80,10 +80,15 @@ class ManuscriptChatAgent:
             return {"error": "Kein Manuskript-Kontext verfügbar", "status": "failed"}
         
         try:
+            # Verwende das KOMPLETTE Manuskript für die Analyse
+            manuscript_length = len(self.manuscript_context)
             prompt = f"""
-            Analysiere das folgende Manuskript gründlich:
+            Analysiere das KOMPLETTE Manuskript gründlich ({manuscript_length:,} Zeichen):
             
             {self.manuscript_context}
+            
+            WICHTIG: Du hast Zugriff auf das GESAMTE Manuskript. Analysiere alle Teile, 
+            einschließlich Anfang, Mitte und Ende der Geschichte.
             
             Erstelle eine detaillierte Analyse mit folgenden Kategorien:
             1. PLOT & STRUKTUR (Bewertung 1-10)
@@ -121,15 +126,21 @@ class ManuscriptChatAgent:
             return {"error": "Kein Manuskript-Kontext verfügbar", "status": "failed"}
         
         try:
+            # Verwende das KOMPLETTE Manuskript für die Zusammenfassung
+            manuscript_length = len(self.manuscript_context)
             prompt = f"""
-            Erstelle eine prägnante Zusammenfassung des folgenden Manuskripts:
+            Erstelle eine prägnante Zusammenfassung des KOMPLETTEN Manuskripts ({manuscript_length:,} Zeichen):
             
             {self.manuscript_context}
+            
+            WICHTIG: Du hast Zugriff auf das GESAMTE Manuskript. Berücksichtige den kompletten 
+            Handlungsverlauf von Anfang bis Ende, einschließlich aller wichtigen Wendepunkte 
+            und des Endes der Geschichte.
             
             Die Zusammenfassung sollte enthalten:
             1. Hauptthema/Genre
             2. Hauptcharaktere
-            3. Zentrale Handlung (ohne Spoiler)
+            3. Zentrale Handlung (inklusive Ende der Geschichte)
             4. Besondere Stärken
             5. Zielgruppe
             
@@ -541,9 +552,14 @@ class ManuscriptChatAgent:
         """Erstellt den System-Prompt für den Chat Agent."""
         manuscript_info = ""
         if self.manuscript_context:
+            # Zeige mehr vom Manuskript-Kontext (erste 10000 Zeichen für besseren Kontext)
+            manuscript_preview = self.manuscript_context[:10000]
             manuscript_info = f"""
-MANUSKRIPT-KONTEXT:
-{self.manuscript_context[:2000]}{"..." if len(self.manuscript_context) > 2000 else ""}
+MANUSKRIPT-KONTEXT (Vollständiges Manuskript verfügbar - {len(self.manuscript_context):,} Zeichen):
+{manuscript_preview}{"..." if len(self.manuscript_context) > 10000 else ""}
+
+HINWEIS: Du hast Zugriff auf das KOMPLETTE Manuskript ({len(self.manuscript_context):,} Zeichen). 
+Verwende die verfügbaren Tools, um das gesamte Manuskript zu analysieren, nicht nur den Vorschau-Abschnitt.
 """
         
         tools_info = "\n".join([
