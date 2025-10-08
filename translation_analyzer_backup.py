@@ -100,22 +100,10 @@ def analyze_manuscript_single_call(cloudevent):
         
         print(f"Text erfolgreich extrahiert: {len(manuscript_text)} Zeichen")
         
-        # 5. Vertex AI Cache erstellen für spätere Übersetzung (mit Fallback)
-        print(f"🔄 Erstelle Vertex AI Cache für Job {job_id}...")
-        manuscript_part = Part.from_data(data=manuscript_text.encode('utf-8'), mime_type="text/plain")
-        
+        # 5. Cache deaktiviert - Übersetzung läuft ohne Cache
+        print(f"🔄 Cache deaktiviert für Job {job_id}...")
         cache = None
-        try:
-            cache = caching.CachedContent.create(
-                model_name="gemini-2.5-flash",
-                system_instruction="Du bist ein Experte für Literaturanalyse und Übersetzung.",
-                contents=[manuscript_part]
-            )
-            print(f"✅ Cache erstellt: {cache.name}")
-        except Exception as cache_error:
-            print(f"⚠️ Cache-Erstellung fehlgeschlagen: {cache_error}")
-            print("🔄 Übersetzung läuft ohne Cache weiter...")
-            cache = None
+        print("✅ Übersetzung läuft ohne Cache (Cache deaktiviert)")
         
         # 6. Gemini zur Analyse des GESAMTEN Manuskripts aufrufen
         prompt = f"""
@@ -302,12 +290,8 @@ def analyze_manuscript_single_call(cloudevent):
             "analyzed_at": datetime.datetime.utcnow()
         }
         
-        # Cache-Name nur hinzufügen wenn Cache erfolgreich erstellt wurde
-        if cache and hasattr(cache, 'name'):
-            update_data["cached_content_name"] = cache.name
-            print(f"✅ Cache-Name gespeichert: {cache.name}")
-        else:
-            print("⚠️ Kein Cache verfügbar - Übersetzung läuft ohne Cache")
+        # Cache deaktiviert - kein Cache-Name zu speichern
+        print("✅ Cache deaktiviert - Übersetzung läuft ohne Cache")
         
         job_ref.update(update_data)
 
