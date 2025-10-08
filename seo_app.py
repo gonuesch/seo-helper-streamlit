@@ -171,10 +171,11 @@ if google_credentials:
 else:
     logger.warning("⚠️ Keine Google Cloud Credentials verfügbar - verwende Default Service Account")
 
-# REVERT: Zurück zu den ursprünglichen Credentials
-# Der TTS Service Account funktioniert für ALLES (Translation + TTS)
-google_credentials = get_google_credentials()
-logger.info("🔧 REVERT: Verwende TTS Service Account für ALLES (Translation + TTS)")
+# FIX: Verwende Cloud Run Default Service Account für Translation
+# TTS Service Account hat KEINE Vertex AI Berechtigungen
+google_credentials = None  # Cloud Run Default Service Account für Translation
+tts_credentials = get_google_credentials()  # TTS Service Account für TTS
+logger.info("🔧 FIX: Cloud Run Default Service Account für Translation, TTS Service Account für TTS")
 
 # Richte den Google Cloud Pub/Sub Publisher ein
 if google_credentials:
