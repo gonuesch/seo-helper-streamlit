@@ -22,6 +22,7 @@ class ManuscriptChatAgent:
         # Chat History
         self.chat_history = []
         self.manuscript_context = None
+        self.cover_image_path = None
         self.available_tools = self._initialize_tools()
     
     def _initialize_tools(self) -> Dict[str, Any]:
@@ -73,6 +74,11 @@ class ManuscriptChatAgent:
         """Setzt den Manuskript-Kontext für den Chat Agent."""
         self.manuscript_context = manuscript_text
         logger.info(f"Manuscript context set: {len(manuscript_text)} characters")
+    
+    def set_cover_image(self, cover_path: str):
+        """Setzt das Cover-Bild für den Agent"""
+        self.cover_image_path = cover_path
+        logger.info(f"Cover-Bild gesetzt: {cover_path}")
     
     def _analyze_manuscript_tool(self, **kwargs) -> Dict[str, Any]:
         """Tool: Manuskript-Analyse"""
@@ -697,11 +703,21 @@ Beantworte die Benutzer-Nachricht und verwende dabei die verfügbaren Tools, wen
             manuscript_summary = summary_result["summary"]
             
             # Generiere 9 verschiedene Bildkonzepte basierend auf dem Manuskript
+            cover_context = ""
+            if self.cover_image_path:
+                cover_context = f"""
+                
+                COVER-BILD VERFÜGBAR:
+                Ein Cover-Bild wurde hochgeladen und sollte bei der Moodboard-Erstellung berücksichtigt werden.
+                Das Cover zeigt bereits wichtige visuelle Elemente, die in das Moodboard integriert werden sollten.
+                """
+            
             moodboard_prompt = f"""
             Basierend auf diesem Manuskript erstelle 9 verschiedene Bildkonzepte für ein Moodboard:
             
             MANUSKRIPT-ZUSAMMENFASSUNG:
             {manuscript_summary}
+            {cover_context}
             
             Erstelle 9 verschiedene Bildkonzepte, die das Manuskript thematisch repräsentieren:
             1. Hauptcharakter/Protagonist
@@ -905,37 +921,6 @@ Beantworte die Benutzer-Nachricht und verwende dabei die verfügbaren Tools, wen
                 "status": "failed"
             }
     
-    def _generate_actual_image(self, description: str, image_id: str) -> str:
-        """Generiert ein echtes Bild basierend auf der Beschreibung"""
-        try:
-            # Verwende einen echten Bildgenerierungs-Service
-            # Hier implementieren wir eine einfache Lösung mit einem öffentlichen API
-            
-            # Erstelle einen optimierten Prompt für die Bildgenerierung
-            optimized_prompt = f"Professional moodboard image: {description[:200]}"
-            
-            # Verwende einen kostenlosen Bildgenerierungs-Service
-            # Hier verwenden wir einen Platzhalter, aber in der echten Implementierung
-            # würde hier eine echte API wie DALL-E, Midjourney oder Stable Diffusion verwendet
-            
-            # Für jetzt erstellen wir eine Platzhalter-URL, die später durch echte Bilder ersetzt wird
-            # In der Produktion würde hier eine echte Bildgenerierungs-API aufgerufen
-            
-            # Simuliere eine echte Bildgenerierung
-            import hashlib
-            hash_id = hashlib.md5(f"{description}_{image_id}".encode()).hexdigest()[:8]
-            
-            # Erstelle eine URL für ein generiertes Bild
-            # Verwende einen echten Bildgenerierungs-Service
-            # Hier verwenden wir Unsplash API für thematische Bilder
-            image_url = f"https://source.unsplash.com/400x400/?{self._extract_keywords(description)}"
-            
-            return image_url
-            
-        except Exception as e:
-            logger.error(f"Fehler bei echter Bildgenerierung: {e}")
-            # Fallback zu einem Platzhalter-Bild
-            return f"https://picsum.photos/400/400?random={image_id}"
     
     def _extract_keywords(self, description: str) -> str:
         """Extrahiert Schlüsselwörter aus der Bildbeschreibung für die Bildsuche"""
