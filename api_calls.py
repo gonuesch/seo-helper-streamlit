@@ -213,7 +213,7 @@ def generate_accessibility_description_cached(image_bytes_for_api, file_name_for
 def generate_translation_guide(manuscript_bytes: bytes, job_id: str, gemini_api_key: str = None) -> dict:
     try:
         vertexai.init(project="avid-infinity-458913-p3")
-        model_for_caching = GenerativeModel("gemini-2.5-pro") # Updated from 1.5-pro-001
+        model_for_caching = GenerativeModel("gemini-2.5-flash") # Optimized for translation speed and cost
         
         # Convert manuscript bytes to text first (DOCX/PDF -> text)
         try:
