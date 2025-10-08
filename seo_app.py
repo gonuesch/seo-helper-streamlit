@@ -34,7 +34,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Importiere Funktionen aus deinen Modulen
-from utils import convert_tiff_to_png_bytes, read_text_from_docx, read_text_from_pdf, chunk_text, chunk_text_by_paragraphs, log_exceptions, upload_to_gcs, download_from_gcs
+from utils import convert_tiff_to_png_bytes, read_text_from_docx, read_text_from_pdf, chunk_text, chunk_text_by_paragraphs, chunk_text_for_translation, log_exceptions, upload_to_gcs, download_from_gcs
 from api_calls import (
     generate_seo_tags_cached, 
     generate_accessibility_description_cached,

@@ -174,3 +174,40 @@ def chunk_text_by_paragraphs(text: str, max_chunk_size: int = 100000) -> list[st
         chunks.append(current_chunk.strip())
     
     return chunks
+
+@log_exceptions
+def chunk_text_for_translation(text: str, chunk_size: int = 40000) -> list[str]:
+    """
+    Teilt Text intelligent für Übersetzung auf, optimiert für 40.000 Zeichen pro Chunk.
+    Versucht Absätze zusammenzuhalten, solange sie unter der chunk_size bleiben.
+    """
+    if not isinstance(text, str):
+        return []
+    
+    # Teile Text in Absätze auf
+    paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
+    
+    if not paragraphs:
+        return []
+    
+    chunks = []
+    current_chunk = ""
+    
+    for paragraph in paragraphs:
+        # Wenn der aktuelle Chunk + neuer Absatz zu groß wäre
+        if current_chunk and len(current_chunk) + len(paragraph) + 2 > chunk_size:
+            # Speichere den aktuellen Chunk
+            chunks.append(current_chunk.strip())
+            current_chunk = paragraph
+        else:
+            # Füge Absatz zum aktuellen Chunk hinzu
+            if current_chunk:
+                current_chunk += "\n\n" + paragraph
+            else:
+                current_chunk = paragraph
+    
+    # Füge den letzten Chunk hinzu
+    if current_chunk.strip():
+        chunks.append(current_chunk.strip())
+    
+    return chunks
