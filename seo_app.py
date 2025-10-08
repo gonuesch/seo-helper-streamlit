@@ -2035,6 +2035,10 @@ elif selected_tool == "Chat-Agent":
                                         try:
                                             # Prüfe ob es ein lokaler Pfad oder eine URL ist
                                             image_url = image_data['url']
+                                            
+                                            # Debug-Information
+                                            st.caption(f"Debug: URL = {image_url}")
+                                            
                                             if image_url.startswith('temp_images/'):
                                                 # Lokales Bild
                                                 st.image(image_url, caption=f"Bild {i+1}", use_container_width=True)
@@ -2050,10 +2054,14 @@ elif selected_tool == "Chat-Agent":
                                                 st.success("✅ Echt generiert mit Gemini")
                                             elif status == 'fallback':
                                                 st.info("ℹ️ Fallback-Bild")
+                                            elif status == 'error':
+                                                st.error("❌ Fehler bei Bildgenerierung")
                                                 
                                         except Exception as e:
                                             st.error(f"Bild konnte nicht geladen werden: {e}")
                                             st.info(f"🖼️ Bild {i+1}: {image_data.get('description', '')[:50]}...")
+                                            # Zeige die URL als Text
+                                            st.text(f"URL: {image_data.get('url', 'Keine URL')}")
                                     else:
                                         st.info(f"🖼️ Bild {i+1}: {str(image_data)[:50]}...")
                                     st.divider()

@@ -836,18 +836,28 @@ Beantworte die Benutzer-Nachricht und verwende dabei die verfügbaren Tools, wen
             # Generiere das echte Bild mit Gemini 2.5 Flash Image
             response = model.generate_content(image_prompt)
             
+            # Debug: Logge die Antwort
+            logger.info(f"Gemini response for image generation: {response}")
+            logger.info(f"Response candidates: {response.candidates}")
+            
             # Extrahiere das generierte Bild
             image_data = None
             image_description = prompt
             
-            for part in response.candidates[0].content.parts:
-                if part.inline_data is not None:
-                    # Das ist das generierte Bild
-                    image_data = part.inline_data.data
-                    break
-                elif part.text is not None:
-                    # Fallback: Text-Beschreibung
-                    image_description = part.text
+            if response.candidates and len(response.candidates) > 0:
+                for part in response.candidates[0].content.parts:
+                    logger.info(f"Part type: {type(part)}, has inline_data: {hasattr(part, 'inline_data')}")
+                    if hasattr(part, 'inline_data') and part.inline_data is not None:
+                        # Das ist das generierte Bild
+                        image_data = part.inline_data.data
+                        logger.info(f"Found image data: {len(image_data) if image_data else 0} bytes")
+                        break
+                    elif hasattr(part, 'text') and part.text is not None:
+                        # Fallback: Text-Beschreibung
+                        image_description = part.text
+                        logger.info(f"Found text description: {image_description[:100]}...")
+            else:
+                logger.warning("No candidates in response")
             
             # Erstelle eine einzigartige Bild-ID
             image_id = f"moodboard_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{hash(prompt) % 10000}"
@@ -869,13 +879,19 @@ Beantworte die Benutzer-Nachricht und verwende dabei die verfügbaren Tools, wen
                     "status": "success"
                 }
             else:
-                # Fallback wenn kein Bild generiert wurde
+                # Fallback: Erstelle ein thematisches Bild mit Unsplash
+                logger.warning(f"No image data received for prompt: {prompt[:100]}...")
+                
+                # Extrahiere Keywords für thematische Bilder
+                keywords = self._extract_keywords_for_image(prompt)
+                fallback_url = f"https://source.unsplash.com/400x400/?{keywords}"
+                
                 return {
                     "image_data": {
                         "id": image_id,
                         "prompt": prompt,
                         "description": image_description,
-                        "url": f"https://picsum.photos/400/400?random={image_id}",
+                        "url": fallback_url,
                         "generated_at": datetime.now().isoformat(),
                         "status": "fallback"
                     },
@@ -949,6 +965,40 @@ Beantworte die Benutzer-Nachricht und verwende dabei die verfügbaren Tools, wen
             # Fallback zu generischen Begriffen
             if not keywords:
                 keywords = ['artistic', 'mood', 'atmosphere']
+            
+            return ','.join(keywords[:3])  # Maximal 3 Keywords
+            
+        except Exception as e:
+            logger.error(f"Fehler bei Keyword-Extraktion: {e}")
+            return "artistic,mood,atmosphere"
+    
+    def _extract_keywords_for_image(self, prompt: str) -> str:
+        """Extrahiert Keywords aus dem Prompt für thematische Bilder"""
+        try:
+            # Extrahiere wichtige Schlüsselwörter aus dem Prompt
+            keywords = []
+            
+            # Häufige thematische Begriffe für Buch-Moodboards
+            theme_keywords = {
+                'character': ['charakter', 'protagonist', 'person', 'woman', 'man', 'face'],
+                'office': ['büro', 'office', 'desk', 'arbeit', 'work', 'building'],
+                'city': ['stadt', 'city', 'urban', 'münchen', 'munich', 'skyline'],
+                'emotion': ['melancholy', 'sad', 'lonely', 'isolation', 'empty', 'tension'],
+                'light': ['light', 'shadow', 'dark', 'bright', 'sunset', 'night'],
+                'artistic': ['artistic', 'cinematic', 'atmospheric', 'mood', 'dramatic']
+            }
+            
+            prompt_lower = prompt.lower()
+            
+            for category, words in theme_keywords.items():
+                for word in words:
+                    if word in prompt_lower:
+                        keywords.append(category)
+                        break
+            
+            # Fallback zu generischen Begriffen
+            if not keywords:
+                keywords = ['artistic', 'mood', 'atmosphere', 'cinematic']
             
             return ','.join(keywords[:3])  # Maximal 3 Keywords
             
