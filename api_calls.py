@@ -480,25 +480,7 @@ def get_google_tts_voices() -> Dict[str, Dict[str, str]]:
     try:
         from google.cloud import texttospeech
 
-        # Verwende TTS Service Account für Text-to-Speech
-        from google.oauth2 import service_account
-        import json
-        from google.cloud import secretmanager
-        
-        # Lade TTS Service Account aus Secret Manager
-        try:
-            secret_client = secretmanager.SecretManagerServiceClient()
-            project_id = "avid-infinity-458913-p3"
-            secret_name = "google-tts-service-account"
-            name = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
-            response = secret_client.access_secret_version(request={"name": name})
-            service_account_json = response.payload.data.decode("UTF-8")
-            service_account_info = json.loads(service_account_json)
-            credentials = service_account.Credentials.from_service_account_info(service_account_info)
-            client = texttospeech.TextToSpeechClient(credentials=credentials)
-        except Exception as e:
-            # Fallback: verwende Default Service Account
-            client = texttospeech.TextToSpeechClient()
+        client = texttospeech.TextToSpeechClient()
         response = client.list_voices(language_code="de-DE")
         
         voice_dict = {}
@@ -734,25 +716,7 @@ def generate_long_audio_gcs(ssml_content: str, voice_name: str, language_code: s
         from pydub import AudioSegment
         
         # Initialize standard TTS client (not Long Audio client)
-        # Verwende TTS Service Account für Text-to-Speech
-        from google.oauth2 import service_account
-        import json
-        from google.cloud import secretmanager
-        
-        # Lade TTS Service Account aus Secret Manager
-        try:
-            secret_client = secretmanager.SecretManagerServiceClient()
-            project_id = "avid-infinity-458913-p3"
-            secret_name = "google-tts-service-account"
-            name = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
-            response = secret_client.access_secret_version(request={"name": name})
-            service_account_json = response.payload.data.decode("UTF-8")
-            service_account_info = json.loads(service_account_json)
-            credentials = service_account.Credentials.from_service_account_info(service_account_info)
-            client = texttospeech.TextToSpeechClient(credentials=credentials)
-        except Exception as e:
-            # Fallback: verwende Default Service Account
-            client = texttospeech.TextToSpeechClient()
+        client = texttospeech.TextToSpeechClient()
         
         # Check if SSML content is too long for standard API (limit is ~5000 characters)
         max_chunk_size = 4500  # Leave some buffer
@@ -886,25 +850,7 @@ def simple_generate_audio(text_content: str, voice_name: str, language_code: str
         from google.cloud import texttospeech
         
         # Initialize TTS client
-        # Verwende TTS Service Account für Text-to-Speech
-        from google.oauth2 import service_account
-        import json
-        from google.cloud import secretmanager
-        
-        # Lade TTS Service Account aus Secret Manager
-        try:
-            secret_client = secretmanager.SecretManagerServiceClient()
-            project_id = "avid-infinity-458913-p3"
-            secret_name = "google-tts-service-account"
-            name = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
-            response = secret_client.access_secret_version(request={"name": name})
-            service_account_json = response.payload.data.decode("UTF-8")
-            service_account_info = json.loads(service_account_json)
-            credentials = service_account.Credentials.from_service_account_info(service_account_info)
-            client = texttospeech.TextToSpeechClient(credentials=credentials)
-        except Exception as e:
-            # Fallback: verwende Default Service Account
-            client = texttospeech.TextToSpeechClient()
+        client = texttospeech.TextToSpeechClient()
         
         # Truncate text to API limit (5000 characters)
         max_length = 4500  # Leave some buffer
@@ -1027,25 +973,7 @@ def simple_text_to_speech(text_content: str, voice_name: str, language_code: str
         from google.cloud import texttospeech
         
         # Initialize TTS client
-        # Verwende TTS Service Account für Text-to-Speech
-        from google.oauth2 import service_account
-        import json
-        from google.cloud import secretmanager
-        
-        # Lade TTS Service Account aus Secret Manager
-        try:
-            secret_client = secretmanager.SecretManagerServiceClient()
-            project_id = "avid-infinity-458913-p3"
-            secret_name = "google-tts-service-account"
-            name = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
-            response = secret_client.access_secret_version(request={"name": name})
-            service_account_json = response.payload.data.decode("UTF-8")
-            service_account_info = json.loads(service_account_json)
-            credentials = service_account.Credentials.from_service_account_info(service_account_info)
-            client = texttospeech.TextToSpeechClient(credentials=credentials)
-        except Exception as e:
-            # Fallback: verwende Default Service Account
-            client = texttospeech.TextToSpeechClient()
+        client = texttospeech.TextToSpeechClient()
         
         # Truncate text to API limit (5000 characters for standard API)
         max_chars = 4500  # Leave some buffer
@@ -1365,25 +1293,7 @@ def simple_text_to_speech_ssml(ssml_content: str, voice_name: str, language_code
         from google.cloud import texttospeech
         
         # Initialize TTS client
-        # Verwende TTS Service Account für Text-to-Speech
-        from google.oauth2 import service_account
-        import json
-        from google.cloud import secretmanager
-        
-        # Lade TTS Service Account aus Secret Manager
-        try:
-            secret_client = secretmanager.SecretManagerServiceClient()
-            project_id = "avid-infinity-458913-p3"
-            secret_name = "google-tts-service-account"
-            name = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
-            response = secret_client.access_secret_version(request={"name": name})
-            service_account_json = response.payload.data.decode("UTF-8")
-            service_account_info = json.loads(service_account_json)
-            credentials = service_account.Credentials.from_service_account_info(service_account_info)
-            client = texttospeech.TextToSpeechClient(credentials=credentials)
-        except Exception as e:
-            # Fallback: verwende Default Service Account
-            client = texttospeech.TextToSpeechClient()
+        client = texttospeech.TextToSpeechClient()
         
         # Wrap SSML in speak tags
         if not ssml_content.strip().startswith('<speak>'):
