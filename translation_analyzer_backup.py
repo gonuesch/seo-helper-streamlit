@@ -62,6 +62,8 @@ def analyze_manuscript_single_call(cloudevent):
     try:
         # --- Clients "Lazy" initialisieren ---
         firestore_client = firestore.Client(project=PROJECT_ID, database=FIRESTORE_DB_ID)
+        
+        # Verwende Cloud Run Default Service Account für Vertex AI
         vertexai.init(project=PROJECT_ID, location=LOCATION)
         model = GenerativeModel("gemini-2.5-flash")
 
@@ -291,15 +293,23 @@ def analyze_manuscript_single_call(cloudevent):
         print(f"✅ Style-Guide erfolgreich in Cloud Storage gespeichert")
         
         # 9. Job-Status in Firestore aktualisieren (inkl. Kosten und Cache-Name)
-        job_ref.update({
+        update_data = {
             "status": "analyzed",
             "style_guide_gcs_path": f"gs://{BUCKET_NAME}/{style_guide_blob.name}",
-            "cached_content_name": cache.name,  # ✅ Cache-Name wird gespeichert!
             "analysis_cost_usd": cost,
             "analysis_input_tokens": input_tokens,
             "analysis_output_tokens": output_tokens,
             "analyzed_at": datetime.datetime.utcnow()
-        })
+        }
+        
+        # Cache-Name nur hinzufügen wenn Cache erfolgreich erstellt wurde
+        if cache and hasattr(cache, 'name'):
+            update_data["cached_content_name"] = cache.name
+            print(f"✅ Cache-Name gespeichert: {cache.name}")
+        else:
+            print("⚠️ Kein Cache verfügbar - Übersetzung läuft ohne Cache")
+        
+        job_ref.update(update_data)
 
         print(f"✅ Analyse für Job {job_id} erfolgreich abgeschlossen.")
         return ("OK", 200)
