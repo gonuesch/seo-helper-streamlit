@@ -54,14 +54,6 @@ from api_calls import (
     # generate_long_audio_gcs
 )
 
-# Importiere die Manuskript-Agents
-from manuscript_agents import (
-    ManuscriptAnalyzerAgent,
-    TargetAudienceAgent, 
-    MarketingStrategyAgent,
-    ManuscriptWorkflowAgent
-)
-
 # Importiere den Chat Agent
 from chat_agent import ManuscriptChatAgent
 
@@ -908,18 +900,6 @@ if 'output_tokens_translation' not in st.session_state:
 if 'final_gcs_path' not in st.session_state:
     st.session_state.final_gcs_path = None
 
-# Für Manuskript-Agent
-if 'manuscript_agent_results' not in st.session_state:
-    st.session_state.manuscript_agent_results = None
-if 'manuscript_agent_analysis' not in st.session_state:
-    st.session_state.manuscript_agent_analysis = None
-if 'manuscript_agent_audience' not in st.session_state:
-    st.session_state.manuscript_agent_audience = None
-if 'manuscript_agent_marketing' not in st.session_state:
-    st.session_state.manuscript_agent_marketing = None
-if 'manuscript_agent_button_clicked' not in st.session_state:
-    st.session_state.manuscript_agent_button_clicked = False
-
 # Für Chat-Agent
 if 'chat_agent' not in st.session_state:
     st.session_state.chat_agent = None
@@ -965,8 +945,8 @@ if st.session_state.get("last_selected_tool") == "Manuskript-Übersetzung":
 
 selected_tool = option_menu(
     menu_title=None,
-    options=["SEO Tags", "Barrierefreie Bildbeschreibung", "Text-to-Speech", "Manuskript-Übersetzung", "Manuskript-Agent", "Chat-Agent"],
-    icons=['search', 'universal-access-circle', 'sound-wave', 'translate', 'robot', 'chat-dots'],
+    options=["SEO Tags", "Barrierefreie Bildbeschreibung", "Text-to-Speech", "Manuskript-Übersetzung", "Chat-Agent"],
+    icons=['search', 'universal-access-circle', 'sound-wave', 'translate', 'chat-dots'],
     menu_icon="cast", default_index=default_index, orientation="horizontal",
     styles={
         "container": {"padding": "5px !important", "background-color": "#fafafa", "border-radius": "10px"},
@@ -987,9 +967,6 @@ with st.sidebar:
         st.markdown("**Unterstützte Formate:** `.docx`, `.pdf`\n\n**🎤 TTS:** Google Cloud Text-to-Speech\n\nBei Fragen -> Gordon")
     elif selected_tool == "Manuskript-Übersetzung":
         st.markdown("Übersetze **deutsche Manuskripte** ins Englische im Hintergrund.\n\n**Unterstützte Formate:** `.docx`, `.pdf`\n\n**Features:** Asynchrone Verarbeitung, Job-Tracking\n\nBei Fragen -> Gordon")
-    elif selected_tool == "Manuskript-Agent":
-        st.markdown("🤖 **AI-Agent für Manuskript-Analyse**\n\n**Features:**\n- Manuskript-Analyse & Bewertung\n- Zielgruppen-Identifikation\n- Marketing-Strategien\n- ROI-Analyse\n\n**Unterstützte Formate:** `.docx`, `.pdf`\n\nBei Fragen -> Gordon")
-    
     elif selected_tool == "Chat-Agent":
         st.markdown("💬 **Interaktiver Chat-Agent**\n\n**Features:**\n- Natürliche Gespräche über Manuskripte\n- Tool-Integration für Analysen\n- Chat-Historie\n- Kontextbewusste Antworten\n- **Moodboard-Generator** mit 9 thematischen Bildern\n\n**Unterstützte Formate:** `.docx`, `.pdf`\n\nBei Fragen -> Gordon")
 
@@ -1972,153 +1949,6 @@ elif selected_tool == "Manuskript-Übersetzung":
             else:
                 st.info("⏳ Übersetzung noch nicht verfügbar")
                 st.caption("Das übersetzte Dokument wird nach Abschluss der Übersetzung hier angezeigt.")
-
-elif selected_tool == "Manuskript-Agent":
-    st.header("🤖 Manuskript-Agent")
-    st.caption("AI-Agent für umfassende Manuskript-Analyse, Zielgruppen-Identifikation und Marketing-Strategien.")
-
-    # Manuskript-Upload
-    uploaded_file = st.file_uploader(
-        label="Lade dein Manuskript hoch (.docx oder .pdf)",
-        type=['docx', 'pdf'],
-        key="manuscript_agent_uploader"
-    )
-
-    if uploaded_file:
-        st.write(f"📄 Manuskript hochgeladen: {uploaded_file.name}")
-        
-        # Text extrahieren
-        if uploaded_file.name.endswith('.pdf'):
-            text_content = read_text_from_pdf(BytesIO(uploaded_file.getvalue()))
-        elif uploaded_file.name.endswith('.docx'):
-            text_content = read_text_from_docx(BytesIO(uploaded_file.getvalue()))
-        else:
-            text_content = None
-        
-        if text_content:
-            st.success(f"✅ Text extrahiert: {len(text_content):,} Zeichen")
-            
-            # Text-Vorschau
-            with st.expander("📄 Manuskript-Vorschau"):
-                st.text(text_content[:1000] + "..." if len(text_content) > 1000 else text_content)
-            
-            # Agent-Auswahl
-            agent_mode = st.radio(
-                "🤖 Wähle den Agent-Modus:",
-                ("Kompletter Workflow", "Nur Manuskript-Analyse", "Nur Zielgruppen-Analyse", "Nur Marketing-Strategie"),
-                horizontal=True
-            )
-            
-            # Start-Button
-            if st.button("🚀 Agent starten", type="primary"):
-                with st.spinner("🤖 Agent arbeitet..."):
-                    try:
-                        # Initialisiere Agents
-                        manuscript_analyzer = ManuscriptAnalyzerAgent(gemini_api_key)
-                        target_audience = TargetAudienceAgent(gemini_api_key)
-                        marketing_strategy = MarketingStrategyAgent(gemini_api_key)
-                        workflow_agent = ManuscriptWorkflowAgent(gemini_api_key)
-                        
-                        results = {}
-                        
-                        if agent_mode == "Kompletter Workflow":
-                            # Kompletter Workflow
-                            result = asyncio.run(workflow_agent.process_manuscript(text_content))
-                            results["workflow"] = result
-                            
-                        elif agent_mode == "Nur Manuskript-Analyse":
-                            # Nur Analyse
-                            analysis_result = manuscript_analyzer.analyze_manuscript(text_content)
-                            summary_result = manuscript_analyzer.summarize_manuscript(text_content)
-                            evaluation_result = manuscript_analyzer.evaluate_manuscript(text_content)
-                            
-                            results["analysis"] = analysis_result
-                            results["summary"] = summary_result
-                            results["evaluation"] = evaluation_result
-                            
-                        elif agent_mode == "Nur Zielgruppen-Analyse":
-                            # Nur Zielgruppen
-                            summary_result = manuscript_analyzer.summarize_manuscript(text_content)
-                            audience_result = target_audience.analyze_target_audience(summary_result["summary"])
-                            channels_result = target_audience.suggest_marketing_channels(summary_result["summary"], audience_result["audience_analysis"])
-                            
-                            results["audience"] = audience_result
-                            results["channels"] = channels_result
-                            
-                        elif agent_mode == "Nur Marketing-Strategie":
-                            # Nur Marketing
-                            summary_result = manuscript_analyzer.summarize_manuscript(text_content)
-                            audience_result = target_audience.analyze_target_audience(summary_result["summary"])
-                            strategy_result = marketing_strategy.optimize_marketing_strategy(summary_result["summary"], audience_result["audience_analysis"])
-                            
-                            results["strategy"] = strategy_result
-                        
-                        # Ergebnisse im Session State speichern
-                        st.session_state.manuscript_agent_results = results
-                        st.session_state.manuscript_agent_button_clicked = True
-                        
-                        st.success("✅ Agent-Analyse abgeschlossen!")
-                        
-                    except Exception as e:
-                        st.error(f"❌ Fehler bei der Agent-Analyse: {str(e)}")
-                        logging.error(f"Manuscript Agent error: {e}")
-        else:
-            st.error("❌ Konnte Text aus dem Dokument nicht extrahieren")
-    
-    # Ergebnisse anzeigen
-    if st.session_state.get("manuscript_agent_results"):
-        st.divider()
-        st.subheader("🤖 Agent-Ergebnisse")
-        
-        results = st.session_state.manuscript_agent_results
-        
-        # Tab-basierte Anzeige der Ergebnisse
-        if "workflow" in results:
-            # Kompletter Workflow
-            st.success("🎉 Kompletter Workflow abgeschlossen!")
-            st.json(results["workflow"])
-            
-        else:
-            # Einzelne Ergebnisse
-            tab1, tab2, tab3, tab4 = st.tabs(["📊 Analyse", "🎯 Zielgruppe", "📈 Marketing", "📋 Zusammenfassung"])
-            
-            with tab1:
-                if "analysis" in results:
-                    st.subheader("📊 Manuskript-Analyse")
-                    st.text_area("Analyse", value=results["analysis"]["analysis"], height=300, disabled=True)
-                
-                if "evaluation" in results:
-                    st.subheader("⭐ Bewertung")
-                    st.text_area("Bewertung", value=results["evaluation"]["evaluation"], height=200, disabled=True)
-            
-            with tab2:
-                if "audience" in results:
-                    st.subheader("🎯 Zielgruppen-Analyse")
-                    st.text_area("Zielgruppe", value=results["audience"]["audience_analysis"], height=300, disabled=True)
-                
-                if "channels" in results:
-                    st.subheader("📢 Marketing-Kanäle")
-                    st.text_area("Kanäle", value=results["channels"]["marketing_channels"], height=200, disabled=True)
-            
-            with tab3:
-                if "strategy" in results:
-                    st.subheader("📈 Marketing-Strategie")
-                    st.text_area("Strategie", value=results["strategy"]["optimized_strategy"], height=300, disabled=True)
-            
-            with tab4:
-                if "summary" in results:
-                    st.subheader("📋 Zusammenfassung")
-                    st.text_area("Zusammenfassung", value=results["summary"]["summary"], height=200, disabled=True)
-                
-                # Download-Button für Ergebnisse
-                if st.button("💾 Ergebnisse herunterladen"):
-                    results_json = json.dumps(results, indent=2, ensure_ascii=False)
-                    st.download_button(
-                        label="📥 Agent-Ergebnisse herunterladen (.json)",
-                        data=results_json.encode('utf-8'),
-                        file_name=f"manuscript_agent_results_{int(time.time())}.json",
-                        mime="application/json"
-                    )
 
 elif selected_tool == "Chat-Agent":
     st.header("💬 Chat-Agent")
