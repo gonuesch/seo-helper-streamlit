@@ -98,22 +98,10 @@ def analyze_manuscript_single_call(cloudevent):
         
         print(f"Text erfolgreich extrahiert: {len(manuscript_text)} Zeichen")
         
-        # 5. Vertex AI Cache erstellen für spätere Übersetzung (mit Fallback)
-        print(f"🔄 Erstelle Vertex AI Cache für Job {job_id}...")
-        manuscript_part = Part.from_data(data=manuscript_text.encode('utf-8'), mime_type="text/plain")
-        
+        # 5. Cache deaktiviert - Übersetzung läuft ohne Cache
+        print(f"🔄 Cache deaktiviert für Job {job_id}...")
         cache = None
-        try:
-            cache = caching.CachedContent.create(
-                model_name="gemini-2.5-flash",
-                system_instruction="Du bist ein Experte für Literaturanalyse und Übersetzung.",
-                contents=[manuscript_part]
-            )
-            print(f"✅ Cache erstellt: {cache.name}")
-        except Exception as cache_error:
-            print(f"⚠️ Cache-Erstellung fehlgeschlagen: {cache_error}")
-            print("🔄 Übersetzung läuft ohne Cache weiter...")
-            cache = None
+        print("✅ Übersetzung läuft ohne Cache (Cache deaktiviert)")
         
         # 6. Gemini zur Analyse des GESAMTEN Manuskripts aufrufen
         prompt = f"""
@@ -290,16 +278,20 @@ def analyze_manuscript_single_call(cloudevent):
         
         print(f"✅ Style-Guide erfolgreich in Cloud Storage gespeichert")
         
-        # 9. Job-Status in Firestore aktualisieren (inkl. Kosten und Cache-Name)
-        job_ref.update({
+        # 9. Job-Status in Firestore aktualisieren (inkl. Kosten)
+        update_data = {
             "status": "analyzed",
             "style_guide_gcs_path": f"gs://{BUCKET_NAME}/{style_guide_blob.name}",
-            "cached_content_name": cache.name,  # ✅ Cache-Name wird gespeichert!
             "analysis_cost_usd": cost,
             "analysis_input_tokens": input_tokens,
             "analysis_output_tokens": output_tokens,
             "analyzed_at": datetime.datetime.utcnow()
-        })
+        }
+        
+        # Cache deaktiviert - kein Cache-Name zu speichern
+        print("✅ Cache deaktiviert - Übersetzung läuft ohne Cache")
+        
+        job_ref.update(update_data)
 
         print(f"✅ Analyse für Job {job_id} erfolgreich abgeschlossen.")
         return ("OK", 200)
