@@ -738,40 +738,55 @@ Beantworte die Benutzer-Nachricht und verwende dabei die verfügbaren Tools, wen
             current_concept = ""
             concept_count = 0
             
-            for line in lines:
-                if line.strip().startswith(('1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.', '9.')):
-                    if current_concept and concept_count < 9:
-                        # Generiere Bild für das vorherige Konzept
-                        try:
-                            image_prompt = f"Create a high-quality, professional image: {current_concept.strip()}"
-                            
-                            # Verwende Gemini Nano Banana für Bildgenerierung
-                            # Hinweis: Dies ist ein Platzhalter - die tatsächliche Implementierung
-                            # würde die Gemini Nano Banana API verwenden
-                            image_result = self._generate_image_with_gemini_nano(image_prompt)
-                            
-                            if image_result["status"] == "success":
-                                generated_images.append(image_result["image_data"])
-                                image_descriptions.append(current_concept.strip())
-                                concept_count += 1
-                        except Exception as e:
-                            logger.error(f"Fehler bei Bildgenerierung {concept_count + 1}: {e}")
-                    
-                    current_concept = line
-                else:
-                    current_concept += " " + line
+            # Erstelle 9 spezifische Bildkonzepte basierend auf dem Manuskript
+            image_concepts = [
+                f"Hauptcharakter aus dem Manuskript: {manuscript_summary[:500]}",
+                f"Setting und Umgebung des Manuskripts: {manuscript_summary[:500]}",
+                f"Stimmung und Atmosphäre des Manuskripts: {manuscript_summary[:500]}",
+                f"Genre-spezifische Elemente des Manuskripts: {manuscript_summary[:500]}",
+                f"Emotionale Kernbotschaft des Manuskripts: {manuscript_summary[:500]}",
+                f"Zeitperiode und Epoche des Manuskripts: {manuscript_summary[:500]}",
+                f"Symbolische Elemente des Manuskripts: {manuscript_summary[:500]}",
+                f"Konflikt und Spannung des Manuskripts: {manuscript_summary[:500]}",
+                f"Auflösung und Hoffnung des Manuskripts: {manuscript_summary[:500]}"
+            ]
             
-            # Generiere das letzte Bild
-            if current_concept and concept_count < 9:
+            # Generiere Bilder für alle 9 Konzepte
+            for i, concept in enumerate(image_concepts):
                 try:
-                    image_prompt = f"Create a high-quality, professional image: {current_concept.strip()}"
+                    image_prompt = f"Create a cinematic, atmospheric image for a book moodboard: {concept}"
+                    
+                    # Verwende Gemini 2.5 Flash Image für Bildgenerierung
                     image_result = self._generate_image_with_gemini_nano(image_prompt)
                     
                     if image_result["status"] == "success":
                         generated_images.append(image_result["image_data"])
-                        image_descriptions.append(current_concept.strip())
+                        image_descriptions.append(f"Bildkonzept {i+1}: {concept[:100]}...")
+                        concept_count += 1
+                    else:
+                        # Fallback für fehlgeschlagene Generierung
+                        generated_images.append({
+                            "id": f"fallback_{i+1}",
+                            "prompt": concept,
+                            "description": f"Fallback-Bild für Konzept {i+1}",
+                            "url": f"https://picsum.photos/400/400?random={i+1}",
+                            "status": "fallback"
+                        })
+                        image_descriptions.append(f"Fallback-Bild {i+1}")
+                        concept_count += 1
+                        
                 except Exception as e:
-                    logger.error(f"Fehler bei letzter Bildgenerierung: {e}")
+                    logger.error(f"Fehler bei Bildgenerierung {i+1}: {e}")
+                    # Fallback für Fehler
+                    generated_images.append({
+                        "id": f"error_{i+1}",
+                        "prompt": concept,
+                        "description": f"Fehler bei Bildgenerierung {i+1}",
+                        "url": f"https://picsum.photos/400/400?random={i+1}",
+                        "status": "error"
+                    })
+                    image_descriptions.append(f"Fehler-Bild {i+1}")
+                    concept_count += 1
             
             return {
                 "moodboard_concepts": concepts_text,
@@ -802,19 +817,20 @@ Beantworte die Benutzer-Nachricht und verwende dabei die verfügbaren Tools, wen
             
             # Erstelle einen optimierten Prompt für die Bildgenerierung
             image_prompt = f"""
-            Create a professional, high-quality image for a moodboard based on this description:
+            Create a high-quality, atmospheric image for a book moodboard based on this description:
             
             {prompt}
             
             The image should be:
             - High resolution and detailed
-            - Professional quality
-            - Thematically appropriate for the manuscript
-            - Emotionally impactful
-            - Visually appealing
-            - Artistic and atmospheric
+            - Professional book cover quality
+            - Thematically appropriate for the manuscript mood
+            - Emotionally impactful and atmospheric
+            - Visually striking and memorable
+            - Artistic with cinematic quality
             
-            Style: Realistic, artistic, professional
+            Style: Realistic, artistic, professional, atmospheric
+            Focus on mood, emotion, and visual storytelling
             """
             
             # Generiere das echte Bild mit Gemini 2.5 Flash Image
@@ -970,7 +986,7 @@ Beantworte die Benutzer-Nachricht und verwende dabei die verfügbaren Tools, wen
             
         except Exception as e:
             logger.error(f"Fehler beim Speichern des Bildes: {e}")
-            # Fallback zu einem Platzhalter
+            # Fallback zu einem thematischen Platzhalter
             return f"https://picsum.photos/400/400?random={image_id}"
     
     def get_available_tools(self) -> Dict[str, Any]:

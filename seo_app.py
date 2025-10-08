@@ -2037,10 +2037,10 @@ elif selected_tool == "Chat-Agent":
                                             image_url = image_data['url']
                                             if image_url.startswith('temp_images/'):
                                                 # Lokales Bild
-                                                st.image(image_url, caption=f"Bild {i+1}", use_column_width=True)
+                                                st.image(image_url, caption=f"Bild {i+1}", use_container_width=True)
                                             else:
                                                 # Externe URL
-                                                st.image(image_url, caption=f"Bild {i+1}", use_column_width=True)
+                                                st.image(image_url, caption=f"Bild {i+1}", use_container_width=True)
                                             
                                             st.caption(f"Beschreibung: {image_data.get('description', '')[:100]}...")
                                             
