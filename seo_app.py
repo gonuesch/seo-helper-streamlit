@@ -310,6 +310,10 @@ def refresh_translation_status():
         st.session_state.input_tokens_translation = job_data.get("input_tokens_translation")
         st.session_state.output_tokens_translation = job_data.get("output_tokens_translation")
         st.session_state.final_gcs_path = job_data.get("final_gcs_path")
+        
+        # Progress-Daten für Chunk-Anzeige
+        translation_progress = job_data.get("translation_progress", {})
+        st.session_state.translation_progress = translation_progress
 
         st.success(f"Status aktualisiert: {job_status}")
         logging.info(f"Job status updated to {job_status} for job {job_id}")
@@ -1436,7 +1440,19 @@ elif selected_tool == "Manuskript-Übersetzung":
         if status == "translation_queued":
             st.info("🚀 **Status:** Übersetzung in Warteschlange...")
         elif status == "translating":
-            st.info("🤖 **Status:** Übersetze Manuskript...")
+            # Chunk-Fortschritt anzeigen
+            progress_data = st.session_state.get("translation_progress", {})
+            chunks_completed = progress_data.get("chunks_completed", 0)
+            total_chunks = progress_data.get("total_chunks", 0)
+            
+            if total_chunks > 0:
+                progress_percent = (chunks_completed / total_chunks) * 100
+                st.info(f"🤖 **Status:** Übersetze Manuskript... ({chunks_completed}/{total_chunks} Chunks - {progress_percent:.1f}%)")
+                
+                # Progress Bar
+                st.progress(chunks_completed / total_chunks)
+            else:
+                st.info("🤖 **Status:** Übersetze Manuskript...")
         elif status == "completed":
             st.success("🎉 **Status:** Übersetzung abgeschlossen!")
         elif status == "translation_failed":
@@ -1683,41 +1699,46 @@ elif selected_tool == "Manuskript-Übersetzung":
         with col2:
             if st.session_state.get("final_gcs_path"):
                 st.success("✅ Übersetztes Dokument verfügbar!")
-                st.info(f"📁 Pfad: {st.session_state.final_gcs_path}")
                 
-                # Download-Button für übersetzte Datei
-                if st.button("📥 Übersetztes Dokument herunterladen", key="download_translated"):
-                    try:
-                        # GCS-Pfad extrahieren
-                        gcs_path = st.session_state.final_gcs_path
-                        if gcs_path.startswith("gs://"):
-                            # Blob-Name extrahieren
-                            bucket_name = gcs_path.split("/")[2]
-                            blob_name = "/".join(gcs_path.split("/")[3:])
-                            
-                            # Datei aus GCS laden
-                            storage_client = storage.Client(project=PROJECT_ID)
-                            bucket = storage_client.bucket(bucket_name)
-                            blob = bucket.blob(blob_name)
-                            
-                            # Datei als Bytes laden
-                            file_bytes = blob.download_as_bytes()
-                            
-                            # Dateiname extrahieren
-                            filename = blob_name.split("/")[-1]
-                            
-                            # Download-Button
-                            st.download_button(
-                                label=f"💾 {filename} herunterladen",
-                                data=file_bytes,
-                                file_name=filename,
-                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                            )
-                            
-                        else:
-                            st.error("Ungültiger GCS-Pfad")
-                    except Exception as e:
-                        st.error(f"Fehler beim Laden der Datei: {e}")
+                # GCS-Pfad anzeigen
+                gcs_path = st.session_state.final_gcs_path
+                st.info(f"📁 Pfad: {gcs_path}")
+                
+                try:
+                    # GCS-Pfad extrahieren
+                    if gcs_path.startswith("gs://"):
+                        # Blob-Name extrahieren
+                        bucket_name = gcs_path.split("/")[2]
+                        blob_name = "/".join(gcs_path.split("/")[3:])
+                        
+                        # Datei aus GCS laden
+                        storage_client = storage.Client(project=PROJECT_ID)
+                        bucket = storage_client.bucket(bucket_name)
+                        blob = bucket.blob(blob_name)
+                        
+                        # Datei als Bytes laden
+                        file_bytes = blob.download_as_bytes()
+                        
+                        # Dateiname extrahieren
+                        filename = blob_name.split("/")[-1]
+                        
+                        # Download-Button
+                        st.download_button(
+                            label=f"💾 {filename} herunterladen",
+                            data=file_bytes,
+                            file_name=filename,
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            key="download_translated_file"
+                        )
+                        
+                        st.success("✅ Download bereit!")
+                        
+                    else:
+                        st.error("Ungültiger GCS-Pfad")
+                except Exception as e:
+                    st.error(f"Fehler beim Laden der Datei: {e}")
+                    st.info("Du kannst die Datei auch direkt über den GCS-Pfad herunterladen:")
+                    st.code(gcs_path)
             else:
                 st.info("⏳ Übersetztes Dokument noch nicht verfügbar")
 
