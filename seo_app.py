@@ -1580,9 +1580,11 @@ elif selected_tool == "Manuskript-Übersetzung":
         st.caption("💡 **Tipp:** Bei langen Jobs regelmäßig den Status prüfen.")
         
         # Manueller Status-Update Button (empfohlen)
-        if st.button("🔄 Status jetzt aktualisieren"):
-            refresh_translation_status()
-            st.rerun()
+        if st.button("🔄 Status jetzt aktualisieren", key="status_update_btn"):
+            with st.spinner("Aktualisiere Status..."):
+                refresh_translation_status()
+            st.success("✅ Status aktualisiert!")
+            # Kein st.rerun() - verhindert Reload
 
     
     # Kosten-Informationen anzeigen (wenn verfügbar)
@@ -1806,53 +1808,44 @@ elif selected_tool == "Manuskript-Übersetzung":
         # Übersetztes Dokument Download (falls verfügbar)
         with col2:
             if st.session_state.get("final_gcs_path"):
-                st.success("🎉 Übersetzung verfügbar!")
+                st.success("✅ Übersetztes Dokument verfügbar!")
+                st.info(f"📁 Pfad: {st.session_state.final_gcs_path}")
                 
-                # Download-Button für die übersetzte Datei
-                if st.button("📥 Übersetztes Dokument herunterladen", type="primary"):
+                # Download-Button für übersetzte Datei
+                if st.button("📥 Übersetztes Dokument herunterladen", key="download_translated"):
                     try:
-                        # Lade Datei aus Cloud Storage
-                        from google.cloud import storage
-                        storage_client = storage.Client()
-                        
-                        # Parse GCS-Pfad
+                        # GCS-Pfad extrahieren
                         gcs_path = st.session_state.final_gcs_path
                         if gcs_path.startswith("gs://"):
-                            path_parts = gcs_path[5:].split("/", 1)
-                            if len(path_parts) == 2:
-                                bucket_name = path_parts[0]
-                                blob_path = path_parts[1]
-                                
-                                # Datei herunterladen
-                                bucket = storage_client.bucket(bucket_name)
-                                blob = bucket.blob(blob_path)
-                                file_bytes = blob.download_as_bytes()
-                                
-                                # Dateiname extrahieren
-                                file_name = blob_path.split("/")[-1]
-                                
-                                # Download-Button anzeigen
-                                st.download_button(
-                                    label=f"💾 {file_name} herunterladen",
-                                    data=file_bytes,
-                                    file_name=file_name,
-                                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                                )
-                                
-                                st.success("✅ Download bereit!")
-                            else:
-                                st.error("❌ Ungültiger GCS-Pfad")
+                            # Blob-Name extrahieren
+                            bucket_name = gcs_path.split("/")[2]
+                            blob_name = "/".join(gcs_path.split("/")[3:])
+                            
+                            # Datei aus GCS laden
+                            storage_client = storage.Client(project=PROJECT_ID)
+                            bucket = storage_client.bucket(bucket_name)
+                            blob = bucket.blob(blob_name)
+                            
+                            # Datei als Bytes laden
+                            file_bytes = blob.download_as_bytes()
+                            
+                            # Dateiname extrahieren
+                            filename = blob_name.split("/")[-1]
+                            
+                            # Download-Button
+                            st.download_button(
+                                label=f"💾 {filename} herunterladen",
+                                data=file_bytes,
+                                file_name=filename,
+                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                            )
+                            
                         else:
-                            st.error("❌ Ungültiger GCS-Pfad")
+                            st.error("Ungültiger GCS-Pfad")
                     except Exception as e:
-                        st.error(f"❌ Fehler beim Laden der Datei: {e}")
-                        st.info("Du kannst die Datei auch direkt über den GCS-Pfad herunterladen:")
-                        st.code(st.session_state.final_gcs_path)
-                
-                st.caption("Klicke den Button oben, um die übersetzte Datei direkt herunterzuladen.")
+                        st.error(f"Fehler beim Laden der Datei: {e}")
             else:
-                st.info("⏳ Übersetzung noch nicht verfügbar")
-                st.caption("Das übersetzte Dokument wird nach Abschluss der Übersetzung hier angezeigt.")
+                st.info("⏳ Übersetztes Dokument noch nicht verfügbar")
 
 # --- SICHERHEITSKONFIGURATION FÜR TTS ---
 MAX_TTS_COST_USD = 10.0  # Maximal 10 USD pro TTS-Job (erhöht von 5.0)
