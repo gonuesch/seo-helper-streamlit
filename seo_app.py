@@ -311,9 +311,7 @@ def refresh_translation_status():
         st.session_state.output_tokens_translation = job_data.get("output_tokens_translation")
         st.session_state.final_gcs_path = job_data.get("final_gcs_path")
         
-        # Progress-Daten für Chunk-Anzeige
-        translation_progress = job_data.get("translation_progress", {})
-        st.session_state.translation_progress = translation_progress
+        # Progress-Daten entfernt (nicht mehr benötigt)
 
         st.success(f"Status aktualisiert: {job_status}")
         logging.info(f"Job status updated to {job_status} for job {job_id}")
@@ -1440,19 +1438,7 @@ elif selected_tool == "Manuskript-Übersetzung":
         if status == "translation_queued":
             st.info("🚀 **Status:** Übersetzung in Warteschlange...")
         elif status == "translating":
-            # Chunk-Fortschritt anzeigen
-            progress_data = st.session_state.get("translation_progress", {})
-            chunks_completed = progress_data.get("chunks_completed", 0)
-            total_chunks = progress_data.get("total_chunks", 0)
-            
-            if total_chunks > 0:
-                progress_percent = (chunks_completed / total_chunks) * 100
-                st.info(f"🤖 **Status:** Übersetze Manuskript... ({chunks_completed}/{total_chunks} Chunks - {progress_percent:.1f}%)")
-                
-                # Progress Bar
-                st.progress(chunks_completed / total_chunks)
-            else:
-                st.info("🤖 **Status:** Übersetze Manuskript...")
+            st.info("🤖 **Status:** Übersetze Manuskript...")
         elif status == "completed":
             st.success("🎉 **Status:** Übersetzung abgeschlossen!")
         elif status == "translation_failed":
@@ -1722,13 +1708,14 @@ elif selected_tool == "Manuskript-Übersetzung":
                         # Dateiname extrahieren
                         filename = blob_name.split("/")[-1]
                         
-                        # Download-Button
+                        # Download-Button (direkt sichtbar)
                         st.download_button(
                             label=f"💾 {filename} herunterladen",
                             data=file_bytes,
                             file_name=filename,
                             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                            key="download_translated_file"
+                            key="download_translated_file",
+                            type="primary"
                         )
                         
                         st.success("✅ Download bereit!")
