@@ -157,13 +157,15 @@ def monitor_translation_progress(job_ref, chunks, translated_chunks, failed_chun
 def calculate_optimal_chunk_size(manuscript_length):
     """
     Berechnet die optimale Chunk-Größe basierend auf der Manuskript-Länge.
-    Kleinere Manuskripte werden in einem Chunk verarbeitet, größere werden aufgeteilt.
+    Optimiert für bessere Performance und weniger kleine Chunks.
     """
-    if manuscript_length < 50000:  # < 50 Seiten
+    if manuscript_length < 30000:  # < 30 Seiten
         return manuscript_length  # Ein Chunk
-    elif manuscript_length < 150000:  # 50-150 Seiten
-        return 50000  # 50 Seiten pro Chunk
-    else:  # > 150 Seiten
+    elif manuscript_length < 100000:  # 30-100 Seiten
+        return 40000  # 40 Seiten pro Chunk (größer)
+    elif manuscript_length < 200000:  # 100-200 Seiten
+        return 35000  # 35 Seiten pro Chunk
+    else:  # > 200 Seiten
         return 30000  # 30 Seiten pro Chunk
 
 def split_text_into_chunks(text, chunk_size):
@@ -267,15 +269,15 @@ def validate_translation_completeness(original_chunks, translated_chunks):
     
     return True
 
-def translate_chunk_with_retry(chunk, style_guide, key_terms, previous_chunk="", chunk_index=0, total_chunks=1, max_retries=3):
+def translate_chunk_with_retry(chunk, style_guide, key_terms, previous_chunk="", chunk_index=0, total_chunks=1, max_retries=2):
     """
     Übersetzt einen Chunk mit robuster Wiederholungslogik und Fallback-Strategien.
     """
     model = GenerativeModel("gemini-2.5-pro")
     
-    # Rate Limiting: Pause zwischen Chunks
+    # Rate Limiting: Pause zwischen Chunks (reduziert)
     if chunk_index > 0:
-        sleep_time = 3 + random.uniform(0, 2)  # 3-5 Sekunden Pause
+        sleep_time = 1 + random.uniform(0, 1)  # 1-2 Sekunden Pause (reduziert)
         print(f"⏳ Rate Limiting: Warte {sleep_time:.1f}s...")
         time.sleep(sleep_time)
     
