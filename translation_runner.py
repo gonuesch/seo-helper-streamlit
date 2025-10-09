@@ -494,7 +494,7 @@ def run_translation_with_cache(cloudevent):
             raise ValueError(f"Extrahierter Text zu kurz: {len(full_text)} Zeichen")
         
         print(f"📊 Text-Extraktion erfolgreich:")
-        print(f"   - Methode: {'Cache' if cache_success else 'Datei'}")
+        print(f"   - Methode: Datei-Extraktion")
         print(f"   - Länge: {len(full_text)} Zeichen")
         print(f"   - Wörter: {len(full_text.split())} Wörter")
 
