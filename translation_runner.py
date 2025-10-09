@@ -96,6 +96,64 @@ def check_job_safety(job_ref, start_time, current_cost=0.0):
         print(f"⚠️ Fehler bei Sicherheitsprüfung: {e}")
         return False  # Bei Fehlern lieber stoppen
 
+def monitor_translation_progress(job_ref, chunks, translated_chunks, failed_chunks):
+    """
+    Überwacht den Übersetzungsfortschritt und erkennt Probleme frühzeitig.
+    """
+    try:
+        job_doc = job_ref.get()
+        if not job_doc.exists:
+            return True
+        
+        job_data = job_doc.to_dict()
+        progress = job_data.get("translation_progress", {})
+        
+        chunks_completed = progress.get("chunks_completed", 0)
+        total_chunks = progress.get("total_chunks", len(chunks))
+        last_chunk_time = progress.get("last_chunk_completed_at")
+        
+        # Prüfe auf hängende Übersetzung
+        if last_chunk_time:
+            if hasattr(last_chunk_time, 'replace'):
+                last_chunk_time = last_chunk_time.replace(tzinfo=None)
+            
+            time_since_last_chunk = datetime.datetime.utcnow() - last_chunk_time
+            if time_since_last_chunk.total_seconds() > 300:  # 5 Minuten ohne Fortschritt
+                print(f"⚠️ WARNUNG: Kein Fortschritt seit {time_since_last_chunk.total_seconds()/60:.1f} Minuten")
+                print(f"   - Letzter Chunk: {chunks_completed}/{total_chunks}")
+                print(f"   - Fehlgeschlagene Chunks: {len(failed_chunks)}")
+                
+                # Aktualisiere Job mit Warnung
+                job_ref.update({
+                    "translation_warnings": {
+                        "stalled_detected": True,
+                        "stall_duration_minutes": time_since_last_chunk.total_seconds() / 60,
+                        "last_chunk_time": last_chunk_time.isoformat(),
+                        "chunks_completed": chunks_completed,
+                        "failed_chunks_count": len(failed_chunks)
+                    }
+                })
+        
+        # Prüfe auf zu viele fehlgeschlagene Chunks
+        failure_rate = len(failed_chunks) / len(chunks) if chunks else 0
+        if failure_rate > 0.3:  # Mehr als 30% Fehlerrate
+            print(f"⚠️ WARNUNG: Hohe Fehlerrate: {failure_rate*100:.1f}% ({len(failed_chunks)}/{len(chunks)})")
+            
+            job_ref.update({
+                "translation_warnings": {
+                    "high_failure_rate": True,
+                    "failure_rate": failure_rate,
+                    "failed_chunks_count": len(failed_chunks),
+                    "failed_chunk_indices": [fc["chunk_index"] for fc in failed_chunks]
+                }
+            })
+        
+        return True
+        
+    except Exception as e:
+        print(f"⚠️ Fehler bei Progress-Monitoring: {e}")
+        return True  # Monitoring-Fehler stoppen nicht den Job
+
 def calculate_optimal_chunk_size(manuscript_length):
     """
     Berechnet die optimale Chunk-Größe basierend auf der Manuskript-Länge.
@@ -463,14 +521,32 @@ def run_translation_with_cache(cloudevent):
         chunks = split_text_into_chunks(full_text, optimal_chunk_size)
         print(f"✂️ Text in {len(chunks)} Chunks aufgeteilt")
 
-        # 7. Chunks übersetzen mit verbessertem Tracking und Sicherheitsprüfungen
-        print(f" Starte Übersetzung der {len(chunks)} Chunks...")
+        # 7. Chunks übersetzen mit erweitertem Tracking und Debugging
+        print(f"🚀 Starte Übersetzung der {len(chunks)} Chunks...")
+        print(f"📊 Chunk-Statistiken:")
+        print(f"   - Gesamt-Chunks: {len(chunks)}")
+        print(f"   - Durchschnittliche Chunk-Größe: {sum(len(c) for c in chunks) // len(chunks)} Zeichen")
+        print(f"   - Größter Chunk: {max(len(c) for c in chunks)} Zeichen")
+        print(f"   - Kleinster Chunk: {min(len(c) for c in chunks)} Zeichen")
+        
         translated_chunks = []
         total_input_tokens = 0
         total_output_tokens = 0
         previous_chunk = ""
+        failed_chunks = []
+        chunk_start_times = []
 
         for i, chunk in enumerate(chunks):
+            chunk_start_time = datetime.datetime.utcnow()
+            chunk_start_times.append(chunk_start_time)
+            
+            print(f"\n{'='*60}")
+            print(f"🔄 VERARBEITE CHUNK {i+1}/{len(chunks)}")
+            print(f"   - Chunk-Größe: {len(chunk)} Zeichen")
+            print(f"   - Erste 100 Zeichen: {chunk[:100]}...")
+            print(f"   - Letzte 100 Zeichen: ...{chunk[-100:]}")
+            print(f"{'='*60}")
+            
             # SICHERHEITSPRÜFUNG vor jedem Chunk
             if not check_job_safety(job_ref, start_time, total_cost):
                 print(f"🚨 SICHERHEIT: Job wird gestoppt nach {i} Chunks")
@@ -480,13 +556,14 @@ def run_translation_with_cache(cloudevent):
                     "killed_reason": "Safety limits exceeded",
                     "chunks_completed": i,
                     "total_chunks": len(chunks),
-                    "final_cost_usd": total_cost
+                    "final_cost_usd": total_cost,
+                    "failed_chunks": failed_chunks,
+                    "chunk_processing_times": [(t.isoformat() for t in chunk_start_times)]
                 })
                 return ("Job killed for safety", 200)
             
-            print(f" Übersetze Chunk {i+1}/{len(chunks)} ({len(chunk)} Zeichen)...")
-            
             try:
+                print(f"⏳ Übersetze Chunk {i+1}...")
                 translated_chunk = translate_chunk_with_context(
                     chunk, 
                     style_guide, 
@@ -495,6 +572,13 @@ def run_translation_with_cache(cloudevent):
                     i, 
                     len(chunks)
                 )
+                
+                # Erweiterte Validierung der Übersetzung
+                if not translated_chunk or len(translated_chunk.strip()) == 0:
+                    raise ValueError(f"Chunk {i+1} ergab leere Übersetzung")
+                
+                if len(translated_chunk) < len(chunk) * 0.1:  # Zu kurz
+                    print(f"⚠️ WARNUNG: Chunk {i+1} ist ungewöhnlich kurz: {len(translated_chunk)} vs {len(chunk)} Zeichen")
                 
                 translated_chunks.append(translated_chunk)
                 previous_chunk = translated_chunk
@@ -509,42 +593,170 @@ def run_translation_with_cache(cloudevent):
                 chunk_cost = ((estimated_input_tokens / 1000000) * PRICE_INPUT_PER_MILLION_TOKENS) + ((estimated_output_tokens / 1000000) * PRICE_OUTPUT_PER_MILLION_TOKENS)
                 total_cost += chunk_cost
                 
-                print(f"✅ Chunk {i+1} erfolgreich übersetzt (Kosten: ${chunk_cost:.4f}, Gesamt: ${total_cost:.4f})")
+                chunk_duration = (datetime.datetime.utcnow() - chunk_start_time).total_seconds()
+                print(f"✅ Chunk {i+1} erfolgreich übersetzt:")
+                print(f"   - Dauer: {chunk_duration:.1f}s")
+                print(f"   - Übersetzungs-Länge: {len(translated_chunk)} Zeichen")
+                print(f"   - Kosten: ${chunk_cost:.4f}, Gesamt: ${total_cost:.4f}")
+                print(f"   - Erste 100 Zeichen der Übersetzung: {translated_chunk[:100]}...")
                 
-                # Aktualisiere den Fortschritt in Firestore
+                # Detaillierte Fortschritts-Aktualisierung in Firestore
+                progress_data = {
+                    "translation_progress": {
+                        "chunks_completed": i + 1,
+                        "total_chunks": len(chunks),
+                        "last_chunk_completed_at": datetime.datetime.utcnow(),
+                        "current_cost_usd": total_cost,
+                        "chunk_processing_times": [t.isoformat() for t in chunk_start_times],
+                        "current_chunk_duration_seconds": chunk_duration,
+                        "translation_quality_metrics": {
+                            "avg_chunk_size": sum(len(c) for c in chunks[:i+1]) / (i+1),
+                            "avg_translation_size": sum(len(t) for t in translated_chunks) / len(translated_chunks),
+                            "compression_ratio": sum(len(t) for t in translated_chunks) / sum(len(c) for c in chunks[:i+1]) if sum(len(c) for c in chunks[:i+1]) > 0 else 0
+                        }
+                    }
+                }
+                
+                # Zusätzliche Debugging-Informationen
+                if i % 5 == 0 or i == len(chunks) - 1:  # Alle 5 Chunks oder beim letzten
+                    progress_data["translation_progress"]["debug_info"] = {
+                        "chunks_processed": i + 1,
+                        "total_original_chars": sum(len(c) for c in chunks[:i+1]),
+                        "total_translated_chars": sum(len(t) for t in translated_chunks),
+                        "failed_chunks_count": len(failed_chunks),
+                        "runtime_minutes": (datetime.datetime.utcnow() - start_time).total_seconds() / 60
+                    }
+                
+                job_ref.update(progress_data)
+                
+                # Progress-Monitoring
+                monitor_translation_progress(job_ref, chunks, translated_chunks, failed_chunks)
+                
+                # Längere Pause für Status-Updates und Rate Limiting
+                time.sleep(2)
+                
+            except Exception as e:
+                error_msg = f"Fehler bei Chunk {i+1}: {str(e)}"
+                print(f"❌ {error_msg}")
+                failed_chunks.append({
+                    "chunk_index": i,
+                    "chunk_size": len(chunk),
+                    "error": str(e),
+                    "timestamp": datetime.datetime.utcnow().isoformat()
+                })
+                
+                # Versuche den Chunk trotzdem zu übersetzen mit Fallback
+                try:
+                    print(f"🔄 Versuche Fallback-Übersetzung für Chunk {i+1}...")
+                    fallback_chunk = f"[ÜBERSETZUNGSFEHLER - Chunk {i+1}: {str(e)[:100]}...]\n\n[ORIGINAL: {chunk[:200]}...]"
+                    translated_chunks.append(fallback_chunk)
+                    previous_chunk = fallback_chunk
+                    print(f"⚠️ Fallback-Chunk für {i+1} erstellt")
+                except Exception as fallback_error:
+                    print(f"❌ Auch Fallback für Chunk {i+1} fehlgeschlagen: {fallback_error}")
+                    # Leeren Chunk hinzufügen um Index zu erhalten
+                    translated_chunks.append("")
+                    previous_chunk = ""
+                
+                # Aktualisiere Firestore mit Fehler-Informationen
                 job_ref.update({
                     "translation_progress": {
                         "chunks_completed": i + 1,
                         "total_chunks": len(chunks),
                         "last_chunk_completed_at": datetime.datetime.utcnow(),
-                        "current_cost_usd": total_cost
+                        "current_cost_usd": total_cost,
+                        "failed_chunks": failed_chunks,
+                        "last_error": str(e)
                     }
                 })
                 
-                # Kurze Pause für Status-Updates
-                time.sleep(1)
-                
-            except Exception as e:
-                print(f"❌ Fehler beim Übersetzen von Chunk {i+1}: {e}")
-                raise e
+                # Kurze Pause nach Fehlern
+                time.sleep(3)
 
-        # 8. Vollständigkeits-Validierung vor der Zusammenfügung
+        # 8. Erweiterte Vollständigkeits-Validierung mit Recovery-Option
         print(f"🔍 Validiere Übersetzungs-Vollständigkeit...")
+        print(f"📊 Validierungs-Statistiken:")
+        print(f"   - Original Chunks: {len(chunks)}")
+        print(f"   - Übersetzte Chunks: {len(translated_chunks)}")
+        print(f"   - Fehlgeschlagene Chunks: {len(failed_chunks)}")
+        print(f"   - Erfolgsrate: {((len(translated_chunks) - len(failed_chunks)) / len(chunks) * 100):.1f}%")
+        
         try:
             validate_translation_completeness(chunks, translated_chunks)
         except ValueError as validation_error:
             print(f"❌ Validierung fehlgeschlagen: {validation_error}")
-            # Aktualisiere Job-Status mit Validierungsfehler
-            job_ref.update({
-                "status": "translation_failed",
-                "error_message": f"Validierung fehlgeschlagen: {validation_error}",
-                "translation_failed_at": datetime.datetime.utcnow(),
-                "translation_success": False,
-                "validation_failed": True,
-                "chunks_original": len(chunks),
-                "chunks_translated": len(translated_chunks)
-            })
-            return (f"Validation Error: {validation_error}", 500)
+            
+            # Prüfe ob wir eine Recovery durchführen können
+            if len(translated_chunks) > len(chunks) * 0.5:  # Mindestens 50% erfolgreich
+                print(f"🔄 Versuche Recovery für fehlgeschlagene Chunks...")
+                
+                # Identifiziere fehlende Chunks
+                missing_chunks = []
+                for i, (orig, trans) in enumerate(zip(chunks, translated_chunks)):
+                    if not trans or len(trans.strip()) == 0:
+                        missing_chunks.append(i)
+                
+                print(f"📋 {len(missing_chunks)} Chunks müssen neu übersetzt werden: {missing_chunks}")
+                
+                # Versuche fehlende Chunks zu übersetzen
+                recovery_success = 0
+                for missing_idx in missing_chunks:
+                    try:
+                        print(f"🔄 Recovery: Übersetze Chunk {missing_idx + 1}...")
+                        recovered_chunk = translate_chunk_with_context(
+                            chunks[missing_idx], 
+                            style_guide, 
+                            key_terms, 
+                            translated_chunks[missing_idx - 1] if missing_idx > 0 else "", 
+                            missing_idx, 
+                            len(chunks)
+                        )
+                        translated_chunks[missing_idx] = recovered_chunk
+                        recovery_success += 1
+                        print(f"✅ Recovery erfolgreich für Chunk {missing_idx + 1}")
+                        time.sleep(2)  # Pause zwischen Recovery-Versuchen
+                    except Exception as recovery_error:
+                        print(f"❌ Recovery fehlgeschlagen für Chunk {missing_idx + 1}: {recovery_error}")
+                        # Erstelle Fehler-Chunk
+                        translated_chunks[missing_idx] = f"[RECOVERY-FEHLER - Chunk {missing_idx + 1}: {str(recovery_error)[:100]}...]"
+                
+                print(f"🔄 Recovery abgeschlossen: {recovery_success}/{len(missing_chunks)} Chunks wiederhergestellt")
+                
+                # Erneute Validierung nach Recovery
+                try:
+                    validate_translation_completeness(chunks, translated_chunks)
+                    print(f"✅ Validierung nach Recovery erfolgreich!")
+                except ValueError as recovery_validation_error:
+                    print(f"❌ Validierung nach Recovery fehlgeschlagen: {recovery_validation_error}")
+                    # Aktualisiere Job-Status mit Recovery-Fehlern
+                    job_ref.update({
+                        "status": "translation_failed",
+                        "error_message": f"Recovery fehlgeschlagen: {recovery_validation_error}",
+                        "translation_failed_at": datetime.datetime.utcnow(),
+                        "translation_success": False,
+                        "validation_failed": True,
+                        "recovery_attempted": True,
+                        "recovery_success_rate": recovery_success / len(missing_chunks) if missing_chunks else 0,
+                        "chunks_original": len(chunks),
+                        "chunks_translated": len(translated_chunks),
+                        "failed_chunks": failed_chunks
+                    })
+                    return (f"Recovery Validation Error: {recovery_validation_error}", 500)
+            else:
+                # Zu wenige erfolgreiche Chunks für Recovery
+                print(f"❌ Zu wenige erfolgreiche Chunks ({len(translated_chunks)}/{len(chunks)}) für Recovery")
+                job_ref.update({
+                    "status": "translation_failed",
+                    "error_message": f"Validierung fehlgeschlagen: {validation_error}",
+                    "translation_failed_at": datetime.datetime.utcnow(),
+                    "translation_success": False,
+                    "validation_failed": True,
+                    "recovery_attempted": False,
+                    "chunks_original": len(chunks),
+                    "chunks_translated": len(translated_chunks),
+                    "failed_chunks": failed_chunks
+                })
+                return (f"Validation Error: {validation_error}", 500)
 
         # 9. Alle übersetzten Chunks zusammenfügen
         final_translated_text = '\n\n'.join(translated_chunks)
