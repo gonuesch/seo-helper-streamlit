@@ -230,8 +230,8 @@ def get_button_click_id():
     st.session_state.click_counter += 1
     return f"click_{st.session_state.click_counter}_{int(time.time())}"
 
-def start_translation_job(uploaded_file):
-    """Startet einen asynchronen Übersetzungsauftrag."""
+def start_direct_translation(uploaded_file):
+    """Startet eine direkte Übersetzung ohne Analyse."""
     if not uploaded_file:
         st.warning("Bitte zuerst eine Datei auswählen.")
         return
@@ -246,33 +246,45 @@ def start_translation_job(uploaded_file):
         blob.upload_from_file(uploaded_file, content_type=uploaded_file.type)
         gcs_path = f"gs://{BUCKET_NAME}/{gcs_file_name}"
 
-        # 2. Job-Eintrag in Firestore erstellen
+        # 2. Job-Eintrag in Firestore erstellen (direkt für Übersetzung)
         job_ref = firestore_client.collection("translation_jobs").document(job_id)
         job_ref.set({
-            "status": "pending",
+            "status": "translation_queued",
             "source_gcs_path": gcs_path,
-            "user_email": st.session_state.get("email", "unknown"),  # Nutzt E-Mail aus dem session_state
+            "user_email": st.session_state.get("email", "unknown"),
             "created_at": datetime.datetime.utcnow(),
-            "file_name": uploaded_file.name
+            "file_name": uploaded_file.name,
+            # Standard-Style-Guide für direkte Übersetzung
+            "style_guide": {
+                "genre_audience": "Allgemeine Literatur",
+                "tone_mood": "Neutral und professionell", 
+                "narrative_perspective": "Standard",
+                "character_names": "Beibehalten",
+                "key_concepts": "Wichtige Begriffe beibehalten",
+                "stylistic_features": "Klare, verständliche Sprache"
+            },
+            "key_terms": {}
         })
 
-        # 3. Nachricht in Pub/Sub veröffentlichen (startet die Analyse)
+        # 3. Nachricht an run-translation Pub/Sub senden (direkte Übersetzung)
+        topic_path = pubsub_publisher.topic_path(PROJECT_ID, "run-translation")
         message_data = json.dumps({"job_id": job_id}).encode('utf-8')
-        future = pubsub_publisher.publish(translation_topic_path, data=message_data)
-        future.result()  # Stellt sicher, dass die Nachricht gesendet wurde
+        future = pubsub_publisher.publish(topic_path, data=message_data)
+        future.result()
 
-        st.success(f"Übersetzungsauftrag '{uploaded_file.name}' wurde gestartet! Job-ID: {job_id}")
+        st.success(f"✅ Übersetzung von '{uploaded_file.name}' gestartet! Job-ID: {job_id}")
+        st.info("🤖 Die Übersetzung läuft jetzt. Du kannst den Status unten verfolgen.")
         
         # Store job info in session state for tracking
         st.session_state.translation_job_id = job_id
-        st.session_state.translation_job_status = "pending"
+        st.session_state.translation_job_status = "translation_queued"
 
     except Exception as e:
-        st.error(f"Ein Fehler ist aufgetreten: {e}")
-        logging.error(f"Translation job error: {e}")
+        st.error(f"❌ Fehler beim Starten der Übersetzung: {e}")
+        logging.error(f"Direct translation job error: {e}")
 
 def refresh_translation_status():
-    """Aktualisiert den Status eines Übersetzungsauftrags und lädt bei Bedarf den Style-Guide herunter."""
+    """Aktualisiert den Status eines Übersetzungsauftrags."""
     job_id = st.session_state.get("translation_job_id")
     if not job_id:
         st.warning("Kein aktiver Job gefunden.")
@@ -294,153 +306,19 @@ def refresh_translation_status():
         st.session_state.translation_job_status = job_status
         
         # Kosten- und Token-Informationen aus Firestore lesen
-        st.session_state.job_cost = job_data.get("estimated_cost_usd")
-        st.session_state.input_tokens = job_data.get("input_tokens")
-        st.session_state.output_tokens = job_data.get("output_tokens")
-        
-        # Neue Felder für Übersetzung
-        st.session_state.cached_content_name = job_data.get("cached_content_name")
         st.session_state.translation_cost_usd = job_data.get("translation_cost_usd")
         st.session_state.input_tokens_translation = job_data.get("input_tokens_translation")
         st.session_state.output_tokens_translation = job_data.get("output_tokens_translation")
         st.session_state.final_gcs_path = job_data.get("final_gcs_path")
 
-        # Wenn der Status "analyzed" ist, Style-Guide herunterladen
-        if job_status == "analyzed":
-            style_guide_gcs_path = job_data.get("style_guide_gcs_path")
-            if style_guide_gcs_path:
-                try:
-                    # GCS-Pfad parsen (Format: gs://bucket-name/path/to/file)
-                    if style_guide_gcs_path.startswith("gs://"):
-                        path_parts = style_guide_gcs_path[5:].split("/", 1)
-                        if len(path_parts) == 2:
-                            bucket_name = path_parts[0]
-                            blob_path = path_parts[1]
-                            
-                            # Style-Guide aus Cloud Storage herunterladen
-                            bucket = storage_client.bucket(bucket_name)
-                            blob = bucket.blob(blob_path)
-                            style_guide_content = blob.download_as_text()
-                            
-                            # JSON parsen und im Session State speichern
-                            parsed_style_guide = json.loads(style_guide_content)
-                            st.session_state.current_style_guide = parsed_style_guide
-                            st.session_state.editable_style_guide = parsed_style_guide.copy()  # Kopie für Bearbeitung
-                            
-                            st.success(f"Status aktualisiert: {job_status} - Style-Guide erfolgreich heruntergeladen!")
-                            logging.info(f"Style guide downloaded successfully for job {job_id}")
-                        else:
-                            st.error("Ungültiger GCS-Pfad für Style-Guide")
-                            logging.error(f"Invalid GCS path format: {style_guide_gcs_path}")
-                    else:
-                        st.error("Ungültiger GCS-Pfad für Style-Guide")
-                        logging.error(f"Invalid GCS path format: {style_guide_gcs_path}")
-                except json.JSONDecodeError as e:
-                    st.error(f"Fehler beim Parsen des Style-Guides (ungültiges JSON): {e}")
-                    logging.error(f"JSON parsing error for style guide: {e}")
-                except Exception as e:
-                    st.error(f"Fehler beim Herunterladen des Style-Guides: {e}")
-                    logging.error(f"Style guide download error: {e}")
-            else:
-                st.warning("Style-Guide-Pfad nicht in Job-Daten gefunden")
-                logging.warning(f"Style guide path not found in job data for job {job_id}")
-        else:
-            st.success(f"Status aktualisiert: {job_status}")
-            logging.info(f"Job status updated to {job_status} for job {job_id}")
+        st.success(f"Status aktualisiert: {job_status}")
+        logging.info(f"Job status updated to {job_status} for job {job_id}")
         
     except Exception as e:
         st.error(f"Fehler beim Abrufen des Status: {e}")
         logging.error(f"Translation status refresh error: {e}")
 
-def save_edited_style_guide():
-    """Speichert die bearbeiteten Style-Guide-Änderungen zurück in Cloud Storage."""
-    job_id = st.session_state.get("translation_job_id")
-    if not job_id:
-        st.error("Kein aktiver Job gefunden.")
-        return
-
-    try:
-        # Hole die bearbeiteten Werte direkt aus den Widget-Keys
-        edited_genre_audience = st.session_state.get("edited_genre_audience", "")
-        edited_tone_mood = st.session_state.get("edited_tone_mood", "")
-        edited_narrative_perspective = st.session_state.get("edited_narrative_perspective", "")
-        edited_character_names = st.session_state.get("edited_character_names", "")
-        edited_key_concepts = st.session_state.get("edited_key_concepts", "")
-        edited_stylistic_features = st.session_state.get("edited_stylistic_features", "")
-        edited_key_terms_df = st.session_state.get("edited_key_terms_data", pd.DataFrame())
-        
-        # Konvertiere DataFrame zu Dictionary
-        edited_key_terms = {}
-        if not edited_key_terms_df.empty:
-            for _, row in edited_key_terms_df.iterrows():
-                if pd.notna(row["Deutscher Begriff"]) and pd.notna(row["Englische Übersetzung"]):
-                    edited_key_terms[row["Deutscher Begriff"]] = row["Englische Übersetzung"]
-        
-        # Baue das Style-Guide-Dictionary neu zusammen
-        updated_style_guide = {
-            "style_guide": {
-                "genre_audience": edited_genre_audience,
-                "tone_mood": edited_tone_mood,
-                "narrative_perspective": edited_narrative_perspective,
-                "character_names": edited_character_names,
-                "key_concepts": edited_key_concepts,
-                "stylistic_features": edited_stylistic_features
-            },
-            "key_terms": edited_key_terms
-        }
-        
-        # Konvertiere zu JSON-String
-        style_guide_json = json.dumps(updated_style_guide, indent=2, ensure_ascii=False)
-        
-        # Hole den ursprünglichen GCS-Pfad aus Firestore
-        job_ref = firestore_client.collection("translation_jobs").document(job_id)
-        job_doc = job_ref.get()
-        
-        if not job_doc.exists:
-            st.error("Job nicht gefunden")
-            return
-        
-        job_data = job_ref.to_dict()
-        style_guide_gcs_path = job_data.get("style_guide_gcs_path")
-        
-        if not style_guide_gcs_path:
-            st.error("Style-Guide-Pfad nicht gefunden")
-            return
-        
-        # Parse GCS-Pfad
-        if style_guide_gcs_path.startswith("gs://"):
-            path_parts = style_guide_gcs_path[5:].split("/", 1)
-            if len(path_parts) == 2:
-                bucket_name = path_parts[0]
-                blob_path = path_parts[1]
-                
-                # Überschreibe die Datei in Cloud Storage
-                bucket = storage_client.bucket(bucket_name)
-                blob = bucket.blob(blob_path)
-                blob.upload_from_string(style_guide_json, content_type='application/json')
-                
-                # Aktualisiere den Job-Status in Firestore
-                job_ref.update({
-                    "status": "guide_approved",
-                    "updated_at": datetime.datetime.utcnow()
-                })
-                
-                # Aktualisiere Session State
-                st.session_state.current_style_guide = updated_style_guide
-                st.session_state.editable_style_guide = updated_style_guide.copy()
-                st.session_state.translation_job_status = "guide_approved"
-                
-                st.success("✅ Style-Guide erfolgreich aktualisiert und freigegeben!")
-                logging.info(f"Style guide updated and approved for job {job_id}")
-                
-            else:
-                st.error("Ungültiger GCS-Pfad")
-        else:
-            st.error("Ungültiger GCS-Pfad")
-            
-    except Exception as e:
-        st.error(f"Fehler beim Speichern des Style-Guides: {e}")
-        logging.error(f"Style guide save error: {e}")
+# Style-Guide-Funktionen entfernt (nicht mehr benötigt für direkte Übersetzung)
 
 def auto_refresh_translation_status():
     """Automatische Status-Aktualisierung alle 30 Sekunden für aktive Übersetzungsaufträge."""
@@ -536,18 +414,7 @@ def auto_refresh_translation_status():
 
 def get_time_estimate(status, file_size_mb=None):
     """Gibt eine Zeitabschätzung für den aktuellen Status zurück."""
-    if status == "pending":
-        return "⏱️ **Geschätzte Dauer:** 2-5 Minuten"
-    elif status == "analyzing":
-        if file_size_mb:
-            if file_size_mb < 1:
-                return "⏱️ **Geschätzte Dauer:** 3-7 Minuten"
-            elif file_size_mb < 5:
-                return "⏱️ **Geschätzte Dauer:** 5-12 Minuten"
-            else:
-                return "⏱️ **Geschätzte Dauer:** 8-20 Minuten"
-        return "⏱️ **Geschätzte Dauer:** 5-15 Minuten"
-    elif status == "translation_queued":
+    if status == "translation_queued":
         return "⏱️ **Geschätzte Dauer:** 1-3 Minuten (Warteschlange)"
     elif status == "translating":
         if file_size_mb:
@@ -558,6 +425,10 @@ def get_time_estimate(status, file_size_mb=None):
             else:
                 return "⏱️ **Geschätzte Dauer:** 35-80 Minuten"
         return "⏱️ **Geschätzte Dauer:** 20-60 Minuten"
+    elif status == "completed":
+        return "✅ **Abgeschlossen:** Übersetzung ist fertig!"
+    elif status == "translation_failed":
+        return "❌ **Fehler:** Übersetzung fehlgeschlagen"
     else:
         return ""
 
@@ -1529,37 +1400,40 @@ elif selected_tool == "Text-to-Speech":
         )
 
 elif selected_tool == "Manuskript-Übersetzung":
-    st.header("Manuskript-Übersetzung (Deutsch → Englisch)")
-    st.caption("Dieses Tool übersetzt deutsche Manuskripte im Hintergrund.")
+    st.header("📚 Manuskript-Übersetzung (Deutsch → Englisch)")
+    st.caption("Lade dein deutsches Manuskript hoch und starte direkt die Übersetzung.")
 
+    # Vereinfachter Upload-Bereich
     uploaded_file = st.file_uploader(
-        label="Lade dein deutsches Manuskript hoch (.docx oder .pdf)",
+        label="📄 Lade dein deutsches Manuskript hoch (.docx oder .pdf)",
         type=['docx', 'pdf'],
-        key="translation_uploader"
+        key="translation_uploader",
+        help="Unterstützte Formate: DOCX, PDF"
     )
 
     if uploaded_file:
-        if st.button("🚀 Analyse starten", type="primary"):
-            with st.spinner("Starte Übersetzungsauftrag..."):
-                start_translation_job(uploaded_file)
-            st.rerun()
+        st.success(f"✅ Datei hochgeladen: {uploaded_file.name}")
+        st.info(f"📊 Dateigröße: {uploaded_file.size:,} Bytes")
+        
+        # Direkter Übersetzungs-Button
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            if st.button("🚀 Übersetzung starten", type="primary", key="start_translation"):
+                with st.spinner("Starte Übersetzung..."):
+                    start_direct_translation(uploaded_file)
+                st.rerun()
+        
+        with col2:
+            st.info("💡 **Hinweis:** Die Übersetzung verwendet Standard-Einstellungen für professionelle Texte.")
     
     # Job Status Anzeige
     if st.session_state.get("translation_job_id"):
         st.divider()
         st.subheader("📋 Übersetzungsauftrag Status")
         
-        # Erweiterte Status-Anzeige mit Icons
+        # Vereinfachte Status-Anzeige (ohne Analyse)
         status = st.session_state.translation_job_status
-        if status == "pending":
-            st.info("⏳ **Status:** Wartet auf Analyse...")
-        elif status == "analyzing":
-            st.info("🔍 **Status:** Analysiere Manuskript...")
-        elif status == "analyzed":
-            st.success("✅ **Status:** Analyse abgeschlossen!")
-        elif status == "guide_approved":
-            st.success("✅ **Status:** Style-Guide freigegeben!")
-        elif status == "translation_queued":
+        if status == "translation_queued":
             st.info("🚀 **Status:** Übersetzung in Warteschlange...")
         elif status == "translating":
             st.info("🤖 **Status:** Übersetze Manuskript...")

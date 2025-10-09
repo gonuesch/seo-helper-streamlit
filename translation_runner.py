@@ -419,11 +419,20 @@ def run_translation_with_cache(cloudevent):
         
         file_name = job_data["file_name"]
         gcs_path = job_data["source_gcs_path"]
-        style_guide_gcs_path = job_data["style_guide_gcs_path"]
-        cached_content_name = job_data.get("cached_content_name")
-
-        if not cached_content_name:
-            raise ValueError(f"Kein cached_content_name für Job {job_id} gefunden")
+        
+        # Direkte Übersetzung: Style-Guide aus Firestore laden (Standard-Werte)
+        style_guide = job_data.get("style_guide", {
+            "genre_audience": "Allgemeine Literatur",
+            "tone_mood": "Neutral und professionell",
+            "narrative_perspective": "Standard",
+            "character_names": "Beibehalten",
+            "key_concepts": "Wichtige Begriffe beibehalten",
+            "stylistic_features": "Klare, verständliche Sprache"
+        })
+        key_terms = job_data.get("key_terms", {})
+        
+        print(f"📋 Standard-Style-Guide verwendet: {len(style_guide)} Felder")
+        print(f"📋 Key Terms: {len(key_terms)} Begriffe")
 
         print(f"📋 Job-Details geladen: {file_name}")
 
@@ -440,69 +449,45 @@ def run_translation_with_cache(cloudevent):
         })
         print(f"✅ Status auf 'translating' gesetzt mit Lock und Sicherheitslimits")
 
-        # 3. Style-Guide laden
-        print(f"📚 Lade Style-Guide von: {style_guide_gcs_path}")
-        style_guide_blob = storage_client.bucket(BUCKET_NAME).blob(style_guide_gcs_path.split(f"gs://{BUCKET_NAME}/")[1])
-        style_guide_json_str = style_guide_blob.download_as_text()
-        style_guide_data = json.loads(style_guide_json_str)
-        print(f"✅ Style-Guide geladen: {len(style_guide_json_str)} Zeichen")
+        # 3. Style-Guide bereits aus Firestore geladen (Standard-Werte)
+        print(f"📚 Verwende Standard-Style-Guide: {len(style_guide)} Felder")
+        print(f"📚 Key Terms: {len(key_terms)} Begriffe")
 
-        # Style-Guide und Glossar extrahieren
-        style_guide = style_guide_data.get("style_guide", {})
-        key_terms = style_guide_data.get("key_terms", {})
-
-        # 4. Cache wiederherstellen und Text extrahieren (mit verbesserter Validierung)
-        print(f"🔄 Stelle Cache wieder her: {cached_content_name}")
+        # 4. Text direkt aus der Datei extrahieren (ohne Cache)
+        print(f"📄 Extrahiere Text direkt aus: {gcs_path}")
         
         full_text = None
-        cache_success = False
+        extraction_success = False
         
         try:
-            cached_content = caching.CachedContent.get(cached_content_name)
-            model_with_cache = GenerativeModel.from_cached_content(cached_content=cached_content)
+            # Datei aus GCS herunterladen
+            file_bytes = get_manuscript_file(gcs_path)
+            print(f"✅ Datei heruntergeladen: {len(file_bytes)} Bytes")
             
-            # Extrahiere den Text aus dem Cache mit verbesserter Validierung
-            cache_response = model_with_cache.generate_content("Gib mir den kompletten Text des Manuskripts zurück, ohne Änderungen.")
-            extracted_text = cache_response.text.strip()
-            
-            # Validierung der Cache-Extraktion
-            if extracted_text and len(extracted_text) > 100:  # Mindestens 100 Zeichen
-                full_text = extracted_text
-                cache_success = True
-                print(f"✅ Text aus Cache extrahiert: {len(full_text)} Zeichen")
+            # Text extrahieren basierend auf Dateityp
+            if file_name.lower().endswith('.docx'):
+                full_text = read_text_from_docx(file_bytes)
+            elif file_name.lower().endswith('.pdf'):
+                full_text = read_text_from_pdf(file_bytes)
             else:
-                print(f"⚠️ Cache-Extraktion unvollständig: {len(extracted_text) if extracted_text else 0} Zeichen")
-                raise ValueError("Cache-Extraktion unvollständig")
+                # Fallback: Versuche als Text zu dekodieren
+                full_text = file_bytes.decode('utf-8', errors='ignore')
             
-        except Exception as cache_error:
-            print(f"⚠️ Cache-Wiederherstellung fehlgeschlagen: {cache_error}")
-            print("🔄 Versuche Text direkt aus der Datei zu extrahieren...")
+            # Validierung der Text-Extraktion
+            if full_text and len(full_text.strip()) > 100:  # Mindestens 100 Zeichen
+                extraction_success = True
+                print(f"✅ Text extrahiert: {len(full_text)} Zeichen")
+            else:
+                print(f"⚠️ Text-Extraktion unvollständig: {len(full_text) if full_text else 0} Zeichen")
+                raise ValueError("Text-Extraktion unvollständig")
             
-            # Fallback: Text direkt aus der Datei extrahieren
-            try:
-                file_bytes = get_manuscript_file(gcs_path)
-                print(f"📄 Datei heruntergeladen: {len(file_bytes)} Bytes")
-                
-                if file_name.lower().endswith('.docx'):
-                    full_text = read_text_from_docx(file_bytes)
-                elif file_name.lower().endswith('.pdf'):
-                    full_text = read_text_from_pdf(file_bytes)
-                else:
-                    full_text = file_bytes.decode('utf-8', errors='ignore')
-                
-                # Validierung der Datei-Extraktion
-                if full_text and len(full_text.strip()) > 100:
-                    print(f"✅ Text direkt aus Datei extrahiert: {len(full_text)} Zeichen")
-                else:
-                    raise ValueError(f"Datei-Extraktion unvollständig: {len(full_text) if full_text else 0} Zeichen")
-                
-            except Exception as file_error:
-                print(f"❌ Fehler beim direkten Datei-Zugriff: {file_error}")
-                raise ValueError(f"Konnte weder Cache noch Datei verwenden: {file_error}")
+        except Exception as extraction_error:
+            print(f"❌ Text-Extraktion fehlgeschlagen: {extraction_error}")
+            raise ValueError(f"Text-Extraktion fehlgeschlagen: {extraction_error}")
         
         # Finale Validierung
         if not full_text or len(full_text.strip()) == 0:
-            raise ValueError("Konnte keinen Text aus Cache oder Datei extrahieren")
+            raise ValueError("Konnte keinen Text aus der Datei extrahieren")
         
         # Zusätzliche Validierung der Textqualität
         if len(full_text) < 50:
