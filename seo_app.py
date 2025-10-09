@@ -765,32 +765,67 @@ def run_tts_processing_and_logging():
 # Page config MUSS der erste Streamlit-Befehl sein
 st.set_page_config(page_title="Toolbox", page_icon="app_icon.png", layout="wide")
 
-# Dark Mode CSS für bessere Lesbarkeit der Navigation
+# Responsive CSS für Dark Mode und Light Mode
 st.markdown("""
 <style>
 /* Dark Mode Navigation Verbesserungen */
+@media (prefers-color-scheme: dark) {
+    .stMenu > div > div > div > div {
+        color: #ffffff !important;
+    }
+
+    .stMenu > div > div > div > div:hover {
+        color: #ffffff !important;
+        background-color: rgba(255, 255, 255, 0.1) !important;
+    }
+
+    /* Bessere Kontraste für Dark Mode */
+    [data-testid="stSidebar"] {
+        background-color: #262730;
+    }
+
+    /* Navigation Tabs im Dark Mode */
+    div[data-testid="stHorizontalBlock"] > div > div > div > div {
+        color: #ffffff !important;
+    }
+
+    /* Hover-Effekte für bessere UX */
+    .stMenu > div > div > div > div:hover {
+        background-color: rgba(0, 123, 255, 0.2) !important;
+        border-radius: 10px;
+    }
+}
+
+/* Light Mode - Standard Streamlit Styles beibehalten */
+@media (prefers-color-scheme: light) {
+    .stMenu > div > div > div > div {
+        color: inherit !important;
+    }
+
+    .stMenu > div > div > div > div:hover {
+        color: inherit !important;
+        background-color: inherit !important;
+    }
+
+    /* Navigation Tabs im Light Mode */
+    div[data-testid="stHorizontalBlock"] > div > div > div > div {
+        color: inherit !important;
+    }
+
+    /* Hover-Effekte für Light Mode */
+    .stMenu > div > div > div > div:hover {
+        background-color: rgba(0, 123, 255, 0.1) !important;
+        border-radius: 10px;
+    }
+}
+
+/* Fallback für Browser ohne prefers-color-scheme Support */
 .stMenu > div > div > div > div {
-    color: #ffffff !important;
+    color: #262730 !important;
 }
 
 .stMenu > div > div > div > div:hover {
-    color: #ffffff !important;
-    background-color: rgba(255, 255, 255, 0.1) !important;
-}
-
-/* Bessere Kontraste für Dark Mode */
-[data-testid="stSidebar"] {
-    background-color: #262730;
-}
-
-/* Navigation Tabs im Dark Mode */
-div[data-testid="stHorizontalBlock"] > div > div > div > div {
-    color: #ffffff !important;
-}
-
-/* Hover-Effekte für bessere UX */
-.stMenu > div > div > div > div:hover {
-    background-color: rgba(0, 123, 255, 0.2) !important;
+    background-color: rgba(0, 123, 255, 0.1) !important;
     border-radius: 10px;
 }
 </style>
@@ -923,11 +958,11 @@ selected_tool = option_menu(
             "margin": "0px 5px", 
             "--hover-color": "#eee", 
             "border-radius": "10px",
-            "color": "#ffffff !important"  # Weiße Schrift für bessere Lesbarkeit
+            "color": "#262730"  # Dunkle Schrift für bessere Lesbarkeit im Light Mode
         },
         "nav-link-selected": {
             "background-color": "#007bff",
-            "color": "#ffffff !important"  # Weiße Schrift für ausgewählten Tab
+            "color": "#ffffff"  # Weiße Schrift für ausgewählten Tab
         },
     }
 )
