@@ -1441,6 +1441,53 @@ elif selected_tool == "Manuskript-Übersetzung":
             st.info("🤖 **Status:** Übersetze Manuskript...")
         elif status == "completed":
             st.success("🎉 **Status:** Übersetzung abgeschlossen!")
+            
+            # Download-Button anzeigen wenn final_gcs_path verfügbar ist
+            if st.session_state.get("final_gcs_path"):
+                st.divider()
+                st.subheader("📥 Übersetztes Dokument herunterladen")
+                
+                try:
+                    # GCS-Pfad extrahieren
+                    gcs_path = st.session_state.final_gcs_path
+                    if gcs_path.startswith("gs://"):
+                        # Blob-Name extrahieren
+                        bucket_name = gcs_path.split("/")[2]
+                        blob_name = "/".join(gcs_path.split("/")[3:])
+                        
+                        # Datei aus GCS laden
+                        from google.cloud import storage
+                        storage_client = storage.Client(project=PROJECT_ID)
+                        bucket = storage_client.bucket(bucket_name)
+                        blob = bucket.blob(blob_name)
+                        
+                        # Datei als Bytes laden
+                        file_bytes = blob.download_as_bytes()
+                        
+                        # Dateiname extrahieren
+                        filename = blob_name.split("/")[-1]
+                        
+                        # Download-Button (prominent angezeigt)
+                        st.success("✅ Übersetztes Dokument verfügbar!")
+                        st.download_button(
+                            label=f"💾 {filename} herunterladen",
+                            data=file_bytes,
+                            file_name=filename,
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            key="download_translated_file_main",
+                            type="primary",
+                            use_container_width=True
+                        )
+                        
+                    else:
+                        st.error("❌ Ungültiger GCS-Pfad")
+                        
+                except Exception as e:
+                    st.error(f"❌ Fehler beim Laden der Datei: {e}")
+                    st.info(f"📁 GCS-Pfad: {st.session_state.final_gcs_path}")
+            else:
+                st.warning("⚠️ Übersetzung abgeschlossen, aber Download-Pfad noch nicht verfügbar. Bitte Status aktualisieren.")
+                
         elif status == "translation_failed":
             st.error("❌ **Status:** Übersetzung fehlgeschlagen!")
         else:
