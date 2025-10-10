@@ -24,8 +24,12 @@ try:
     from langchain_text_splitters import SemanticChunker
     from langchain_google_vertexai import VertexAIEmbeddings
     SEMANTIC_CHUNKING_AVAILABLE = True
+    print("✅ Semantic chunking dependencies loaded successfully")
 except ImportError as e:
     print(f"⚠️ Semantic chunking not available: {e}")
+    SEMANTIC_CHUNKING_AVAILABLE = False
+except Exception as e:
+    print(f"⚠️ Error loading semantic chunking: {e}")
     SEMANTIC_CHUNKING_AVAILABLE = False
 import PyPDF2
 import fitz

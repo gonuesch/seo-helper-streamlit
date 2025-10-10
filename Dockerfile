@@ -12,6 +12,9 @@ RUN apt-get update && apt-get install -y \
     g++ \
     libffi-dev \
     libssl-dev \
+    libxml2-dev \
+    libxslt1-dev \
+    zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements.txt and install Python dependencies
@@ -31,4 +34,4 @@ EXPOSE 8080
 
 # Use gunicorn to run the Flask app
 # Configure gunicorn for Cloud Run with appropriate workers and timeout
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--timeout", "3600", "--max-requests", "1", "--max-requests-jitter", "0", "main:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--timeout", "3600", "--max-requests", "1", "--max-requests-jitter", "0", "--preload", "--worker-class", "sync", "--worker-connections", "1000", "main:app"]
