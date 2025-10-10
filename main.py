@@ -20,17 +20,9 @@ from vertexai.generative_models import GenerativeModel, Part
 from vertexai import caching
 from docx import Document
 from docx.shared import Inches
-try:
-    from langchain_text_splitters import SemanticChunker
-    from langchain_google_vertexai import VertexAIEmbeddings
-    SEMANTIC_CHUNKING_AVAILABLE = True
-    print("✅ Semantic chunking dependencies loaded successfully")
-except ImportError as e:
-    print(f"⚠️ Semantic chunking not available: {e}")
-    SEMANTIC_CHUNKING_AVAILABLE = False
-except Exception as e:
-    print(f"⚠️ Error loading semantic chunking: {e}")
-    SEMANTIC_CHUNKING_AVAILABLE = False
+# Simplified import handling - always use fallback for stability
+SEMANTIC_CHUNKING_AVAILABLE = False
+print("ℹ️ Using paragraph-based chunking for maximum stability")
 import PyPDF2
 import fitz
 
@@ -365,43 +357,11 @@ def extract_text_from_pdf_batched(file_path: str, batch_size: int = 50) -> Gener
 
 def get_semantic_chunks(text: str) -> List[str]:
     """
-    Creates semantic chunks using langchain_text_splitters.SemanticChunker.
-    Replaces naive chunking with intelligent semantic boundaries.
-    Uses Gemini 2.5 Flash embeddings for better integration with Google Cloud.
+    Creates chunks using paragraph-based chunking for maximum stability.
+    This ensures the service works reliably without complex dependencies.
     """
-    if not SEMANTIC_CHUNKING_AVAILABLE:
-        print("⚠️ Semantic chunking not available, using paragraph-based chunking")
-        return chunk_text_by_paragraphs(text, max_chunk_size=40000)
-    
-    try:
-        # Initialize Vertex AI embeddings using Gemini 2.5 Flash
-        # This integrates seamlessly with Google Cloud and doesn't require external API keys
-        embeddings = VertexAIEmbeddings(
-            model_name="textembedding-gecko@003",  # Google's embedding model
-            project=PROJECT_ID,
-            location=LOCATION
-        )
-        
-        # Create semantic chunker
-        chunker = SemanticChunker(
-            embeddings=embeddings,
-            breakpoint_threshold_type="percentile",  # Use percentile-based threshold
-            breakpoint_threshold_amount=95  # 95th percentile threshold
-        )
-        
-        # Split text into semantic chunks
-        chunks = chunker.split_text(text)
-        
-        print(f"🧠 Semantic chunking created {len(chunks)} chunks")
-        for i, chunk in enumerate(chunks):
-            print(f"   Chunk {i+1}: {len(chunk)} characters")
-        
-        return chunks
-        
-    except Exception as e:
-        print(f"⚠️ Semantic chunking failed, falling back to paragraph-based chunking: {e}")
-        # Fallback to paragraph-based chunking
-        return chunk_text_by_paragraphs(text, max_chunk_size=40000)
+    print("📝 Using paragraph-based chunking for maximum stability")
+    return chunk_text_by_paragraphs(text, max_chunk_size=40000)
 
 def chunk_text_by_paragraphs(text: str, max_chunk_size: int = 40000) -> List[str]:
     """

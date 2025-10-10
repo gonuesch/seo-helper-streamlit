@@ -23,8 +23,8 @@ pydub
 # Cloud Run Translation Service Dependencies
 Flask>=2.3.0
 gunicorn>=21.2.0
-langchain==0.2.16
-langchain-google-vertexai==1.0.6
-langchain-text-splitters>=0.2.0
-langchain-community==0.2.16
+# Simplified langchain dependencies to avoid conflicts
+langchain>=0.1.0
+langchain-google-vertexai>=1.0.0
+langchain-text-splitters>=0.0.1
 PyPDF2>=3.0.0

@@ -6,15 +6,12 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies required for document processing
+# Install minimal system dependencies for document processing
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     libffi-dev \
     libssl-dev \
-    libxml2-dev \
-    libxslt1-dev \
-    zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements.txt and install Python dependencies
@@ -33,5 +30,5 @@ USER app
 EXPOSE 8080
 
 # Use gunicorn to run the Flask app
-# Configure gunicorn for Cloud Run with appropriate workers and timeout
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--timeout", "3600", "--max-requests", "1", "--max-requests-jitter", "0", "--preload", "--worker-class", "sync", "--worker-connections", "1000", "main:app"]
+# Simplified configuration for maximum stability
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--timeout", "3600", "--max-requests", "1", "--max-requests-jitter", "0", "main:app"]
