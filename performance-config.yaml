@@ -1,0 +1,176 @@
+# Performance Configuration for Cloud Run Translation Service
+# This file contains optimized settings for handling large document translations
+
+# Cloud Run Service Configuration
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: translation-service
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/execution-environment: gen2
+spec:
+  template:
+    metadata:
+      annotations:
+        # Resource allocation for memory-intensive operations
+        run.googleapis.com/memory: "4Gi"
+        run.googleapis.com/cpu: "2"
+        
+        # Timeout settings for long-running translations
+        run.googleapis.com/timeout: "3600s"  # 1 hour max
+        
+        # Scaling configuration
+        run.googleapis.com/max-scale: "10"   # Max 10 instances
+        run.googleapis.com/min-scale: "0"    # Scale to zero when idle
+        
+        # Performance optimizations
+        run.googleapis.com/cpu-throttling: "false"  # Disable CPU throttling
+        run.googleapis.com/execution-environment: gen2  # Use 2nd gen execution
+        
+        # Network and security
+        run.googleapis.com/vpc-access-connector: "projects/PROJECT_ID/locations/REGION/connectors/CONNECTOR_NAME"
+        run.googleapis.com/vpc-access-egress: "private-ranges-only"
+        
+    spec:
+      # Container configuration
+      containerConcurrency: 1  # Process one request at a time for memory efficiency
+      timeoutSeconds: 3600     # 1 hour timeout
+      
+      containers:
+      - image: gcr.io/PROJECT_ID/translation-service:latest
+        ports:
+        - containerPort: 8080
+        
+        # Environment variables
+        env:
+        - name: GCP_PROJECT
+          value: "PROJECT_ID"
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: openai-api-key
+              key: key
+        - name: FIRESTORE_DB_ID
+          value: "hbu-toolbox-firestone"
+        - name: LOCATION
+          value: "europe-west1"
+        - name: BUCKET_NAME
+          value: "manuskripte-upload-avid-infinity"
+        - name: MAX_COST_PER_JOB_USD
+          value: "10.0"
+        - name: MAX_RUNTIME_MINUTES
+          value: "120"
+        
+        # Resource limits and requests
+        resources:
+          limits:
+            cpu: "2"      # 2 vCPUs
+            memory: "4Gi" # 4GB RAM
+          requests:
+            cpu: "1"      # 1 vCPU minimum
+            memory: "2Gi" # 2GB RAM minimum
+        
+        # Health check configuration
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+---
+# Eventarc Trigger Configuration
+apiVersion: eventarc.cnrm.cloud.google.com/v1beta1
+kind: EventarcTrigger
+metadata:
+  name: translation-trigger
+spec:
+  location: europe-west1
+  destination:
+    cloudRunService:
+      service: translation-service
+      path: /
+      region: europe-west1
+  eventFilters:
+  - attribute: type
+    value: google.cloud.storage.object.v1.finalized
+  - attribute: bucket
+    value: your-bucket-name
+  serviceAccountRef:
+    name: translation-service-account
+
+---
+# Service Account Configuration
+apiVersion: iam.cnrm.cloud.google.com/v1beta1
+kind: IAMServiceAccount
+metadata:
+  name: translation-service-account
+spec:
+  displayName: "Translation Service Account"
+  description: "Service account for Cloud Run translation service"
+
+---
+# IAM Policy Binding
+apiVersion: iam.cnrm.cloud.google.com/v1beta1
+kind: IAMPolicyMember
+metadata:
+  name: translation-service-permissions
+spec:
+  member: serviceAccount:translation-service-account@PROJECT_ID.iam.gserviceaccount.com
+  role: roles/storage.objectViewer
+  resourceRef:
+    apiVersion: resourcemanager.cnrm.cloud.google.com/v1beta1
+    kind: Project
+    external: PROJECT_ID
+
+---
+# Additional IAM bindings for required permissions
+apiVersion: iam.cnrm.cloud.google.com/v1beta1
+kind: IAMPolicyMember
+metadata:
+  name: translation-service-firestore
+spec:
+  member: serviceAccount:translation-service-account@PROJECT_ID.iam.gserviceaccount.com
+  role: roles/datastore.user
+  resourceRef:
+    apiVersion: resourcemanager.cnrm.cloud.google.com/v1beta1
+    kind: Project
+    external: PROJECT_ID
+
+---
+apiVersion: iam.cnrm.cloud.google.com/v1beta1
+kind: IAMPolicyMember
+metadata:
+  name: translation-service-vertex
+spec:
+  member: serviceAccount:translation-service-account@PROJECT_ID.iam.gserviceaccount.com
+  role: roles/aiplatform.user
+  resourceRef:
+    apiVersion: resourcemanager.cnrm.cloud.google.com/v1beta1
+    kind: Project
+    external: PROJECT_ID
+
+---
+apiVersion: iam.cnrm.cloud.google.com/v1beta1
+kind: IAMPolicyMember
+metadata:
+  name: translation-service-logging
+spec:
+  member: serviceAccount:translation-service-account@PROJECT_ID.iam.gserviceaccount.com
+  role: roles/logging.logWriter
+  resourceRef:
+    apiVersion: resourcemanager.cnrm.cloud.google.com/v1beta1
+    kind: Project
+    external: PROJECT_ID

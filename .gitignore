@@ -35,3 +35,49 @@ translation_analyzer_requirements.txt# Temporäre JSON-Bereinigungsdateien
 fix_json_cleaning.py
 improved_json_cleaning.py
 TTS_PROCESS.md
+
+# misc
+translation_refactor.md
+
+# Cloud Run Translation Service specific files
+# Temporary files created during processing
+/tmp/
+temp_*
+*.tmp
+
+# Deployment artifacts
+*.log
+deployment.log
+build.log
+
+# Test files
+test_*.py
+*_test.py
+test_results/
+
+# Environment-specific files
+.env.local
+.env.production
+.env.staging
+
+# Cloud Build artifacts
+.gcloud/
+cloudbuild-*.log
+
+# Container images (if built locally)
+*.tar
+*.tar.gz
+
+# IDE specific files for Cloud Run development
+.vscode/settings.json
+.idea/workspace.xml
+
+# Backup files
+*.backup
+*.bak
+*~
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini

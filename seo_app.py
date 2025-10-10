@@ -28,6 +28,7 @@ from typing import Tuple, Dict
 import re
 import requests
 import os
+import base64
 
 # Richte ein einfaches Logging ein
 logging.basicConfig(level=logging.INFO)
@@ -185,6 +186,9 @@ BUCKET_NAME = "manuskripte-upload-avid-infinity"
 FIRESTORE_DB_ID = "hbu-toolbox-firestone"
 PUB_SUB_TOPIC = "start-translation"
 
+# Cloud Run Translation Service URL
+TRANSLATION_SERVICE_URL = "https://translation-service-785897725191.europe-west1.run.app"
+
 # GCS Buckets für Text-to-Speech
 GCS_TTS_OUTPUT_BUCKET = "tts-output-europe-west4-6899" # Bucket für MP3-Dateien
 
@@ -254,6 +258,8 @@ def start_direct_translation(uploaded_file):
             "user_email": st.session_state.get("email", "unknown"),
             "created_at": datetime.datetime.utcnow(),
             "file_name": uploaded_file.name,
+            "original_filename": uploaded_file.name,
+            "target_language": "English",
             # Standard-Style-Guide für direkte Übersetzung
             "style_guide": {
                 "genre_audience": "Allgemeine Literatur",
@@ -266,14 +272,29 @@ def start_direct_translation(uploaded_file):
             "key_terms": {}
         })
 
-        # 3. Nachricht an start-translation Pub/Sub senden (direkte Übersetzung)
-        topic_path = pubsub_publisher.topic_path(PROJECT_ID, "start-translation")
-        message_data = json.dumps({"job_id": job_id}).encode('utf-8')
-        future = pubsub_publisher.publish(topic_path, data=message_data)
-        future.result()
-
-        st.success(f"✅ Übersetzung von '{uploaded_file.name}' gestartet! Job-ID: {job_id}")
-        st.info("🤖 Die Übersetzung läuft jetzt. Du kannst den Status unten verfolgen.")
+        # 3. Cloud Run Service direkt aufrufen (simuliert Eventarc Event)
+        event_data = {
+            "data": {
+                "message": {
+                    "data": base64.b64encode(json.dumps({"job_id": job_id}).encode()).decode()
+                }
+            }
+        }
+        
+        # Cloud Run Service aufrufen
+        response = requests.post(
+            TRANSLATION_SERVICE_URL,
+            json=event_data,
+            headers={"Content-Type": "application/json"},
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            st.success(f"✅ Übersetzung von '{uploaded_file.name}' gestartet! Job-ID: {job_id}")
+            st.info("🤖 Die Übersetzung läuft jetzt mit dem neuen Cloud Run Service (Gemini 2.5 Flash + Semantic Chunking).")
+        else:
+            st.error(f"❌ Fehler beim Starten der Übersetzung: Service antwortete mit Status {response.status_code}")
+            logging.error(f"Cloud Run service error: {response.status_code} - {response.text}")
         
         # Store job info in session state for tracking
         st.session_state.translation_job_id = job_id

@@ -6,7 +6,6 @@ google-auth-oauthlib>=1.0.0
 pandas==2.1.4
 pyarrow==14.0.1
 openpyxl
-google-generativeai
 python-docx
 PyMuPDF==1.23.8
 Authlib
@@ -20,3 +19,12 @@ google-cloud-firestore
 google-cloud-aiplatform
 google-cloud-texttospeech
 pydub
+
+# Cloud Run Translation Service Dependencies
+Flask>=2.3.0
+gunicorn>=21.2.0
+langchain>=0.2.0
+langchain-google-vertexai>=1.0.0
+langchain-text-splitters>=0.0.1
+langchain-community>=0.2.0
+PyPDF2>=3.0.0

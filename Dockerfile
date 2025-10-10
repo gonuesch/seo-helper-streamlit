@@ -1,14 +1,34 @@
-# Dockerfile (Finale, korrigierte Version)
+# Dockerfile for Cloud Run Translation Service
+# Uses python:3.11-slim as base image for optimal performance and security
+
 FROM python:3.11-slim
+
+# Set working directory
 WORKDIR /app
 
-# Erst die Anforderungen kopieren, um das Caching von Docker-Layern zu optimieren
+# Install system dependencies required for document processing
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    libffi-dev \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements.txt and install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Dann den Rest des App-Codes kopieren
-COPY . .
+# Copy application code
+COPY main.py .
 
-# Wir verwenden wieder die Shell-Form und übergeben den Port explizit,
-# da dies in der Cloud Run-Umgebung erforderlich ist.
-CMD streamlit run seo_app.py --server.port=$PORT --server.address=0.0.0.0
+# Create non-root user for security
+RUN useradd --create-home --shell /bin/bash app \
+    && chown -R app:app /app
+USER app
+
+# Expose port 8080 as required by Cloud Run
+EXPOSE 8080
+
+# Use gunicorn to run the Flask app
+# Configure gunicorn for Cloud Run with appropriate workers and timeout
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--timeout", "3600", "--max-requests", "1", "--max-requests-jitter", "0", "main:app"]
