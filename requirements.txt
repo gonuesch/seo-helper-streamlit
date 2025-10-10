@@ -25,6 +25,6 @@ Flask>=2.3.0
 gunicorn>=21.2.0
 langchain==0.2.16
 langchain-google-vertexai==1.0.6
-langchain-text-splitters==0.0.1
+langchain-text-splitters>=0.2.0
 langchain-community==0.2.16
 PyPDF2>=3.0.0
