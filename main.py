@@ -50,12 +50,23 @@ vertexai.init(project=PROJECT_ID, location=LOCATION)
 
 # --- Flask Routes ---
 
-@app.route('/', methods=['POST'])
-def handle_translation_request():
+@app.route('/', methods=['GET', 'POST'])
+def handle_request():
     """
-    Main HTTP POST endpoint for Eventarc trigger.
-    Receives and parses JSON payload from Eventarc event.
+    Main endpoint for handling requests.
+    GET: Health check
+    POST: Translation requests
     """
+    if request.method == 'GET':
+        # Health check endpoint
+        return jsonify({
+            "status": "healthy",
+            "service": "translation-service",
+            "version": "2.0.0",
+            "message": "Service is running and ready"
+        }), 200
+    
+    # Handle POST requests (translation)
     try:
         # Parse the Eventarc event payload
         event_data = request.get_json()
