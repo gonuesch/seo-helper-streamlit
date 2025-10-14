@@ -12,6 +12,7 @@ import datetime
 import time
 import random
 import tempfile
+import threading
 from typing import List, Generator, Dict, Any
 from flask import Flask, request, jsonify
 from google.cloud import firestore, storage, aiplatform
@@ -88,11 +89,23 @@ def handle_request():
                 print(f"❌ {error_msg}")
                 return jsonify({"error": error_msg}), 400
                 
-            print(f"🔄 Processing translation request for job_id: {job_id}")
+            print(f"🔄 Accepted translation request for job_id: {job_id}")
             
-            # Call the orchestrator function
-            result = process_translation_request(job_id)
-            return jsonify(result), 200
+            # Start translation in background thread - respond immediately!
+            thread = threading.Thread(
+                target=process_translation_request,
+                args=(job_id,),
+                daemon=True
+            )
+            thread.start()
+            print(f"✅ Background thread started for job {job_id}")
+            
+            # Return immediately with 202 Accepted
+            return jsonify({
+                "status": "accepted",
+                "job_id": job_id,
+                "message": f"Translation job {job_id} accepted and processing in background"
+            }), 202
             
         else:
             error_msg = f"Invalid event structure. Expected 'data.message.data' but got keys: {list(event_data.keys()) if event_data else 'None'}"

@@ -319,9 +319,9 @@ def start_direct_translation(uploaded_file):
             
             logger.info(f"📨 Translation Service responded with status {response.status_code}")
             
-            if response.status_code == 200:
+            if response.status_code in [200, 202]:  # Accept both 200 OK and 202 Accepted
                 st.success(f"✅ Übersetzung von '{uploaded_file.name}' gestartet! Job-ID: {job_id}")
-                st.info("🤖 Die Übersetzung läuft jetzt mit dem neuen Cloud Run Service (Gemini 2.5 Flash + Semantic Chunking).")
+                st.info("🤖 Die Übersetzung läuft jetzt im Hintergrund mit dem Cloud Run Service (Gemini 2.5 Flash + Semantic Chunking).")
                 logger.info(f"✅ Translation successfully started for job {job_id}")
             else:
                 error_msg = f"Service antwortete mit Status {response.status_code}: {response.text}"
