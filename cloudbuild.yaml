@@ -5,7 +5,8 @@ steps:
   # Build the container image
   - name: 'gcr.io/cloud-builders/docker'
     args: [
-      'build', 
+      'build',
+      '-f', '$_DOCKERFILE',
       '-t', 'gcr.io/$PROJECT_ID/$_SERVICE_NAME:$COMMIT_SHA',
       '-t', 'gcr.io/$PROJECT_ID/$_SERVICE_NAME:latest',
       '.'
@@ -25,15 +26,15 @@ steps:
       'run', 'deploy', '$_SERVICE_NAME',
       '--image', 'gcr.io/$PROJECT_ID/$_SERVICE_NAME:$COMMIT_SHA',
       '--platform', 'managed',
-      '--region', 'europe-west1',
+      '--region', '$_REGION',
       '--allow-unauthenticated',
       '--port', '8080',
-      '--memory', '4Gi',
-      '--cpu', '2',
-      '--timeout', '3600',
-      '--max-instances', '1',
-      '--min-instances', '0',
-      '--concurrency', '1',
+      '--memory', '$_MEMORY',
+      '--cpu', '$_CPU',
+      '--timeout', '$_TIMEOUT',
+      '--max-instances', '$_MAX_INSTANCES',
+      '--min-instances', '$_MIN_INSTANCES',
+      '--concurrency', '$_CONCURRENCY',
       '--no-cpu-throttling',
       '--set-env-vars', 'GCP_PROJECT=$PROJECT_ID'
     ]
@@ -45,12 +46,17 @@ options:
   logging: CLOUD_LOGGING_ONLY  # Fix logging configuration
 
 # Substitution variables
+# These can be overridden in Cloud Build triggers
 substitutions:
   _SERVICE_NAME: 'translation-service'
+  _DOCKERFILE: 'Dockerfile'
   _REGION: 'europe-west1'
   _MEMORY: '4Gi'
   _CPU: '2'
   _TIMEOUT: '3600'
+  _MAX_INSTANCES: '1'
+  _MIN_INSTANCES: '0'
+  _CONCURRENCY: '1'
 
 # Build timeout
 timeout: '1200s'  # 20 minutes timeout for build process
