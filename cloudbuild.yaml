@@ -34,7 +34,7 @@ steps:
       '--min-instances', '0',
       '--concurrency', '1',
       '--no-cpu-throttling',
-      '--set-env-vars', 'GCP_PROJECT=$PROJECT_ID,PORT=8080'
+      '--set-env-vars', 'GCP_PROJECT=$PROJECT_ID'
     ]
 
 # Build configuration
