@@ -18,6 +18,7 @@ google-cloud-storage
 google-cloud-firestore
 google-cloud-aiplatform
 google-cloud-texttospeech
+google-generativeai
 pydub
 
 # Cloud Run Translation Service Dependencies
