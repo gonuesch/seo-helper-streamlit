@@ -607,10 +607,5 @@ def check_job_safety(job_ref, start_time: datetime.datetime, current_cost: float
         return False  # Stop on errors for safety
 
 # --- Application Entry Point ---
-
-if __name__ == "__main__":
-    # For local development only
-    import os
-    port = int(os.environ.get("PORT", 8080))
-    print(f"🚀 Starting Flask app on port {port}")
-    app.run(host="0.0.0.0", port=port, debug=True)
+# Note: In production (Cloud Run), Gunicorn is used as the WSGI server (see Dockerfile CMD).
+# The Flask app object is imported by Gunicorn and no additional startup code is needed.
