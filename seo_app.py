@@ -1613,203 +1613,57 @@ elif selected_tool == "Manuskript-Übersetzung":
             else:
                 st.metric(label="📝 Input Tokens", value="N/A")
 
-    # Style-Guide Anzeige (wenn verfügbar)
-    if 'current_style_guide' in st.session_state and st.session_state.current_style_guide:
-        st.divider()
-        st.subheader("📋 Analyse-Ergebnis: Style-Guide & Glossar")
-        
-        # Erfolgsmeldung
-        st.success("✅ Dokumentanalyse abgeschlossen! Der Style-Guide wurde erfolgreich generiert.")
-        
-        # Interaktive Bearbeitung des Style-Guides
-        with st.expander("✏️ Style-Guide & Glossar bearbeiten", expanded=True):
-            if st.session_state.editable_style_guide:
-                style_guide = st.session_state.editable_style_guide
-                
-                # Style-Guide Details bearbeiten
-                st.subheader("📝 Style-Guide Details")
-                
-                # Genre und Zielgruppe
-                genre_audience = style_guide.get("style_guide", {}).get("genre_audience", "")
-                edited_genre_audience = st.text_area(
-                    "Genre und Zielgruppe:",
-                    value=genre_audience,
-                    height=60,
-                    key="edited_genre_audience",
-                    help="Bearbeite die Genre- und Zielgruppen-Analyse."
-                )
-                
-                # Ton und Stimmung
-                tone_mood = style_guide.get("style_guide", {}).get("tone_mood", "")
-                edited_tone_mood = st.text_area(
-                    "Ton und Stimmung:",
-                    value=tone_mood,
-                    height=60,
-                    key="edited_tone_mood",
-                    help="Bearbeite die Beschreibung von Ton und Stimmung."
-                )
-                
-                # Erzählperspektive
-                narrative_perspective = style_guide.get("style_guide", {}).get("narrative_perspective", "")
-                edited_narrative_perspective = st.text_area(
-                    "Erzählperspektive:",
-                    value=narrative_perspective,
-                    height=60,
-                    key="edited_narrative_perspective",
-                    help="Bearbeite die Erzählperspektive."
-                )
-                
-                # Charakternamen
-                character_names = style_guide.get("style_guide", {}).get("character_names", "")
-                edited_character_names = st.text_area(
-                    "Charakternamen:",
-                    value=character_names,
-                    height=60,
-                    key="edited_character_names",
-                    help="Bearbeite die Liste der Hauptcharaktere."
-                )
-                
-                # Schlüsselkonzepte
-                key_concepts = style_guide.get("style_guide", {}).get("key_concepts", "")
-                edited_key_concepts = st.text_area(
-                    "Schlüsselkonzepte:",
-                    value=key_concepts,
-                    height=60,
-                    key="edited_key_concepts",
-                    help="Bearbeite die zentralen Begriffe der Geschichte."
-                )
-                
-                # Stilistische Merkmale
-                stylistic_features = style_guide.get("style_guide", {}).get("stylistic_features", "")
-                edited_stylistic_features = st.text_area(
-                    "Stilistische Merkmale:",
-                    value=stylistic_features,
-                    height=60,
-                    key="edited_stylistic_features",
-                    help="Bearbeite die Beschreibung der sprachlichen Stilmittel."
-                )
-                
-                # Key Terms (Glossar) bearbeiten
-                st.subheader("📚 Key Terms (Glossar)")
-                key_terms = style_guide.get("key_terms", {})
-                
-                # Konvertiere Dictionary zu DataFrame für bessere Bearbeitung
-                if key_terms:
-                    # Erstelle DataFrame aus Dictionary
-                    key_terms_df = pd.DataFrame([
-                        {"Deutscher Begriff": key, "Englische Übersetzung": value} 
-                        for key, value in key_terms.items()
-                    ])
-                else:
-                    # Leerer DataFrame mit korrekten Spalten
-                    key_terms_df = pd.DataFrame(columns=["Deutscher Begriff", "Englische Übersetzung"])
-                
-                # Data Editor für Key Terms
-                edited_key_terms_df = st.data_editor(
-                    key_terms_df,
-                    key="edited_key_terms_data",
-                    num_rows="dynamic",
-                    use_container_width=True
-                )
-                
-                # Konvertiere DataFrame zurück zu Dictionary
-                edited_key_terms = {}
-                for _, row in edited_key_terms_df.iterrows():
-                    if pd.notna(row["Deutscher Begriff"]) and pd.notna(row["Englische Übersetzung"]):
-                        edited_key_terms[row["Deutscher Begriff"]] = row["Englische Übersetzung"]
-                
-                # Prüfe, ob Änderungen vorgenommen wurden
-                has_changes = (
-                    edited_genre_audience != genre_audience or
-                    edited_tone_mood != tone_mood or
-                    edited_narrative_perspective != narrative_perspective or
-                    edited_character_names != character_names or
-                    edited_key_concepts != key_concepts or
-                    edited_stylistic_features != stylistic_features or
-                    edited_key_terms != key_terms
-                )
-                
-                # Speichern Button
-                st.divider()
-                col1, col2 = st.columns([1, 3])
-                with col1:
-                    button_type = "primary" if has_changes else "secondary"
-                    button_text = "💾 Änderungen speichern" if has_changes else "💾 Keine Änderungen"
-                    button_disabled = not has_changes
-                    
-                    if st.button(button_text, type=button_type, disabled=button_disabled, on_click=save_edited_style_guide):
-                        st.rerun()
-                with col2:
-                    if has_changes:
-                        st.info("💡 Nach dem Speichern wird der Job-Status auf 'guide_approved' gesetzt.")
-                    else:
-                        st.info("ℹ️ Keine Änderungen zum Speichern vorhanden.")
-                
-                # Old Pub/Sub translation flow removed - using direct HTTP translation
-        
+    # Old Style-Guide analysis feature removed - using direct translation only
+    
+    
+    # Translation status and download section
+    if st.session_state.get("final_gcs_path"):
         # Download-Bereich
         st.divider()
-        st.subheader("📥 Downloads")
+        st.subheader("📥 Übersetztes Dokument herunterladen")
         
-        col1, col2 = st.columns(2)
+        st.success("✅ Übersetztes Dokument verfügbar!")
         
-        # Style-Guide Download
-        with col1:
-            style_guide_json = json.dumps(st.session_state.current_style_guide, indent=2, ensure_ascii=False)
-            st.download_button(
-                label="💾 Style-Guide herunterladen (.json)",
-                data=style_guide_json.encode('utf-8'),
-                file_name="style_guide.json",
-                mime="application/json"
-            )
+        # GCS-Pfad anzeigen
+        gcs_path = st.session_state.final_gcs_path
+        st.info(f"📁 Pfad: {gcs_path}")
         
-        # Übersetztes Dokument Download (falls verfügbar)
-        with col2:
-            if st.session_state.get("final_gcs_path"):
-                st.success("✅ Übersetztes Dokument verfügbar!")
+        try:
+            # GCS-Pfad extrahieren
+            if gcs_path.startswith("gs://"):
+                # Blob-Name extrahieren
+                bucket_name = gcs_path.split("/")[2]
+                blob_name = "/".join(gcs_path.split("/")[3:])
                 
-                # GCS-Pfad anzeigen
-                gcs_path = st.session_state.final_gcs_path
-                st.info(f"📁 Pfad: {gcs_path}")
+                # Datei aus GCS laden
+                storage_client = storage.Client(project=PROJECT_ID)
+                bucket = storage_client.bucket(bucket_name)
+                blob = bucket.blob(blob_name)
                 
-                try:
-                    # GCS-Pfad extrahieren
-                    if gcs_path.startswith("gs://"):
-                        # Blob-Name extrahieren
-                        bucket_name = gcs_path.split("/")[2]
-                        blob_name = "/".join(gcs_path.split("/")[3:])
-                        
-                        # Datei aus GCS laden
-                        storage_client = storage.Client(project=PROJECT_ID)
-                        bucket = storage_client.bucket(bucket_name)
-                        blob = bucket.blob(blob_name)
-                        
-                        # Datei als Bytes laden
-                        file_bytes = blob.download_as_bytes()
-                        
-                        # Dateiname extrahieren
-                        filename = blob_name.split("/")[-1]
-                        
-                        # Download-Button (direkt sichtbar)
-                        st.download_button(
-                            label=f"💾 {filename} herunterladen",
-                            data=file_bytes,
-                            file_name=filename,
-                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                            key="download_translated_file",
-                            type="primary"
-                        )
-                        
-                        st.success("✅ Download bereit!")
-                        
-                    else:
-                        st.error("Ungültiger GCS-Pfad")
-                except Exception as e:
-                    st.error(f"Fehler beim Laden der Datei: {e}")
-                    st.info("Du kannst die Datei auch direkt über den GCS-Pfad herunterladen:")
-                    st.code(gcs_path)
+                # Datei als Bytes laden
+                file_bytes = blob.download_as_bytes()
+                
+                # Dateiname extrahieren
+                filename = blob_name.split("/")[-1]
+                
+                # Download-Button (direkt sichtbar)
+                st.download_button(
+                    label=f"💾 {filename} herunterladen",
+                    data=file_bytes,
+                    file_name=filename,
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    key="download_translated_file",
+                    type="primary"
+                )
+                
+                st.success("✅ Download bereit!")
+                
             else:
-                st.info("⏳ Übersetztes Dokument noch nicht verfügbar")
+                st.error("Ungültiger GCS-Pfad")
+        except Exception as e:
+            st.error(f"Fehler beim Laden der Datei: {e}")
+            st.info("Du kannst die Datei auch direkt über den GCS-Pfad herunterladen:")
+            st.code(gcs_path)
 
 # --- SICHERHEITSKONFIGURATION FÜR TTS ---
 MAX_TTS_COST_USD = 10.0  # Maximal 10 USD pro TTS-Job (erhöht von 5.0)
