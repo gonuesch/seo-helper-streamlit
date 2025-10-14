@@ -499,25 +499,7 @@ def get_time_estimate(status, file_size_mb=None):
     else:
         return ""
 
-def trigger_translation_runner(job_id):
-    """Sendet eine Nachricht an das 'start-translation' Pub/Sub-Thema."""
-    try:
-        # Job-Status in Firestore aktualisieren
-        firestore_client.collection("translation_jobs").document(job_id).update({"status": "translation_queued"})
-
-        # Nachricht an Pub/Sub senden (startet die Übersetzung)
-        topic_path = pubsub_publisher.topic_path(PROJECT_ID, "start-translation")
-        message_data = json.dumps({"job_id": job_id}).encode('utf-8')
-        future = pubsub_publisher.publish(topic_path, data=message_data)
-        future.result()
-
-        st.success("Der Übersetzungs-Job wurde erfolgreich an die Pipeline übergeben!")
-        # Optional: Status in der App direkt aktualisieren
-        st.session_state.translation_job_status = "translation_queued"
-
-    except Exception as e:
-        st.error(f"Fehler beim Starten des Übersetzungs-Jobs: {e}")
-        logging.error(f"Translation runner trigger error: {e}")
+# Old Pub/Sub translation flow removed - now using direct HTTP calls to translation-service
 
 # Comprehensive Processing Functions
 def run_seo_processing_and_logging(files_to_process):
@@ -1763,24 +1745,7 @@ elif selected_tool == "Manuskript-Übersetzung":
                     else:
                         st.info("ℹ️ Keine Änderungen zum Speichern vorhanden.")
                 
-                # Übersetzung starten Button (nur aktiv wenn Status "analyzed" oder "guide_approved" ist)
-                st.divider()
-                current_status = st.session_state.get("translation_job_status")
-                is_ready_for_translation = current_status in ["analyzed", "guide_approved"]
-                
-                if is_ready_for_translation:
-                    st.subheader("🚀 Übersetzung starten")
-                    st.info("Der Style-Guide wurde geprüft. Du kannst jetzt die finale Übersetzung starten.")
-                    
-                    if st.button(
-                        "✅ Übersetzung jetzt starten",
-                        on_click=trigger_translation_runner,
-                        args=(st.session_state.translation_job_id,),
-                        type="primary"
-                    ):
-                        st.rerun()
-                else:
-                    st.info(f"⏳ Übersetzung kann gestartet werden, sobald der Status 'analyzed' oder 'guide_approved' ist. Aktueller Status: {current_status}")
+                # Old Pub/Sub translation flow removed - using direct HTTP translation
         
         # Download-Bereich
         st.divider()
