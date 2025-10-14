@@ -55,9 +55,9 @@ substitutions:
   _MEMORY: '4Gi'
   _CPU: '2'
   _TIMEOUT: '3600'
-  _MAX_INSTANCES: '1'
-  _MIN_INSTANCES: '0'
-  _CONCURRENCY: '1'
+  _MAX_INSTANCES: '10'  # Support for 10 parallel translations
+  _MIN_INSTANCES: '0'   # Auto-scale to 0 when idle (saves costs, ensures termination)
+  _CONCURRENCY: '1'     # 1 translation per container instance
 
 # Build timeout
 timeout: '1200s'  # 20 minutes timeout for build process
