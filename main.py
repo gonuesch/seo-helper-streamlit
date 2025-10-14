@@ -70,17 +70,23 @@ def handle_request():
     try:
         # Parse the Eventarc event payload
         event_data = request.get_json()
-        print(f"📨 Received Eventarc event: {json.dumps(event_data, indent=2)}")
+        print(f"📨 Received event payload")
+        print(f"📦 Event data keys: {list(event_data.keys()) if event_data else 'None'}")
+        print(f"📄 Full event data: {json.dumps(event_data, indent=2)}")
         
         # Extract bucket and file information from nested data structure
         # Eventarc payload structure: data.message.data (base64 encoded)
         if 'data' in event_data and 'message' in event_data['data']:
             message_data_b64 = event_data['data']['message']['data']
+            print(f"🔓 Decoding base64 message data...")
             decoded_data = json.loads(base64.b64decode(message_data_b64).decode('utf-8'))
+            print(f"✅ Decoded data: {decoded_data}")
             job_id = decoded_data.get('job_id')
             
             if not job_id:
-                return jsonify({"error": "No job_id found in event data"}), 400
+                error_msg = f"No job_id found in decoded data: {decoded_data}"
+                print(f"❌ {error_msg}")
+                return jsonify({"error": error_msg}), 400
                 
             print(f"🔄 Processing translation request for job_id: {job_id}")
             
@@ -89,10 +95,15 @@ def handle_request():
             return jsonify(result), 200
             
         else:
-            return jsonify({"error": "Invalid event structure"}), 400
+            error_msg = f"Invalid event structure. Expected 'data.message.data' but got keys: {list(event_data.keys()) if event_data else 'None'}"
+            print(f"❌ {error_msg}")
+            print(f"❌ Full invalid event: {json.dumps(event_data, indent=2)}")
+            return jsonify({"error": error_msg}), 400
             
     except Exception as e:
         print(f"❌ Error handling translation request: {str(e)}")
+        import traceback
+        print(f"❌ Traceback: {traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 # --- Core Translation Logic ---
