@@ -26,9 +26,10 @@ RUN useradd --create-home --shell /bin/bash app \
     && chown -R app:app /app
 USER app
 
-# Expose port 8080 as required by Cloud Run
+# Cloud Run automatically sets PORT environment variable (default 8080)
+# Use environment variable to avoid port conflicts
 EXPOSE 8080
 
-# Use gunicorn to run the Flask app
-# Simplified configuration for maximum stability
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--timeout", "3600", "--max-requests", "1", "--max-requests-jitter", "0", "main:app"]
+# Use gunicorn with environment variable for port
+# exec ensures proper signal handling
+CMD exec gunicorn --bind 0.0.0.0:${PORT:-8080} --workers 1 --threads 1 --timeout 3600 --graceful-timeout 30 --max-requests 1 --max-requests-jitter 0 --access-logfile - --error-logfile - main:app

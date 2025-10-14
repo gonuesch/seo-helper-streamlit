@@ -609,8 +609,8 @@ def check_job_safety(job_ref, start_time: datetime.datetime, current_cost: float
 # --- Application Entry Point ---
 
 if __name__ == "__main__":
-    # For local development
-    app.run(host="0.0.0.0", port=8080, debug=True)
-else:
-    # For Cloud Run deployment
-    app.run(host="0.0.0.0", port=8080)
+    # For local development only
+    import os
+    port = int(os.environ.get("PORT", 8080))
+    print(f"🚀 Starting Flask app on port {port}")
+    app.run(host="0.0.0.0", port=port, debug=True)
