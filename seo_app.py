@@ -189,6 +189,30 @@ PUB_SUB_TOPIC = "start-translation"
 # Cloud Run Translation Service URL
 TRANSLATION_SERVICE_URL = "https://translation-service-785897725191.europe-west1.run.app"
 
+# Health Check für Translation Service
+def check_translation_service_health():
+    """Prüft ob der Translation Service erreichbar ist."""
+    try:
+        response = requests.get(TRANSLATION_SERVICE_URL, timeout=5)
+        if response.status_code == 200:
+            logger.info(f"✅ Translation Service is healthy: {response.json()}")
+            return True
+        else:
+            logger.warning(f"⚠️ Translation Service responded with status {response.status_code}")
+            return False
+    except requests.exceptions.Timeout:
+        logger.error(f"❌ Translation Service health check timeout - service may not be deployed")
+        return False
+    except requests.exceptions.ConnectionError:
+        logger.error(f"❌ Translation Service is not reachable - service not deployed")
+        return False
+    except Exception as e:
+        logger.error(f"❌ Translation Service health check failed: {e}")
+        return False
+
+# Führe Health Check beim App-Start durch
+translation_service_available = check_translation_service_health()
+
 # GCS Buckets für Text-to-Speech
 GCS_TTS_OUTPUT_BUCKET = "tts-output-europe-west4-6899" # Bucket für MP3-Dateien
 
@@ -281,28 +305,48 @@ def start_direct_translation(uploaded_file):
             }
         }
         
-        # Cloud Run Service aufrufen
-        response = requests.post(
-            TRANSLATION_SERVICE_URL,
-            json=event_data,
-            headers={"Content-Type": "application/json"},
-            timeout=30
-        )
+        # Cloud Run Service aufrufen mit besserem Error Handling
+        logger.info(f"🔄 Calling Translation Service at {TRANSLATION_SERVICE_URL}")
+        logger.info(f"📦 Event data: {json.dumps(event_data)}")
         
-        if response.status_code == 200:
-            st.success(f"✅ Übersetzung von '{uploaded_file.name}' gestartet! Job-ID: {job_id}")
-            st.info("🤖 Die Übersetzung läuft jetzt mit dem neuen Cloud Run Service (Gemini 2.5 Flash + Semantic Chunking).")
-        else:
-            st.error(f"❌ Fehler beim Starten der Übersetzung: Service antwortete mit Status {response.status_code}")
-            logging.error(f"Cloud Run service error: {response.status_code} - {response.text}")
-        
-        # Store job info in session state for tracking
-        st.session_state.translation_job_id = job_id
-        st.session_state.translation_job_status = "translation_queued"
+        try:
+            response = requests.post(
+                TRANSLATION_SERVICE_URL,
+                json=event_data,
+                headers={"Content-Type": "application/json"},
+                timeout=30
+            )
+            
+            logger.info(f"📨 Translation Service responded with status {response.status_code}")
+            
+            if response.status_code == 200:
+                st.success(f"✅ Übersetzung von '{uploaded_file.name}' gestartet! Job-ID: {job_id}")
+                st.info("🤖 Die Übersetzung läuft jetzt mit dem neuen Cloud Run Service (Gemini 2.5 Flash + Semantic Chunking).")
+                logger.info(f"✅ Translation successfully started for job {job_id}")
+            else:
+                error_msg = f"Service antwortete mit Status {response.status_code}: {response.text}"
+                st.error(f"❌ Fehler beim Starten der Übersetzung: {error_msg}")
+                logger.error(f"❌ Cloud Run service error: {error_msg}")
+            
+            # Store job info in session state for tracking
+            st.session_state.translation_job_id = job_id
+            st.session_state.translation_job_status = "translation_queued"
+            
+        except requests.exceptions.Timeout:
+            error_msg = f"Translation Service antwortet nicht (Timeout nach 30s). Der Service ist möglicherweise nicht deployed oder startet gerade."
+            st.error(f"❌ {error_msg}")
+            logger.error(f"❌ Timeout connecting to {TRANSLATION_SERVICE_URL}")
+            st.info("💡 **Lösung**: Prüfe ob der Translation Service deployed ist: https://console.cloud.google.com/run?project=avid-infinity-458913-p3")
+            
+        except requests.exceptions.ConnectionError as conn_err:
+            error_msg = f"Verbindung zum Translation Service fehlgeschlagen: {str(conn_err)}"
+            st.error(f"❌ {error_msg}")
+            logger.error(f"❌ Connection error to {TRANSLATION_SERVICE_URL}: {conn_err}")
+            st.info("💡 **Lösung**: Der Translation Service existiert nicht oder ist nicht erreichbar.")
 
     except Exception as e:
-        st.error(f"❌ Fehler beim Starten der Übersetzung: {e}")
-        logging.error(f"Direct translation job error: {e}")
+        st.error(f"❌ Fehler beim Starten der Übersetzung: {str(e)}")
+        logger.error(f"❌ Direct translation job error: {str(e)}", exc_info=True)
 
 def refresh_translation_status():
     """Aktualisiert den Status eines Übersetzungsauftrags."""
@@ -1438,10 +1482,15 @@ elif selected_tool == "Manuskript-Übersetzung":
         st.success(f"✅ Datei hochgeladen: {uploaded_file.name}")
         st.info(f"📊 Dateigröße: {uploaded_file.size:,} Bytes")
         
+        # Translation Service Status Warnung
+        if not translation_service_available:
+            st.warning("⚠️ **Translation Service nicht erreichbar!** Der Service ist möglicherweise nicht deployed.")
+            st.info("💡 Prüfe den Service Status: https://console.cloud.google.com/run?project=avid-infinity-458913-p3")
+        
         # Direkter Übersetzungs-Button
         col1, col2 = st.columns([1, 2])
         with col1:
-            if st.button("🚀 Übersetzung starten", type="primary", key="start_translation"):
+            if st.button("🚀 Übersetzung starten", type="primary", key="start_translation", disabled=not translation_service_available):
                 with st.spinner("Starte Übersetzung..."):
                     start_direct_translation(uploaded_file)
                 st.rerun()
