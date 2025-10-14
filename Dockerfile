@@ -32,4 +32,5 @@ EXPOSE 8080
 
 # Use gunicorn with environment variable for port
 # exec ensures proper signal handling
-CMD exec gunicorn --bind 0.0.0.0:${PORT:-8080} --workers 1 --threads 1 --timeout 3600 --graceful-timeout 30 --max-requests 1 --max-requests-jitter 0 --access-logfile - --error-logfile - main:app
+# --preload loads the app before forking workers to avoid port conflicts
+CMD exec gunicorn --bind 0.0.0.0:${PORT:-8080} --workers 1 --threads 8 --timeout 3600 --graceful-timeout 30 --max-requests 100 --max-requests-jitter 10 --preload --access-logfile - --error-logfile - main:app
