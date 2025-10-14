@@ -609,3 +609,4 @@ def check_job_safety(job_ref, start_time: datetime.datetime, current_cost: float
 # --- Application Entry Point ---
 # Note: In production (Cloud Run), Gunicorn is used as the WSGI server (see Dockerfile CMD).
 # The Flask app object is imported by Gunicorn and no additional startup code is needed.
+# See Dockerfile CMD for more details.
