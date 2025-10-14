@@ -1,7 +1,7 @@
 """
 Cloud Run Translation Service
 Refactored from Cloud Function to handle long-running tasks with improved memory efficiency
-and semantic chunking for higher translation quality.
+and semantic chunking for higher translation quality!
 """
 
 import base64
