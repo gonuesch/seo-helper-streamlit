@@ -808,8 +808,8 @@ if 'last_selected_tool' not in st.session_state:
 if 'click_counter' not in st.session_state:
     st.session_state.click_counter = 0
 
-# API-Schlüssel direkt aus st.secrets laden
-gemini_api_key = st.secrets.get("gemini_api_key")
+# API-Schlüssel aus Environment Variables (Cloud Run)
+gemini_api_key = os.environ.get("GEMINI_API_KEY")
 
 # Prüfe, ob die API-Schlüssel vorhanden sind.
 missing_keys = []
