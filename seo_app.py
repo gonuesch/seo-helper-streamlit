@@ -376,8 +376,17 @@ def refresh_translation_status():
         st.session_state.output_tokens_translation = job_data.get("output_tokens_translation")
         st.session_state.final_gcs_path = job_data.get("final_gcs_path")
         
-        # Progress-Daten entfernt (nicht mehr benötigt)
-
+        # Progress-Daten für Debugging
+        translation_progress = job_data.get("translation_progress", {})
+        chunks_completed = translation_progress.get("chunks_completed", 0)
+        total_chunks = translation_progress.get("total_chunks", 0)
+        chunks_processed = job_data.get("chunks_processed", 0)
+        
+        # Status-Message mit Progress
+        if job_status == "translating" and chunks_completed > 0:
+            st.info(f"⏳ Übersetzung läuft: {chunks_completed}/{total_chunks} Chunks in diesem Batch")
+            st.info(f"📊 Gesamt verarbeitet: {chunks_processed} Chunks")
+        
         st.success(f"Status aktualisiert: {job_status}")
         logging.info(f"Job status updated to {job_status} for job {job_id}")
         

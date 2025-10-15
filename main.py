@@ -13,6 +13,7 @@ import time
 import random
 import tempfile
 import threading
+import traceback
 from typing import List, Generator, Dict, Any
 from flask import Flask, request, jsonify
 from google.cloud import firestore, storage, aiplatform
@@ -130,7 +131,20 @@ def process_translation_request(job_id: str) -> Dict[str, Any]:
     start_time = datetime.datetime.utcnow()
     total_cost = 0.0
     
+    # Configure logging with explicit flush
+    import sys
+    import logging as py_logging
+    py_logging.basicConfig(
+        level=py_logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        stream=sys.stdout,
+        force=True
+    )
+    logger = py_logging.getLogger(__name__)
+    
     try:
+        logger.info(f"🚀 START TRANSLATION JOB: {job_id}")
+        sys.stdout.flush()
         # 1. Load job details from Firestore
         job_ref = firestore_client.collection("translation_jobs").document(job_id)
         job_doc = job_ref.get()
@@ -200,24 +214,31 @@ def process_translation_request(job_id: str) -> Dict[str, Any]:
         
         try:
             # 3. Extract text using page-batching generators
-            print(f"📖 Extracting text with page-batching...")
+            logger.info(f"📖 Extracting text with page-batching...")
+            sys.stdout.flush()
             all_translated_chunks = []
+            batch_num = 0
             
             # Process document in batches using generators
             for text_block in extract_text_with_batching(temp_file_path, file_name):
-                print(f"📝 Processing text block: {len(text_block)} characters")
+                batch_num += 1
+                logger.info(f"📝 BATCH {batch_num}: Processing text block with {len(text_block)} characters")
+                sys.stdout.flush()
                 
                 # 4. Apply semantic chunking to the text block
                 semantic_chunks = get_semantic_chunks(text_block)
-                print(f"🧠 Created {len(semantic_chunks)} semantic chunks from text block")
+                logger.info(f"🧠 BATCH {batch_num}: Created {len(semantic_chunks)} semantic chunks")
+                sys.stdout.flush()
                 
                 # 5. Translate each semantic chunk
                 for chunk_index, chunk in enumerate(semantic_chunks):
-                    print(f"🔄 Translating semantic chunk {chunk_index + 1}/{len(semantic_chunks)}")
+                    logger.info(f"🔄 BATCH {batch_num} CHUNK {chunk_index + 1}/{len(semantic_chunks)}: Translating...")
+                    sys.stdout.flush()
                     
                     # Safety check
                     if not check_job_safety(job_ref, start_time, total_cost):
-                        print(f"🚨 SAFETY: Job stopped after processing {len(all_translated_chunks)} chunks")
+                        logger.warning(f"🚨 SAFETY: Job stopped after processing {len(all_translated_chunks)} chunks")
+                        sys.stdout.flush()
                         return {"status": "killed", "reason": "Safety limits exceeded"}
                     
                     try:
@@ -231,12 +252,15 @@ def process_translation_request(job_id: str) -> Dict[str, Any]:
                         )
                         
                         all_translated_chunks.append(translated_chunk)
+                        logger.info(f"✅ BATCH {batch_num} CHUNK {chunk_index + 1}/{len(semantic_chunks)}: Translated successfully. Total: {len(all_translated_chunks)}")
+                        sys.stdout.flush()
                         
                         # Update progress
                         job_ref.update({
                             "translation_progress": {
                                 "chunks_completed": len(all_translated_chunks),
                                 "total_chunks": len(semantic_chunks),
+                                "current_batch": batch_num,
                                 "last_chunk_completed_at": datetime.datetime.utcnow(),
                                 "current_cost_usd": total_cost
                             }
@@ -246,21 +270,33 @@ def process_translation_request(job_id: str) -> Dict[str, Any]:
                         time.sleep(1 + random.uniform(0, 1))
                         
                     except Exception as e:
-                        print(f"❌ Error translating chunk {chunk_index + 1}: {str(e)}")
+                        logger.error(f"❌ BATCH {batch_num} CHUNK {chunk_index + 1}: Error translating - {str(e)}")
+                        logger.error(f"❌ Traceback: {traceback.format_exc()}")
+                        sys.stdout.flush()
                         # Add error chunk to maintain structure
                         error_chunk = f"[TRANSLATION_ERROR - Chunk {chunk_index + 1}: {str(e)[:100]}...]\n\n[ORIGINAL: {chunk[:200]}...]"
                         all_translated_chunks.append(error_chunk)
+                
+                logger.info(f"✅ BATCH {batch_num} COMPLETED: Translated {len(semantic_chunks)} chunks. Moving to next batch...")
+                sys.stdout.flush()
             
             # 6. Create final document from chunks
-            print(f"📄 Creating final document from {len(all_translated_chunks)} chunks...")
+            logger.info(f"📄 ALL BATCHES DONE: Creating final document from {len(all_translated_chunks)} chunks...")
+            sys.stdout.flush()
             docx_bytes = create_docx_from_chunks(all_translated_chunks)
+            logger.info(f"✅ Final document created: {len(docx_bytes)} bytes")
+            sys.stdout.flush()
             
             # 7. Upload final document to Cloud Storage
-            print(f"☁️ Uploading final document to Cloud Storage...")
+            logger.info(f"☁️ Uploading final document to Cloud Storage...")
+            sys.stdout.flush()
             final_gcs_path = upload_final_document(docx_bytes, job_id, file_name)
+            logger.info(f"✅ Uploaded to: {final_gcs_path}")
+            sys.stdout.flush()
             
             # 8. Mark job as completed
-            print(f"🎉 Marking job as completed...")
+            logger.info(f"🎉 Marking job as completed...")
+            sys.stdout.flush()
             job_ref.update({
                 "status": "completed",
                 "final_gcs_path": final_gcs_path,
@@ -269,10 +305,12 @@ def process_translation_request(job_id: str) -> Dict[str, Any]:
                 "translation_lock": None,
                 "kill_switch": False,
                 "chunks_processed": len(all_translated_chunks),
+                "total_batches_processed": batch_num,
                 "final_cost_usd": total_cost
             })
             
-            print(f"🎯 Job {job_id} successfully completed! {len(all_translated_chunks)} chunks processed.")
+            logger.info(f"🎯 JOB {job_id} SUCCESSFULLY COMPLETED! {len(all_translated_chunks)} chunks from {batch_num} batches processed.")
+            sys.stdout.flush()
             return {"status": "completed", "final_gcs_path": final_gcs_path}
             
         finally:
@@ -283,22 +321,28 @@ def process_translation_request(job_id: str) -> Dict[str, Any]:
 
     except Exception as e:
         error_message = f"Error in translation function: {e}"
-        print(f"❌ {error_message}")
+        logger.error(f"❌ {error_message}")
+        logger.error(f"❌ Traceback: {traceback.format_exc()}")
+        sys.stdout.flush()
 
         if job_ref:
             try:
                 job_ref.update({
                     "status": "translation_failed",
                     "error_message": str(e),
+                    "error_traceback": traceback.format_exc()[:1000],  # First 1000 chars
                     "translation_failed_at": datetime.datetime.utcnow(),
                     "translation_success": False,
                     "translation_lock": None,
                     "kill_switch": False,
-                    "final_cost_usd": total_cost
+                    "final_cost_usd": total_cost,
+                    "chunks_completed_before_failure": len(all_translated_chunks) if 'all_translated_chunks' in locals() else 0
                 })
-                print(f"✅ Error status saved to Firestore")
+                logger.info(f"✅ Error status saved to Firestore")
+                sys.stdout.flush()
             except Exception as firestore_error:
-                print(f"⚠️ Could not save error status: {firestore_error}")
+                logger.error(f"⚠️ Could not save error status: {firestore_error}")
+                sys.stdout.flush()
 
         return {"status": "error", "message": str(e)}
 
