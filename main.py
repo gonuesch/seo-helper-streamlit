@@ -14,6 +14,7 @@ import random
 import tempfile
 import threading
 import traceback
+import re
 from typing import List, Generator, Dict, Any
 from flask import Flask, request, jsonify
 from google.cloud import firestore, storage, aiplatform
@@ -76,43 +77,109 @@ def handle_request():
         print(f"📦 Event data keys: {list(event_data.keys()) if event_data else 'None'}")
         print(f"📄 Full event data: {json.dumps(event_data, indent=2)}")
         
-        # Extract bucket and file information from nested data structure
-        # Eventarc payload structure: data.message.data (base64 encoded)
-        if 'data' in event_data and 'message' in event_data['data']:
-            message_data_b64 = event_data['data']['message']['data']
-            print(f"🔓 Decoding base64 message data...")
-            decoded_data = json.loads(base64.b64decode(message_data_b64).decode('utf-8'))
-            print(f"✅ Decoded data: {decoded_data}")
-            job_id = decoded_data.get('job_id')
-            
-            if not job_id:
-                error_msg = f"No job_id found in decoded data: {decoded_data}"
-                print(f"❌ {error_msg}")
-                return jsonify({"error": error_msg}), 400
+        job_id = None
+        
+        # Try to extract job_id from different event formats
+        # Format 1: Pub/Sub message format (for manual API calls)
+        # Structure: data.message.data (base64 encoded JSON with job_id)
+        if 'data' in event_data and 'message' in event_data['data'] and 'data' in event_data['data']['message']:
+            try:
+                message_data_b64 = event_data['data']['message']['data']
+                print(f"🔓 Decoding base64 message data (Pub/Sub format)...")
+                decoded_data = json.loads(base64.b64decode(message_data_b64).decode('utf-8'))
+                print(f"✅ Decoded data: {decoded_data}")
+                job_id = decoded_data.get('job_id')
+                print(f"✅ Extracted job_id from Pub/Sub format: {job_id}")
+            except Exception as e:
+                print(f"⚠️ Failed to decode Pub/Sub format: {e}")
+        
+        # Format 2: Eventarc Cloud Storage event format (for automatic triggers)
+        # Structure: Direct GCS object metadata with 'name' and 'bucket' fields
+        if not job_id and 'name' in event_data and 'bucket' in event_data:
+            try:
+                file_name = event_data.get('name')
+                print(f"📁 Cloud Storage event detected. File name: {file_name}")
                 
-            print(f"🔄 Accepted translation request for job_id: {job_id}")
-            
-            # Start translation in background thread - respond immediately!
-            thread = threading.Thread(
-                target=process_translation_request,
-                args=(job_id,),
-                daemon=True
+                # Extract job_id from filename format: {job_id}-{original_filename}
+                # Job_id is typically a UUID (36 chars: 8-4-4-4-12), so we need to find it
+                if file_name and '-' in file_name:
+                    # Try to extract UUID format (36 characters with hyphens)
+                    # UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+                    # Look for pattern: start with 8 chars, then 4-4-4-12 pattern
+                    uuid_pattern = r'^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})'
+                    match = re.match(uuid_pattern, file_name, re.IGNORECASE)
+                    
+                    if match:
+                        job_id = match.group(1)
+                        print(f"✅ Extracted UUID job_id from Cloud Storage filename: {job_id}")
+                    else:
+                        # Fallback: try to extract everything before the last hyphen that appears before a file extension
+                        # This handles cases where the format might be slightly different
+                        # Find the position of the last '-' before the file extension
+                        if '.' in file_name:
+                            name_without_ext = file_name.rsplit('.', 1)[0]
+                            # Try to find a reasonable split point
+                            # Look for a long segment that might be a job_id (at least 8 chars before next hyphen or end)
+                            parts = name_without_ext.split('-')
+                            if len(parts) >= 2:
+                                # Try combining parts to find a UUID-like pattern
+                                # Start with first 5 parts (UUID has 5 segments)
+                                if len(parts) >= 5:
+                                    potential_uuid = '-'.join(parts[:5])
+                                    if len(potential_uuid) == 36:  # UUID length
+                                        job_id = potential_uuid
+                                        print(f"✅ Extracted job_id from segmented filename: {job_id}")
+                                    else:
+                                        # Try first part (should be at least 8 chars for UUID start)
+                                        if len(parts[0]) >= 8:
+                                            # Combine until we get something reasonable
+                                            potential_job_id = parts[0]
+                                            for i in range(1, min(5, len(parts))):
+                                                candidate = '-'.join(parts[:i+1])
+                                                if len(candidate) == 36 or (len(candidate) >= 32 and i == 4):
+                                                    job_id = candidate
+                                                    print(f"✅ Extracted job_id by combining segments: {job_id}")
+                                                    break
+                                
+                                # Last resort: use first segment if it's long enough
+                                if not job_id and len(parts[0]) >= 8:
+                                    job_id = parts[0]
+                                    print(f"⚠️ Using first segment as job_id (fallback): {job_id}")
+                else:
+                    print(f"⚠️ File name '{file_name}' does not contain expected format (job_id-filename)")
+            except Exception as e:
+                print(f"⚠️ Failed to extract job_id from Cloud Storage event: {e}")
+                import traceback
+                print(f"⚠️ Traceback: {traceback.format_exc()}")
+        
+        # If job_id still not found, return error
+        if not job_id:
+            error_msg = (
+                f"Could not extract job_id from event. "
+                f"Expected either Pub/Sub format (data.message.data) or Cloud Storage format (with 'name' field). "
+                f"Got keys: {list(event_data.keys()) if event_data else 'None'}"
             )
-            thread.start()
-            print(f"✅ Background thread started for job {job_id}")
-            
-            # Return immediately with 202 Accepted
-            return jsonify({
-                "status": "accepted",
-                "job_id": job_id,
-                "message": f"Translation job {job_id} accepted and processing in background"
-            }), 202
-            
-        else:
-            error_msg = f"Invalid event structure. Expected 'data.message.data' but got keys: {list(event_data.keys()) if event_data else 'None'}"
             print(f"❌ {error_msg}")
             print(f"❌ Full invalid event: {json.dumps(event_data, indent=2)}")
             return jsonify({"error": error_msg}), 400
+                
+        print(f"🔄 Accepted translation request for job_id: {job_id}")
+        
+        # Start translation in background thread - respond immediately!
+        thread = threading.Thread(
+            target=process_translation_request,
+            args=(job_id,),
+            daemon=True
+        )
+        thread.start()
+        print(f"✅ Background thread started for job {job_id}")
+        
+        # Return immediately with 202 Accepted
+        return jsonify({
+            "status": "accepted",
+            "job_id": job_id,
+            "message": f"Translation job {job_id} accepted and processing in background"
+        }), 202
             
     except Exception as e:
         print(f"❌ Error handling translation request: {str(e)}")
